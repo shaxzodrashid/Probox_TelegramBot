@@ -1,0 +1,117 @@
+<svg width="800" height="1150" viewBox="0 0 800 1150" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="1150" fill="#F8FAFC"/>
+  <defs>
+    <linearGradient id="blue_grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2563EB" />
+      <stop offset="100%" style="stop-color:#3B82F6" />
+    </linearGradient>
+    <linearGradient id="purple_grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7C3AED" />
+      <stop offset="100%" style="stop-color:#8B5CF6" />
+    </linearGradient>
+    <linearGradient id="green_grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#059669" />
+      <stop offset="100%" style="stop-color:#10B981" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="800" height="80" fill="#1E293B"/>
+  <text x="400" y="50" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle">PROBOX BOT: FOYDALANUVCHI YO'LI</text>
+
+  <!-- Step 1: Start -->
+  <rect x="280" y="100" width="240" height="50" rx="25" fill="url(#blue_grad)" filter="url(#shadow)"/>
+  <text x="400" y="132" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white" text-anchor="middle">1. BOSHLASH</text>
+
+  <!-- Arrow -->
+  <path d="M400 150 V170" stroke="#CBD5E1" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 1.5: Language -->
+  <rect x="250" y="170" width="300" height="60" rx="15" fill="white" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <text x="400" y="198" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1E293B" text-anchor="middle">TIL TANLASH</text>
+  <text x="400" y="218" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">UZ / RU / EN</text>
+
+  <!-- Arrow -->
+  <path d="M400 230 V240" stroke="#CBD5E1" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 2: Contact -->
+  <rect x="250" y="240" width="300" height="80" rx="12" fill="white" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <circle cx="280" cy="280" r="20" fill="#DBEAFE"/>
+  <path d="M275 272 H285 V288 H275 V282Z" fill="#2563EB"/>
+  <text x="430" y="275" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#1E293B" text-anchor="middle">Telefon raqamini yuborish</text>
+  <text x="430" y="295" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">Telegram kontakt ulashish</text>
+
+  <!-- Arrow -->
+  <path d="M400 320 V360" stroke="#CBD5E1" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Decision: SAP Check -->
+  <path d="M400 360 L520 410 L400 460 L280 410 Z" fill="#FFFBEB" stroke="#F59E0B" stroke-width="2"/>
+  <text x="400" y="415" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#92400E" text-anchor="middle">SAP bazasida bormi?</text>
+
+  <!-- Path: No -->
+  <path d="M280 410 H130 V480" stroke="#CBD5E1" stroke-width="2" fill="none"/>
+  <rect x="30" y="480" width="200" height="80" rx="12" fill="#FEF2F2" stroke="#EF4444"/>
+  <text x="130" y="515" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#991B1B" text-anchor="middle">Admin ko'rigi</text>
+  <text x="130" y="535" font-family="Arial, sans-serif" font-size="12" fill="#B91C1C" text-anchor="middle">Tasdiqlash kutilmoqda</text>
+  <path d="M130 560 V610 H400" stroke="#CBD5E1" stroke-width="2" fill="none"/>
+
+  <!-- Path: Yes -->
+  <path d="M520 410 H670 V480" stroke="#CBD5E1" stroke-width="2" fill="none"/>
+  <rect x="570" y="480" width="200" height="80" rx="12" fill="#F0FDF4" stroke="#22C55E"/>
+  <text x="670" y="515" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#166534" text-anchor="middle">SMS OTP bosqichi</text>
+  <text x="670" y="535" font-family="Arial, sans-serif" font-size="12" fill="#15803D" text-anchor="middle">Tezkor tasdiqlash</text>
+  <path d="M670 560 V610 H400" stroke="#CBD5E1" stroke-width="2" fill="none"/>
+
+  <!-- Merge Point Connector -->
+  <circle cx="400" cy="610" r="5" fill="#CBD5E1"/>
+  
+  <!-- Step 3: Menu -->
+  <path d="M400 615 V640" stroke="#CBD5E1" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <rect x="250" y="640" width="300" height="80" rx="40" fill="url(#purple_grad)" filter="url(#shadow)"/>
+  <text x="400" y="675" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="white" text-anchor="middle">🏠 ASOSIY MENYU</text>
+  <text x="400" y="695" font-family="Arial, sans-serif" font-size="12" fill="white" opacity="0.9" text-anchor="middle">Tasdiqlangan foydalanuvchi</text>
+
+  <!-- Features Grid -->
+  <rect x="50" y="750" width="210" height="120" rx="12" fill="white" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <text x="155" y="790" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#1E293B" text-anchor="middle">Mening shartnomalarim</text>
+  <text x="155" y="810" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">PDF yuklab olish</text>
+  <text x="155" y="830" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">Faol va Yakunlangan</text>
+
+  <rect x="295" y="750" width="210" height="120" rx="12" fill="white" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <text x="400" y="790" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1E293B" text-anchor="middle">Mening to'lovlarim</text>
+  <text x="400" y="810" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">To'lovlar tarixi</text>
+  <text x="400" y="830" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">To'lov grafigi</text>
+
+  <rect x="540" y="750" width="210" height="120" rx="12" fill="white" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <text x="645" y="790" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1E293B" text-anchor="middle">Qo'llab-quvvatlash</text>
+  <text x="645" y="810" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">Operator bilan bog'lanish</text>
+  <text x="645" y="830" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">Yordam markazi</text>
+
+  <!-- Auto Processes -->
+  <!-- Settings Box (New) -->
+  <rect x="295" y="890" width="210" height="120" rx="12" fill="white" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <text x="400" y="930" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1E293B" text-anchor="middle">⚙️ Sozlamalar</text>
+  <text x="400" y="955" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">Telefon raqamni o'zgartirish</text>
+  <text x="400" y="975" font-family="Arial, sans-serif" font-size="12" fill="#64748B" text-anchor="middle">Tilni o'zgartirish</text>
+
+  <!-- Auto Processes -->
+  <rect x="0" y="1050" width="800" height="90" fill="#F1F5F9"/>
+  <text x="400" y="1070" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#475569" text-anchor="middle">ORQA FONDA AVTOMATLASHTIRISH</text>
+  
+  <rect x="100" y="1085" width="280" height="35" rx="17" fill="url(#green_grad)"/>
+  <text x="240" y="1108" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white" text-anchor="middle">📄 Xarid vaqtida avtomatik PDF</text>
+  
+  <rect x="420" y="1085" width="280" height="35" rx="17" fill="url(#green_grad)"/>
+  <text x="560" y="1108" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white" text-anchor="middle">🔔 Aqlli eslatmalar (2 kun oldin, to'lov kuni)</text>
+
+  <!-- Marker Definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#CBD5E1" />
+    </marker>
+  </defs>
+</svg>

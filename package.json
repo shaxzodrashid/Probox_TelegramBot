@@ -1,0 +1,43 @@
+{
+  "name": "probox_telegrambot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@grammyjs/conversations": "^2.1.1",
+    "@grammyjs/i18n": "^1.1.2",
+    "@sap/hana-client": "^2.27.19",
+    "axios": "^1.13.2",
+    "dotenv": "^17.2.3",
+    "grammy": "^1.39.3",
+    "ioredis": "^5.9.2",
+    "knex": "^3.1.0",
+    "minio": "^8.0.6",
+    "pg": "^8.17.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^25.0.9",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.0.0",
+    "nodemon": "^3.1.11",
+    "prettier": "^3.8.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.53.0"
+  }
+}
