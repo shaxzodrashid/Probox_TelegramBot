@@ -10,37 +10,6 @@ import { HanaService } from '../sap/hana.service';
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
 
 /**
- * Tracker for message IDs to delete after registration
- */
-interface MessageTracker {
-  messageIds: number[];
-  chatId: number;
-}
-
-/**
- * Helper to track a message ID
- */
-function trackMessage(tracker: MessageTracker, messageId: number | undefined) {
-  if (messageId) {
-    tracker.messageIds.push(messageId);
-  }
-}
-
-/**
- * Deletes all tracked messages
- */
-async function deleteTrackedMessages(ctx: BotContext, tracker: MessageTracker) {
-  for (const messageId of tracker.messageIds) {
-    try {
-      await ctx.api.deleteMessage(tracker.chatId, messageId);
-    } catch (error) {
-      // Silently ignore deletion errors (message may already be deleted or too old)
-      logger.debug(`Failed to delete message ${messageId}: ${error}`);
-    }
-  }
-}
-
-/**
  * Checks if the user exists in SAP HANA by phone number.
  */
 async function verifySapUser(phoneNumber: string): Promise<IBusinessPartner | undefined> {
@@ -72,25 +41,20 @@ async function getLocale(ctx: BotContext): Promise<string> {
 async function requestPhoneNumber(
   conversation: BotConversation, 
   ctx: BotContext, 
-  locale: string,
-  tracker: MessageTracker
+  locale: string
 ): Promise<{ phoneNumber: string, ctx: BotContext } | null> {
   const sharePhoneKeyboard = new Keyboard()
     .requestContact(i18n.t(locale, 'share-phone-button'))
     .resized()
     .oneTime();
 
-  const askPhoneMsg = await ctx.reply(i18n.t(locale, 'ask-phone'), {
+  await ctx.reply(i18n.t(locale, 'ask-phone'), {
     reply_markup: sharePhoneKeyboard,
   });
-  trackMessage(tracker, askPhoneMsg.message_id);
 
   while (true) {
     const messageContext = await conversation.wait();
     const message = messageContext.message;
-
-    // Track user message
-    trackMessage(tracker, message?.message_id);
 
     if (message?.text === '/start') {
       return null;
@@ -106,10 +70,9 @@ async function requestPhoneNumber(
 
     // If input is invalid, re-ask (or just loop waiting for valid input).
     // Original behavior re-sends the prompt.
-    const reAskMsg = await messageContext.reply(i18n.t(locale, 'ask-phone'), {
+    await messageContext.reply(i18n.t(locale, 'ask-phone'), {
       reply_markup: sharePhoneKeyboard,
     });
-    trackMessage(tracker, reAskMsg.message_id);
   }
 }
 
@@ -121,27 +84,19 @@ async function performOtpVerification(
   conversation: BotConversation,
   ctx: BotContext, // Context to reply to initially
   phoneNumber: string,
-  locale: string,
-  tracker: MessageTracker
+  locale: string
 ): Promise<{ verified: boolean, lastCtx: BotContext }> {
   await conversation.external(() => OtpService.createOtp(phoneNumber));
-  const otpSentMsg = await ctx.reply(i18n.t(locale, 'otp-sent'));
-  trackMessage(tracker, otpSentMsg.message_id);
+  await ctx.reply(`${i18n.t(locale, 'otp-sent')}\n\n${i18n.t(locale, 'ask-otp')}`);
 
   while (true) {
-    const askOtpMsg = await ctx.reply(i18n.t(locale, 'ask-otp'));
-    trackMessage(tracker, askOtpMsg.message_id);
     const otpContext = await conversation.wait();
-
-    // Track user message or callback query message
-    trackMessage(tracker, otpContext.message?.message_id);
 
     // Handle Resend
     if (otpContext.callbackQuery?.data === 'resend_otp') {
       await otpContext.answerCallbackQuery();
       await conversation.external(() => OtpService.createOtp(phoneNumber));
-      const resendOtpMsg = await otpContext.reply(i18n.t(locale, 'otp-sent'));
-      trackMessage(tracker, resendOtpMsg.message_id);
+      await otpContext.reply(`${i18n.t(locale, 'otp-sent')}\n\n${i18n.t(locale, 'ask-otp')}`);
       continue;
     }
 
@@ -170,10 +125,9 @@ async function performOtpVerification(
         'resend_otp'
       );
       
-      const invalidOtpMsg = await otpContext.reply(i18n.t(locale, 'invalid-otp'), {
+      await otpContext.reply(i18n.t(locale, 'invalid-otp'), {
         reply_markup: resendKeyboard
       });
-      trackMessage(tracker, invalidOtpMsg.message_id);
     }
   }
 }
@@ -223,14 +177,8 @@ async function updateExistingUser(
 export async function registrationConversation(conversation: BotConversation, ctx: BotContext) {
   const locale = await getLocale(ctx);
   
-  // Initialize message tracker
-  const tracker: MessageTracker = {
-    messageIds: [],
-    chatId: ctx.chat?.id || 0
-  };
-
   // 1. Get Phone Number
-  const phoneResult = await requestPhoneNumber(conversation, ctx, locale, tracker);
+  const phoneResult = await requestPhoneNumber(conversation, ctx, locale);
   if (!phoneResult) return; // /start was called
   
   const { phoneNumber, ctx: phoneCtx } = phoneResult;
@@ -247,7 +195,7 @@ export async function registrationConversation(conversation: BotConversation, ct
 
   if (!user) {
     // 3. New User: Verify OTP
-    const { verified, lastCtx } = await performOtpVerification(conversation, phoneCtx, phoneNumber, locale, tracker);
+    const { verified, lastCtx } = await performOtpVerification(conversation, phoneCtx, phoneNumber, locale);
     finalCtx = lastCtx;
 
     if (!verified) return; // /start called during OTP
@@ -260,7 +208,6 @@ export async function registrationConversation(conversation: BotConversation, ct
   }
   
   // 5. Delete all tracked messages from the registration conversation
-  await deleteTrackedMessages(finalCtx, tracker);
   
   // 6. Success: Show confirmation and main menu
   await finalCtx.reply(i18n.t(locale, 'phone-saved'), {
