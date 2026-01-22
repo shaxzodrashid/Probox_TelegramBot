@@ -28,3 +28,20 @@ contracts-page-info = 📋 Jami: { $total } ta shartnoma | Sahifa: { $current }/
 contracts-back = 🔙 Orqaga
 contracts-download = 📥 Yuklab olish
 contracts-coming-soon = 🚧 PDF yuklash funksiyasi tez orada qo'shiladi!
+# Settings
+settings-header = ⚙️ *Sozlamalar*
+    
+    👤 *Ism:* { $first_name } { $last_name }
+    📱 *Tel:* { $phone }
+    🌐 *Til:* { $language }
+    
+    Kerakli bo'limni tanlang:
+settings-change-name = 👤 Ismni o'zgartirish
+settings-change-phone = 📱 Raqamni o'zgartirish
+settings-change-language = 🌐 Tilni o'zgartirish
+settings-enter-first-name = Iltimos, yangi ismingizni kiriting:
+settings-enter-last-name = Iltimos, yangi familiyangizni kiriting:
+settings-enter-phone = Iltimos, yangi telefon raqamingizni kiriting (+998XXXXXXXXX):
+settings-name-updated = ✅ Ismingiz muvaffaqiyatli o'zgartirildi!
+settings-phone-updated = ✅ Telefon raqamingiz muvaffaqiyatli o'zgartirildi!
+settings-back = 🔙 Orqaga

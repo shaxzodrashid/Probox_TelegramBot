@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
+import { getLocaleFromConversation } from '../utils/locale';
 
 /**
  * Checks if the user exists in SAP HANA by phone number.
@@ -23,17 +24,6 @@ async function verifySapUser(phoneNumber: string): Promise<IBusinessPartner | un
   return undefined;
 }
 
-/**
- * Helper to determine the locale from context or session.
- */
-async function getLocale(ctx: BotContext): Promise<string> {
-  if (ctx.i18n) {
-    return await ctx.i18n.getLocale();
-  } else if (ctx.session && ctx.session.__language_code) {
-    return ctx.session.__language_code;
-  }
-  return 'uz';
-}
 
 /**
  * Requests phone number from the user until a valid one is provided or /start is called.
@@ -80,7 +70,7 @@ async function requestPhoneNumber(
  * Handles the OTP verification flow.
  * Returns true if verified, false if cancelled (e.g. /start).
  */
-async function performOtpVerification(
+export async function performOtpVerification(
   conversation: BotConversation,
   ctx: BotContext, // Context to reply to initially
   phoneNumber: string,
@@ -164,7 +154,7 @@ async function registerNewUser(
  * Main Registration Conversation
  */
 export async function registrationConversation(conversation: BotConversation, ctx: BotContext) {
-  const locale = await getLocale(ctx);
+  const locale = await getLocaleFromConversation(conversation);
   const telegramId = ctx.from?.id;
   
   // 1. Check if user is already registered by Telegram ID

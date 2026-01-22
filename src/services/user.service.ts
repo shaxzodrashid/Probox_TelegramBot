@@ -37,4 +37,16 @@ export class UserService {
       .where('telegram_id', telegramId)
       .update({ language_code: languageCode, updated_at: new Date() });
   }
+
+  static async updateUserName(telegramId: number, firstName: string, lastName: string): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update({ first_name: firstName, last_name: lastName, updated_at: new Date() });
+  }
+
+  static async updateUserPhone(telegramId: number, phoneNumber: string): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update({ phone_number: phoneNumber, updated_at: new Date() });
+  }
 }
