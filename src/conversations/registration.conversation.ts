@@ -86,8 +86,12 @@ async function performOtpVerification(
   phoneNumber: string,
   locale: string
 ): Promise<{ verified: boolean, lastCtx: BotContext }> {
-  await conversation.external(() => OtpService.createOtp(phoneNumber));
-  await ctx.reply(`${i18n.t(locale, 'otp-sent')}\n\n${i18n.t(locale, 'ask-otp')}`);
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  const otp = await conversation.external(() => OtpService.createOtp(phoneNumber));
+  const otpMessage = `${i18n.t(locale, 'otp-sent')}\n\n${i18n.t(locale, 'ask-otp')}`;
+  const messageWithCode = isDevelopment ? `${otpMessage}\n\n🔑 Dev code: ${otp}` : otpMessage;
+  await ctx.reply(messageWithCode);
 
   while (true) {
     const otpContext = await conversation.wait();
@@ -95,8 +99,9 @@ async function performOtpVerification(
     // Handle Resend
     if (otpContext.callbackQuery?.data === 'resend_otp') {
       await otpContext.answerCallbackQuery();
-      await conversation.external(() => OtpService.createOtp(phoneNumber));
-      await otpContext.reply(`${i18n.t(locale, 'otp-sent')}\n\n${i18n.t(locale, 'ask-otp')}`);
+      const resendOtp = await conversation.external(() => OtpService.createOtp(phoneNumber));
+      const resendMessage = isDevelopment ? `${otpMessage}\n\n🔑 Dev code: ${resendOtp}` : otpMessage;
+      await otpContext.reply(resendMessage);
       continue;
     }
 
@@ -154,30 +159,29 @@ async function registerNewUser(
   await conversation.external(() => UserService.createUser(data_to_store));
 }
 
-/**
- * Updates an existing user's Telegram info.
- */
-async function updateExistingUser(
-  conversation: BotConversation,
-  userId: number,
-  ctx: BotContext,
-  locale: string
-) {
-  await conversation.external(() => UserService.updateUser(userId, {
-    telegram_id: ctx.from?.id,
-    first_name: ctx.from?.first_name,
-    last_name: ctx.from?.last_name,
-    language_code: locale
-  }));
-}
 
 /**
  * Main Registration Conversation
  */
 export async function registrationConversation(conversation: BotConversation, ctx: BotContext) {
   const locale = await getLocale(ctx);
+  const telegramId = ctx.from?.id;
   
-  // 1. Get Phone Number
+  // 1. Check if user is already registered by Telegram ID
+  if (telegramId) {
+    const existingUser = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
+    
+    if (existingUser) {
+      // User already registered, show main menu directly
+      logger.info(`User with Telegram ID ${telegramId} is already registered.`);
+      await ctx.reply(i18n.t(locale, 'welcome-message'), {
+        reply_markup: getMainKeyboardByLocale(locale),
+      });
+      return;
+    }
+  }
+  
+  // 2. Get Phone Number (only for new users)
   const phoneResult = await requestPhoneNumber(conversation, ctx, locale);
   if (!phoneResult) return; // /start was called
   
@@ -188,34 +192,23 @@ export async function registrationConversation(conversation: BotConversation, ct
     ctx.session.user_phone = phoneNumber;
   }
 
-  // 2. Check if user exists
-  const user = await conversation.external(() => UserService.getUserByPhone(phoneNumber));
-  
-  let finalCtx = phoneCtx;
+  // 3. Verify OTP for new user
+  const { verified, lastCtx } = await performOtpVerification(conversation, phoneCtx, phoneNumber, locale);
 
-  if (!user) {
-    // 3. New User: Verify OTP
-    const { verified, lastCtx } = await performOtpVerification(conversation, phoneCtx, phoneNumber, locale);
-    finalCtx = lastCtx;
+  if (!verified) return; // /start called during OTP
 
-    if (!verified) return; // /start called during OTP
-
-    // 4. Register
-    await registerNewUser(conversation, finalCtx, phoneNumber, locale);
-  } else {
-    // 3. Existing User: Update
-    await updateExistingUser(conversation, user.id, phoneCtx, locale);
-  }
+  // 4. Register new user
+  await registerNewUser(conversation, lastCtx, phoneNumber, locale);
   
   // 5. Delete all tracked messages from the registration conversation
   
   // 6. Success: Show confirmation and main menu
-  await finalCtx.reply(i18n.t(locale, 'phone-saved'), {
+  await lastCtx.reply(i18n.t(locale, 'phone-saved'), {
     reply_markup: { remove_keyboard: true },
   });
 
   // 7. Show welcome message with main menu keyboard
-  await finalCtx.reply(i18n.t(locale, 'welcome-message'), {
+  await lastCtx.reply(i18n.t(locale, 'welcome-message'), {
     reply_markup: getMainKeyboardByLocale(locale),
   });
 }

@@ -14,15 +14,6 @@ export interface User {
 }
 
 export class UserService {
-  static async getUserByPhone(phoneNumber: string): Promise<User | null> {
-    const normalizedPhone = phoneNumber.replace('+', '');
-    const user = await db('users')
-      .where('phone_number', normalizedPhone)
-      .orWhere('phone_number', `+${normalizedPhone}`)
-      .first();
-    return user || null;
-  }
-
   static async getUserByTelegramId(telegramId: number): Promise<User | null> {
     const user = await db('users').where('telegram_id', telegramId).first();
     return user || null;
