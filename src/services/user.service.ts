@@ -7,6 +7,7 @@ export interface User {
   first_name?: string;
   last_name?: string;
   phone_number?: string;
+  sap_card_code?: string;
   language_code: string;
   is_admin: boolean;
   created_at: Date;

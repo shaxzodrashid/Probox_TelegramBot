@@ -143,7 +143,11 @@ async function registerNewUser(
     first_name: sapUser?.CardName?.split(' ')[0] || ctx.from?.first_name || '',
     last_name: sapUser?.CardName?.split(' ')[1] || ctx.from?.last_name || '',
     phone_number: phoneNumber,
-    language_code: locale
+    language_code: locale,
+    sap_card_code: sapUser?.CardCode || '',
+    is_admin: sapUser?.U_admin === 'yes',
+    created_at: new Date(),
+    updated_at: new Date()
   };
 
   await conversation.external(() => UserService.createUser(data_to_store));

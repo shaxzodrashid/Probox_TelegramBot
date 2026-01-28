@@ -7,19 +7,23 @@ import { logger } from './utils/logger';
 import { loggerMiddleware } from './middlewares/logger.middleware';
 import { startHandler } from './handlers/start.handler';
 import { helpHandler, aboutHandler } from './handlers/help.handler';
-import { 
-  contractsHandler, 
-  contractsPaginationHandler, 
-  downloadContractHandler,
-  backToMenuHandler 
+import {
+  contractsHandler,
+  contractsPaginationHandler,
+  contractDetailHandler,
+  backToContractsHandler,
+  backToMenuHandler,
+  downloadPdfHandler,
+  contractSelectionHandler,
+  backFromContractsToMenuHandler
 } from './handlers/contracts.handler';
 import { registrationConversation } from './conversations/registration.conversation';
 import { changeNameConversation, changePhoneConversation } from './conversations/settings.conversation';
-import { 
-  settingsHandler, 
-  changeNameHandler, 
-  changePhoneHandler, 
-  changeLanguageHandler 
+import {
+  settingsHandler,
+  changeNameHandler,
+  changePhoneHandler,
+  changeLanguageHandler
 } from './handlers/settings.handler';
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
@@ -61,58 +65,53 @@ bot.callbackQuery('help', helpHandler);
 bot.callbackQuery('about', aboutHandler);
 bot.callbackQuery('start', startHandler);
 
-bot.callbackQuery('set_lang_uz', async (ctx) => {
-  // Explicitly set session language code first
-  ctx.session.__language_code = 'uz';
-  ctx.session.languageSelected = true;
-  
-  // Then sync with i18n
-  await ctx.i18n.setLocale('uz');
-  
-  // Update language in database if user exists
-  const telegramId = ctx.from?.id;
-  if (telegramId) {
-    await UserService.updateUserLanguage(telegramId, 'uz');
-  }
-  
-  // Remove the language selection message
-  await ctx.deleteMessage().catch(() => {});
-  await ctx.answerCallbackQuery();
-  
-  await startHandler(ctx);
-});
-
-bot.callbackQuery('set_lang_ru', async (ctx) => {
-  // Explicitly set session language code first
-  ctx.session.__language_code = 'ru';
-  ctx.session.languageSelected = true;
-  
-  // Then sync with i18n
-  await ctx.i18n.setLocale('ru');
-  
-  // Update language in database if user exists
-  const telegramId = ctx.from?.id;
-  if (telegramId) {
-    await UserService.updateUserLanguage(telegramId, 'ru');
-  }
-  
-  // Remove the language selection message
-  await ctx.deleteMessage().catch(() => {});
-  await ctx.answerCallbackQuery();
-  
-  await startHandler(ctx);
-});
-
 // Contracts menu button handler (matches text from keyboard)
 bot.hears([/📄 Shartnomalarim/, /📄 Мои контракты/], contractsHandler);
 
 // Settings menu button handler
 bot.hears([/⚙️ Sozlamalar/, /⚙️ Настройки/], settingsHandler);
 
+// Settings keyboard handlers
+bot.hears([/👤 Ismni o'zgartirish/, /👤 Изменить имя/], changeNameHandler);
+bot.hears([/📱 Raqamni o'zgartirish/, /📱 Изменить номер/], changePhoneHandler);
+bot.hears([/🌐 Tilni o'zgartirish/, /🌐 Изменить язык/], changeLanguageHandler);
+
+// Language selection handlers for both callback and keyboard
+const handleLanguageSelection = async (ctx: BotContext, lang: 'uz' | 'ru') => {
+  ctx.session.__language_code = lang;
+  ctx.session.languageSelected = true;
+  await ctx.i18n.setLocale(lang);
+
+  const telegramId = ctx.from?.id;
+  if (telegramId) {
+    await UserService.updateUserLanguage(telegramId, lang);
+  }
+
+  if (ctx.callbackQuery) {
+    await ctx.deleteMessage().catch(() => { });
+    await ctx.answerCallbackQuery();
+  }
+
+  await startHandler(ctx);
+};
+
+bot.callbackQuery('set_lang_uz', (ctx) => handleLanguageSelection(ctx, 'uz'));
+bot.callbackQuery('set_lang_ru', (ctx) => handleLanguageSelection(ctx, 'ru'));
+bot.hears("🇺🇿 O'zbekcha", (ctx) => handleLanguageSelection(ctx, 'uz'));
+bot.hears("🇷🇺 Русский", (ctx) => handleLanguageSelection(ctx, 'ru'));
+
 // Contracts callback handlers
 bot.callbackQuery(/^contracts_page:\d+$/, contractsPaginationHandler);
-bot.callbackQuery(/^download_contract:.+$/, downloadContractHandler);
+bot.callbackQuery(/^contract_detail:.+$/, contractDetailHandler);
+bot.callbackQuery('back_to_contracts', backToContractsHandler);
 bot.callbackQuery('back_to_menu', backToMenuHandler);
+bot.callbackQuery('download_pdf', downloadPdfHandler);
+
+// Generic listener for contract selection from reply keyboard
+bot.hears(/^\d+\./, contractSelectionHandler);
+
+// Back to menu from contracts keyboard
+bot.hears([/🔙 Orqaga/, /🔙 Назад/], backFromContractsToMenuHandler);
 
 // Settings callback handlers
 bot.callbackQuery('change_name', changeNameHandler);

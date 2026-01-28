@@ -1,6 +1,6 @@
-import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../types/context';
 import { UserService } from '../services/user.service';
+import { getSettingsKeyboard, getSettingsLanguageKeyboard } from '../keyboards';
 
 export async function settingsHandler(ctx: BotContext) {
   const telegramId = ctx.from?.id;
@@ -10,12 +10,8 @@ export async function settingsHandler(ctx: BotContext) {
   if (!user) return;
 
   const locale = ctx.session?.__language_code || 'uz';
-  
-  const keyboard = new InlineKeyboard()
-    .text(ctx.t('settings-change-name'), 'change_name').row()
-    .text(ctx.t('settings-change-phone'), 'change_phone').row()
-    .text(ctx.t('settings-change-language'), 'change_language').row()
-    .text(ctx.t('settings-back'), 'back_to_menu');
+
+  const keyboard = getSettingsKeyboard(ctx);
 
   const message = ctx.t('settings-header', {
     first_name: user.first_name || '',
@@ -25,7 +21,9 @@ export async function settingsHandler(ctx: BotContext) {
   });
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(message, {
+    // If it was triggered by a callback, we might want to delete the message or reply with a new one
+    // because InlineKeyboardMarkup and ReplyKeyboardMarkup don't mix well in editMessageText
+    await ctx.reply(message, {
       parse_mode: 'Markdown',
       reply_markup: keyboard
     });
@@ -38,24 +36,27 @@ export async function settingsHandler(ctx: BotContext) {
 }
 
 export async function changeNameHandler(ctx: BotContext) {
-  await ctx.answerCallbackQuery();
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery();
+  }
   await ctx.conversation.enter('changeNameConversation');
 }
 
 export async function changePhoneHandler(ctx: BotContext) {
-  await ctx.answerCallbackQuery();
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery();
+  }
   await ctx.conversation.enter('changePhoneConversation');
 }
 
 export async function changeLanguageHandler(ctx: BotContext) {
-  await ctx.answerCallbackQuery();
-  
-  const keyboard = new InlineKeyboard()
-    .text('🇺🇿 O\'zbekcha', 'set_lang_uz').row()
-    .text('🇷🇺 Русский', 'set_lang_ru').row()
-    .text(ctx.t('settings-back'), 'open_settings');
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery();
+  }
 
-  await ctx.editMessageText(ctx.t('start-message'), {
+  const keyboard = getSettingsLanguageKeyboard(ctx);
+
+  await ctx.reply(ctx.t('start-message'), {
     reply_markup: keyboard
   });
 }

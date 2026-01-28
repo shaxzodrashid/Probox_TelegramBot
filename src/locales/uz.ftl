@@ -25,9 +25,13 @@ menu-support = 📞 Qo'llab-quvvatlash
 # Contracts
 contracts-header = 📄 *Sizning shartnomalaringiz*
 contracts-page-info = 📋 Jami: { $total } ta shartnoma | Sahifa: { $current }/{ $pages }
+contracts-total = 📋 Jami: { $total } ta shartnoma
 contracts-back = 🔙 Orqaga
 contracts-download = 📥 Yuklab olish
 contracts-coming-soon = 🚧 PDF yuklash funksiyasi tez orada qo'shiladi!
+contracts-not-found = Hozircha sizda faol shartnomalar mavjud emas. 😊
+contracts-no-access = ⚠️ Shartnomalarni ko'rish uchun avval ro'yxatdan o'ting yoki administratorga murojaat qiling.
+contracts-error = ❌ Shartnomalarni yuklashda xatolik yuz berdi.
 # Settings
 settings-header = ⚙️ *Sozlamalar*
     

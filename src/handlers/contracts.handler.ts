@@ -1,18 +1,29 @@
 import { InlineKeyboard, InputFile } from 'grammy';
 import { BotContext } from '../types/context';
-import { getPaginatedContracts, mockContracts } from '../data/contracts.mock';
+import { Contract } from '../data/contracts.mock';
+import { getMainKeyboardByLocale, getContractsKeyboard } from '../keyboards';
+import { ContractService } from '../services/contract.service';
+import { UserService } from '../services/user.service';
 import { logger } from '../utils/logger';
+import { formatDate, formatCurrency } from '../utils/formatter.util';
 import { minioService } from '../services/minio.service';
 
 const PAGE_SIZE = 10;
 
+interface PaginatedContracts {
+  items: Contract[];
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
 
 /**
  * Build the contracts list message with inline keyboard
  */
-const buildContractsMessage = (page: number, locale: string) => {
-  const { items, currentPage, totalPages, totalItems, hasNextPage, hasPrevPage } =
-    getPaginatedContracts(page, PAGE_SIZE);
+const buildContractsMessage = (paginatedData: PaginatedContracts, locale: string) => {
+  const { items, currentPage, totalPages, totalItems, hasNextPage, hasPrevPage } = paginatedData;
 
   // Build message text
   const isUzbek = locale === 'uz';
@@ -26,7 +37,7 @@ const buildContractsMessage = (page: number, locale: string) => {
 
   // Simple list with only item names
   let contractsList = '';
-  items.forEach((contract, index) => {
+  items.forEach((contract: Contract, index: number) => {
     const number = (currentPage - 1) * PAGE_SIZE + index + 1;
     contractsList += `*${number}.* ${contract.itemName}\n`;
   });
@@ -36,35 +47,110 @@ const buildContractsMessage = (page: number, locale: string) => {
   // Build inline keyboard
   const keyboard = new InlineKeyboard();
 
-  // Add numbered download buttons in 2 rows (5 buttons per row max)
+  // Add numbered detail buttons
   const BUTTONS_PER_ROW = 5;
-  items.forEach((contract, index) => {
+  items.forEach((contract: Contract, index: number) => {
     const number = (currentPage - 1) * PAGE_SIZE + index + 1;
-    keyboard.text(`${number}`, `download_contract:${contract.id}`);
-    
-    // Add row break after every 5 buttons
+    keyboard.text(`${number}`, `contract_detail:${contract.id}`);
+
     if ((index + 1) % BUTTONS_PER_ROW === 0) {
       keyboard.row();
     }
   });
 
-  // Ensure we start a new row for pagination if last row wasn't complete
   if (items.length % BUTTONS_PER_ROW !== 0) {
     keyboard.row();
   }
 
-  // Add pagination row: ⬅️ | 🔙 Orqaga | ➡️
-  const backText = isUzbek ? '🔙 Orqaga' : '🔙 Назад';
-  
+  // Add pagination row
+  const backToMenuText = isUzbek ? '🔙 Menyuga' : '🔙 В меню';
+
   if (hasPrevPage) {
     keyboard.text('⬅️', `contracts_page:${currentPage - 1}`);
   }
-  
-  keyboard.text(backText, 'back_to_menu');
-  
+
+  keyboard.text(backToMenuText, 'back_to_menu');
+
   if (hasNextPage) {
     keyboard.text('➡️', `contracts_page:${currentPage + 1}`);
   }
+
+  return { text, keyboard };
+};
+
+/**
+ * Build the contract detail message
+ */
+const buildContractDetailMessage = (contract: Contract, locale: string) => {
+  const isUzbek = locale === 'uz';
+
+  // Find next payment (first Open installment)
+  const sortedInst = [...contract.installments].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  const nextPayment = sortedInst.find(inst => inst.status === 'O');
+
+  let text = isUzbek
+    ? `📄 *SHARTNOMA MA'LUMOTLARI*\n\n`
+    : `📄 *ИНФОРМАЦИЯ О КОНТРАКТЕ*\n\n`;
+
+  text += isUzbek
+    ? `👤 *Hamkor:* ${contract.cardName}\n`
+    : `👤 *Партнер:* ${contract.cardName}\n`;
+
+  text += isUzbek
+    ? `🛠 *Mahsulot:* ${contract.itemName}\n`
+    : `🛠 *Товар:* ${contract.itemName}\n`;
+
+  text += isUzbek
+    ? `🔢 *Shartnoma raqami:* \`${contract.contractNumber}\`\n\n`
+    : `🔢 *Номер контракта:* \`${contract.contractNumber}\`\n\n`;
+
+  text += isUzbek
+    ? `📅 *Sotib olingan sana:* ${formatDate(contract.purchaseDate)}\n`
+    : `📅 *Дата покупки:* ${formatDate(contract.purchaseDate)}\n`;
+
+  text += isUzbek
+    ? `🏁 *Yakunlanish sanasi:* ${formatDate(contract.dueDate)}\n\n`
+    : `🏁 *Дата окончания:* ${formatDate(contract.dueDate)}\n\n`;
+
+  text += isUzbek
+    ? `💰 *Shartnoma summasi:* ${formatCurrency(contract.totalAmount, contract.currency)}\n`
+    : `💰 *Сумма контракта:* ${formatCurrency(contract.totalAmount, contract.currency)}\n`;
+
+  text += isUzbek
+    ? `✅ *To'langan:* ${formatCurrency(contract.totalPaid, contract.currency)}\n\n`
+    : `✅ *Оплачено:* ${formatCurrency(contract.totalPaid, contract.currency)}\n\n`;
+
+  if (nextPayment) {
+    text += isUzbek
+      ? `⏳ *Navbatdagi to'lov:*\n`
+      : `⏳ *Следующий платеж:*\n`;
+
+    text += isUzbek
+      ? `📅 *Sana:* ${formatDate(nextPayment.dueDate)}\n`
+      : `📅 *Дата:* ${formatDate(nextPayment.dueDate)}\n`;
+
+    text += isUzbek
+      ? `💵 *Summa:* ${formatCurrency(nextPayment.total, contract.currency)}\n`
+      : `💵 *Сумма:* ${formatCurrency(nextPayment.total, contract.currency)}\n`;
+
+    const remainingForInst = nextPayment.total - nextPayment.paid;
+    if (nextPayment.paid > 0) {
+      text += isUzbek
+        ? `⚠️ *Eslatma:* Ushbu to'lovdan ${formatCurrency(nextPayment.paid, contract.currency)} to'langan. Qolgan summa: ${formatCurrency(remainingForInst, contract.currency)}\n`
+        : `⚠️ *Примечание:* Из этого платежа оплачено ${formatCurrency(nextPayment.paid, contract.currency)}. Остаток: ${formatCurrency(remainingForInst, contract.currency)}\n`;
+    } else {
+      text += isUzbek
+        ? `⚠️ *Eslatma:* Ushbu to'lov hali amalga oshirilmagan.\n`
+        : `⚠️ *Примечание:* Этот платеж еще не произведен.\n`;
+    }
+  } else {
+    text += isUzbek
+      ? `🎉 *Tabriklaymiz!* Barcha to'lovlar amalga oshirilgan.`
+      : `🎉 *Поздравляем!* Все платежи произведены.`;
+  }
+
+  const keyboard = new InlineKeyboard()
+    .text(isUzbek ? ' 📄 PDF yuklab olish' : '📄 PDF загрузить', 'download_pdf');
 
   return { text, keyboard };
 };
@@ -75,13 +161,43 @@ const buildContractsMessage = (page: number, locale: string) => {
 export const contractsHandler = async (ctx: BotContext) => {
   logger.info(`[CONTRACTS] User ${ctx.from?.id} opened contracts list`);
 
-  const locale = await ctx.i18n.getLocale() || 'uz';
-  const { text, keyboard } = buildContractsMessage(1, locale);
+  const telegramId = ctx.from?.id;
+  if (!telegramId) return;
 
-  await ctx.reply(text, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard,
-  });
+  const user = await UserService.getUserByTelegramId(telegramId);
+  const cardCode = user?.sap_card_code;
+
+  if (!cardCode) {
+    await ctx.reply(ctx.t('contracts-no-access'));
+    return;
+  }
+
+  try {
+    const contracts = await ContractService.getContractsByCardCode(cardCode);
+
+    if (!contracts || contracts.length === 0) {
+      await ctx.reply(ctx.t('contracts-not-found'));
+      return;
+    }
+
+    ctx.session.contracts = contracts; // Cache in session
+    ctx.session.currentContractsPage = 1;
+
+    const locale = (await ctx.i18n.getLocale()) || 'uz';
+    const keyboard = getContractsKeyboard(contracts, locale);
+
+    const text = `${ctx.t('contracts-header')}\n\n${ctx.t('contracts-total', {
+      total: contracts.length
+    })}`;
+
+    await ctx.reply(text, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  } catch (err) {
+    logger.error(`[CONTRACTS] Error fetching contracts for ${cardCode}: ${err}`);
+    await ctx.reply(ctx.t('contracts-error'));
+  }
 };
 
 /**
@@ -96,8 +212,27 @@ export const contractsPaginationHandler = async (ctx: BotContext) => {
 
   logger.info(`[CONTRACTS] User ${ctx.from?.id} navigated to page ${page}`);
 
-  const locale = await ctx.i18n.getLocale() || 'uz';
-  const { text, keyboard } = buildContractsMessage(page, locale);
+  const locale = (await ctx.i18n.getLocale()) || 'uz';
+
+  let contracts = ctx.session.contracts;
+  if (!contracts || contracts.length === 0) {
+    const user = await UserService.getUserByTelegramId(ctx.from!.id);
+    const cardCode = user?.sap_card_code;
+
+    if (!cardCode) {
+      return ctx.answerCallbackQuery({
+        text: locale === 'uz' ? '⚠️ Shartnoma topilmadi.' : '⚠️ Контракт не найден.',
+        show_alert: true
+      });
+    }
+
+    contracts = await ContractService.getContractsByCardCode(cardCode);
+    ctx.session.contracts = contracts;
+  }
+
+  ctx.session.currentContractsPage = page;
+  const paginatedData = ContractService.paginateContracts(contracts || [], page, PAGE_SIZE);
+  const { text, keyboard } = buildContractsMessage(paginatedData, locale);
 
   await ctx.editMessageText(text, {
     parse_mode: 'Markdown',
@@ -107,87 +242,154 @@ export const contractsPaginationHandler = async (ctx: BotContext) => {
 };
 
 /**
- * Handler for download contract callback - fetches PDF from MinIO and sends to user
+ * Handler for contract detail view
  */
-export const downloadContractHandler = async (ctx: BotContext) => {
+export const contractDetailHandler = async (ctx: BotContext) => {
   const callbackData = ctx.callbackQuery?.data;
   if (!callbackData) return;
 
   const contractId = callbackData.split(':')[1];
-  logger.info(`[CONTRACTS] User ${ctx.from?.id} requested download of contract ${contractId}`);
+  logger.info(`[CONTRACTS] User ${ctx.from?.id} requested details for contract ${contractId}`);
 
-  // Get locale - try i18n first, then session, then default to 'uz'
-  const i18nLocale = await ctx.i18n.getLocale();
-  const sessionLocale = ctx.session?.__language_code;
-  const locale = i18nLocale || sessionLocale || 'uz';
-  
-  logger.info(`[CONTRACTS] Locale detection - i18n: ${i18nLocale}, session: ${sessionLocale}, using: ${locale}`);
-  
-  // Show loading message
-  const loadingMessage = locale === 'uz'
-    ? '📥 PDF yuklanmoqda...'
-    : '📥 Загрузка PDF...';
-  
-  await ctx.answerCallbackQuery({
-    text: loadingMessage,
-  });
+  const locale = (await ctx.i18n.getLocale()) || 'uz';
 
-  try {
-    // For now, using the mock PDF file path
-    // In production, construct the path based on user's CardCode or contract data
-    // Example: `${userCardCode}/${contractNumber}.pdf`
-    const pdfPath = 'bp-files/5672248725/test.pdf';
-    
-    // Check if file exists
-    logger.info(`[CONTRACTS] Checking if file exists in MinIO: ${pdfPath}`);
-    const fileExists = await minioService.fileExists(pdfPath);
-    logger.info(`[CONTRACTS] File exists: ${fileExists}`);
-    
-    if (!fileExists) {
-      const errorMessage = locale === 'uz'
-        ? '❌ PDF fayl topilmadi. Iltimos, keyinroq urinib ko\'ring.'
-        : '❌ PDF файл не найден. Пожалуйста, попробуйте позже.';
-      
-      await ctx.reply(errorMessage);
-      return;
+  let contracts = ctx.session.contracts;
+  if (!contracts || contracts.length === 0) {
+    logger.info(`[CONTRACTS] Session empty, refetching contracts for user ${ctx.from?.id}`);
+    const user = await UserService.getUserByTelegramId(ctx.from!.id);
+    const cardCode = user?.sap_card_code;
+
+    if (cardCode) {
+      contracts = await ContractService.getContractsByCardCode(cardCode);
+      ctx.session.contracts = contracts;
     }
-
-    // Get the PDF file as buffer
-    const pdfBuffer = await minioService.getFileAsBuffer(pdfPath);
-    
-    // Find the contract to get its name for the filename
-    const contract = mockContracts.find(c => c.id === contractId);
-    const fileName = contract 
-      ? `${contract.contractNumber}_${contract.itemName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
-      : `contract_${contractId}.pdf`;
-
-    // Send the PDF document to the user
-    await ctx.replyWithDocument(
-      new InputFile(pdfBuffer, fileName),
-      {
-        caption: locale === 'uz'
-          ? `📄 Shartnoma: ${contract?.itemName || contractId}`
-          : `📄 Контракт: ${contract?.itemName || contractId}`,
-      }
-    );
-
-    logger.info(`[CONTRACTS] Successfully sent PDF for contract ${contractId} to user ${ctx.from?.id}`);
-
-  } catch (error) {
-    logger.error(`[CONTRACTS] Error downloading PDF for contract ${contractId}: ${error}`);
-    
-    const errorMessage = locale === 'uz'
-      ? '❌ PDF yuklashda xatolik yuz berdi. Iltimos, keyinroq urinib ko\'ring.'
-      : '❌ Ошибка при загрузке PDF. Пожалуйста, попробуйте позже.';
-    
-    await ctx.reply(errorMessage);
   }
+
+  const contract = contracts?.find(c => c.id === contractId);
+  if (!contract) {
+    await ctx.answerCallbackQuery({
+      text: locale === 'uz' ? '❌ Shartnoma topilmadi.' : '❌ Контракт не найден.',
+      show_alert: true
+    });
+    return;
+  }
+
+  const { text, keyboard } = buildContractDetailMessage(contract, locale);
+
+  await ctx.editMessageText(text, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
+  await ctx.answerCallbackQuery();
+};
+
+/**
+ * Handler to go back to contracts list from detail view
+ */
+export const backToContractsHandler = async (ctx: BotContext) => {
+  logger.info(`[CONTRACTS] User ${ctx.from?.id} going back to contracts list`);
+
+  const locale = (await ctx.i18n.getLocale()) || 'uz';
+  const page = ctx.session.currentContractsPage || 1;
+
+  let contracts = ctx.session.contracts;
+  if (!contracts || contracts.length === 0) {
+    const user = await UserService.getUserByTelegramId(ctx.from!.id);
+    const cardCode = user?.sap_card_code;
+
+    if (cardCode) {
+      contracts = await ContractService.getContractsByCardCode(cardCode);
+      ctx.session.contracts = contracts;
+    }
+  }
+
+  const paginatedData = ContractService.paginateContracts(contracts || [], page, PAGE_SIZE);
+  const { text, keyboard } = buildContractsMessage(paginatedData, locale);
+
+  await ctx.editMessageText(text, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
+  await ctx.answerCallbackQuery();
 };
 
 /**
  * Handler for back to menu callback
  */
 export const backToMenuHandler = async (ctx: BotContext) => {
-  await ctx.deleteMessage().catch(() => {});
+  await ctx.deleteMessage().catch(() => { });
   await ctx.answerCallbackQuery();
 };
+
+/**
+ * Handler for PDF download
+ */
+export const downloadPdfHandler = async (ctx: BotContext) => {
+  const locale = (await ctx.i18n.getLocale()) || 'uz';
+  const objectName = 'bp-files/5672248725/test.pdf';
+
+  try {
+    await ctx.answerCallbackQuery({
+      text: locale === 'uz' ? 'Fayl tayyorlanmoqda...' : 'Файл подготавливается...'
+    });
+
+    const fileBuffer = await minioService.getFileAsBuffer(objectName);
+
+    await ctx.replyWithDocument(new InputFile(fileBuffer, 'shartnoma.pdf'), {
+      caption: locale === 'uz' ? '📄 Sizning shartnomangiz' : '📄 Ваш контракт'
+    });
+  } catch (err) {
+    logger.error(`[CONTRACTS] Error downloading PDF from MinIO: ${err}`);
+    const errorMsg = locale === 'uz'
+      ? '❌ PDF faylni yuklab olishda xatolik yuz berdi.'
+      : '❌ Ошибка при загрузке PDF файла.';
+    await ctx.reply(errorMsg);
+  }
+};
+
+/**
+ * Handler for contract selection from reply keyboard
+ */
+export const contractSelectionHandler = async (ctx: BotContext) => {
+  const text = ctx.message?.text;
+  if (!text) return;
+
+  const match = text.match(/^(\d+)\./);
+  if (!match) return;
+
+  const index = parseInt(match[1], 10) - 1;
+  const locale = (await ctx.i18n.getLocale()) || 'uz';
+
+  let contracts = ctx.session.contracts;
+  if (!contracts || contracts.length === 0) {
+    const user = await UserService.getUserByTelegramId(ctx.from!.id);
+    const cardCode = user?.sap_card_code;
+    if (cardCode) {
+      contracts = await ContractService.getContractsByCardCode(cardCode);
+      ctx.session.contracts = contracts;
+    }
+  }
+
+  const contract = contracts?.[index];
+  if (!contract) {
+    return ctx.reply(locale === 'uz' ? '❌ Shartnoma topilmadi.' : '❌ Контракт не найден.');
+  }
+
+  const { text: detailText, keyboard } = buildContractDetailMessage(contract, locale);
+  await ctx.reply(detailText, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
+};
+
+/**
+ * Handler for back to menu from keyboard
+ */
+export const backFromContractsToMenuHandler = async (ctx: BotContext) => {
+  const locale = (await ctx.i18n.getLocale()) || 'uz';
+  const welcomeMsg = locale === 'uz' ? 'Bosh menyu' : 'Главное меню';
+  await ctx.reply(welcomeMsg, {
+    reply_markup: getMainKeyboardByLocale(locale),
+  });
+};
+

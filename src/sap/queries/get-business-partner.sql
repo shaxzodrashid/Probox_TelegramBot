@@ -6,7 +6,7 @@ SELECT
     T0."Phone2",
     T0."U_admin"
 FROM {{schema}}."OCRD" T0
-WHERE T0."GroupCode" = '102'
+WHERE T0."CardType" = 'C'
   AND (
     RIGHT(
     REPLACE_REGEXPR('[^0-9]' IN T0."Phone1" WITH ''),

@@ -8,10 +8,13 @@ export const config = {
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
+
+  // SMS Configuration
+  SMS_API_URL: process.env.SMS_API_URL || '',
   SMS_ORIGINATOR: process.env.SMS_ORIGINATOR || '',
   SMS_USERNAME: process.env.SMS_USERNAME || '',
   SMS_PASSWORD: process.env.SMS_PASSWORD || '',
-  
+
   // MinIO Configuration
   MINIO_ENDPOINT: process.env.MINIO_ENDPOINT || 'localhost',
   MINIO_PORT: parseInt(process.env.MINIO_PORT || '9000', 10),

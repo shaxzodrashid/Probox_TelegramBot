@@ -30,7 +30,9 @@ class MinioServiceClass {
    */
   async getFileAsBuffer(objectName: string): Promise<Buffer> {
     try {
+      logger.info(`[MINIO] getFileAsBuffer: getting object ${objectName} from bucket ${this.bucket}`);
       const dataStream = await this.client.getObject(this.bucket, objectName);
+      logger.info(`[MINIO] getFileAsBuffer: obtained stream for ${objectName}`);
       const chunks: Buffer[] = [];
 
       return new Promise((resolve, reject) => {
@@ -62,8 +64,9 @@ class MinioServiceClass {
    */
   async getFileAsStream(objectName: string): Promise<Readable> {
     try {
+      logger.info(`[MINIO] getFileAsStream: getting object ${objectName} from bucket ${this.bucket}`);
       const dataStream = await this.client.getObject(this.bucket, objectName);
-      logger.info(`[MINIO] Streaming ${objectName}`);
+      logger.info(`[MINIO] getFileAsStream: obtained stream for ${objectName}`);
       return dataStream;
     } catch (error) {
       logger.error(`[MINIO] Error getting object stream ${objectName}: ${error}`);

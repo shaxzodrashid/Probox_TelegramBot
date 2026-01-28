@@ -1,6 +1,7 @@
 import { HanaService } from './hana.service';
 import { logger } from '../utils/logger';
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
+import { IPurchaseInstallment } from '../interfaces/purchase.interface';
 import { loadSQL } from '../utils/sql-loader.utils';
 import { normalizeUzPhone } from '../utils/uz-phone.util'
 
@@ -8,7 +9,7 @@ export class SapService {
   private readonly logger = logger;
   private readonly schema: string = process.env.SAP_SCHEMA || 'ALTITUDE_DB';
 
-  constructor(private readonly hana: HanaService) {}
+  constructor(private readonly hana: HanaService) { }
 
   async getBusinessPartnerByPhone(phone: string): Promise<IBusinessPartner[]> {
     const sql = loadSQL('sap/queries/get-business-partner.sql').replace(
@@ -28,6 +29,25 @@ export class SapService {
       this.logger.error('❌ [SAP] getBusinessPartnerByPhone failed', message);
 
       throw new Error(`SAP query failed (getBusinessPartnerByPhone)`);
+    }
+  }
+
+  async getBPpurchasesByCardCode(cardCode: string): Promise<IPurchaseInstallment[]> {
+    const sql = loadSQL('sap/queries/get-bp-purchases.sql').replace(
+      /{{schema}}/g,
+      this.schema,
+    );
+
+    this.logger.info(`📦 [SAP] Fetching purchases for CardCode: ${cardCode}`);
+
+    try {
+      return await this.hana.executeOnce<IPurchaseInstallment>(sql, [cardCode]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getBPpurchasesByCardCode failed', message);
+
+      throw new Error(`SAP query failed (getBPpurchasesByCardCode)`);
     }
   }
 }
