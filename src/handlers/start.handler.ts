@@ -1,5 +1,6 @@
 import { BotContext } from '../types/context';
 import { getMainKeyboard, getLanguageKeyboard } from '../keyboards';
+import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { logger } from '../utils/logger';
 import { UserService } from '../services/user.service';
 
@@ -18,15 +19,28 @@ export const startHandler = async (ctx: BotContext) => {
       await ctx.i18n.setLocale(user.language_code);
       ctx.session.languageSelected = true;
     }
-    
+
+    if (user.is_admin) {
+      const text = ctx.t('admin-menu-header');
+      const keyboard = getAdminMenuKeyboard(user.language_code || 'uz');
+
+      if (ctx.callbackQuery) {
+        await ctx.deleteMessage().catch(() => { });
+        await ctx.answerCallbackQuery();
+      }
+
+      await ctx.reply(text, { reply_markup: keyboard });
+      return;
+    }
+
     const text = ctx.t('welcome-message');
     const keyboard = getMainKeyboard(ctx);
 
     if (ctx.callbackQuery) {
-      await ctx.deleteMessage().catch(() => {});
+      await ctx.deleteMessage().catch(() => { });
       await ctx.answerCallbackQuery();
     }
-    
+
     await ctx.reply(text, { reply_markup: keyboard });
     return;
   }
@@ -35,7 +49,7 @@ export const startHandler = async (ctx: BotContext) => {
   if (!ctx.session?.languageSelected) {
     const text = ctx.t('start-message');
     const keyboard = getLanguageKeyboard();
-    
+
     if (ctx.callbackQuery) {
       await ctx.editMessageText(text, { reply_markup: keyboard });
       await ctx.answerCallbackQuery();

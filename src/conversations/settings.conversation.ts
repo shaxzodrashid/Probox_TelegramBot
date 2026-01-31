@@ -18,14 +18,14 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
   await ctx.reply(i18n.t(locale, 'settings-enter-first-name'), {
     reply_markup: { remove_keyboard: true }
   });
-  
+
   const firstNameCtx = await conversation.wait();
   if (firstNameCtx.message?.text === '/start') return;
   const firstName = firstNameCtx.message?.text || '';
 
   // Ask for Last Name
   await ctx.reply(i18n.t(locale, 'settings-enter-last-name'));
-  
+
   const lastNameCtx = await conversation.wait();
   if (lastNameCtx.message?.text === '/start') return;
   const lastName = lastNameCtx.message?.text || '';
@@ -33,8 +33,11 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
   // Update in DB
   await conversation.external(() => UserService.updateUserName(telegramId, firstName, lastName));
 
+  const user = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
+  const isAdmin = user?.is_admin || false;
+
   await ctx.reply(i18n.t(locale, 'settings-name-updated'), {
-    reply_markup: getMainKeyboardByLocale(locale)
+    reply_markup: getMainKeyboardByLocale(locale, isAdmin)
   });
 }
 
@@ -48,7 +51,7 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
   if (!telegramId) return;
 
   await ctx.reply(i18n.t(locale, 'settings-enter-phone'), {
-     reply_markup: { remove_keyboard: true }
+    reply_markup: { remove_keyboard: true }
   });
 
   while (true) {
@@ -59,7 +62,7 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
 
     if (text && /^\+998\d{9}$/.test(text)) {
       const phoneNumber = text;
-      
+
       // Perform OTP Verification
       const { verified, lastCtx } = await performOtpVerification(conversation, phoneCtx, phoneNumber, locale);
 
@@ -68,8 +71,11 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
       // Update in DB
       await conversation.external(() => UserService.updateUserPhone(telegramId, phoneNumber));
 
+      const user = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
+      const isAdmin = user?.is_admin || false;
+
       await lastCtx.reply(i18n.t(locale, 'settings-phone-updated'), {
-        reply_markup: getMainKeyboardByLocale(locale)
+        reply_markup: getMainKeyboardByLocale(locale, isAdmin)
       });
       break;
     } else {

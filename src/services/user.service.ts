@@ -10,6 +10,7 @@ export interface User {
   sap_card_code?: string;
   language_code: string;
   is_admin: boolean;
+  is_support_banned?: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -49,5 +50,34 @@ export class UserService {
     await db('users')
       .where('telegram_id', telegramId)
       .update({ phone_number: phoneNumber, updated_at: new Date() });
+  }
+
+  /**
+   * Mark a user as blocked (user has blocked the bot)
+   * This is detected from Telegram API errors when sending messages fails
+   */
+  static async markUserAsBlocked(telegramId: number): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update({ is_blocked: true, updated_at: new Date() });
+  }
+
+  /**
+   * Unblock a user (e.g., when they start the bot again)
+   */
+  static async unblockUser(telegramId: number): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update({ is_blocked: false, updated_at: new Date() });
+  }
+  /**
+   * Unblock a user only if they are currently blocked.
+   * This limits unnecessary updates and timestamp changes.
+   */
+  static async unblockUserIfBlocked(telegramId: number): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .andWhere('is_blocked', true)
+      .update({ is_blocked: false, updated_at: new Date() });
   }
 }

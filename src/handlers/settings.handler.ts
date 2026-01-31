@@ -1,6 +1,7 @@
 import { BotContext } from '../types/context';
 import { UserService } from '../services/user.service';
 import { getSettingsKeyboard, getSettingsLanguageKeyboard } from '../keyboards';
+import { formatUzPhone } from '../utils/uz-phone.util';
 
 export async function settingsHandler(ctx: BotContext) {
   const telegramId = ctx.from?.id;
@@ -10,13 +11,14 @@ export async function settingsHandler(ctx: BotContext) {
   if (!user) return;
 
   const locale = ctx.session?.__language_code || 'uz';
+  const isAdmin = user.is_admin || false;
 
-  const keyboard = getSettingsKeyboard(ctx);
+  const keyboard = getSettingsKeyboard(ctx, isAdmin);
 
   const message = ctx.t('settings-header', {
     first_name: user.first_name || '',
     last_name: user.last_name || '',
-    phone: user.phone_number || '',
+    phone: formatUzPhone(user.phone_number),
     language: locale === 'uz' ? "O'zbekcha" : "Русский"
   });
 

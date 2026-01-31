@@ -5,6 +5,8 @@ import { i18n } from './i18n';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { loggerMiddleware } from './middlewares/logger.middleware';
+import { sessionRestorerMiddleware } from './middlewares/session.middleware';
+
 import { startHandler } from './handlers/start.handler';
 import { helpHandler, aboutHandler } from './handlers/help.handler';
 import {
@@ -17,8 +19,41 @@ import {
   contractSelectionHandler,
   backFromContractsToMenuHandler
 } from './handlers/contracts.handler';
+import {
+  paymentsHandler,
+  paymentSelectionHandler,
+  backFromPaymentsToMenuHandler
+} from './handlers/payments.handler';
 import { registrationConversation } from './conversations/registration.conversation';
 import { changeNameConversation, changePhoneConversation } from './conversations/settings.conversation';
+import { supportConversation } from './conversations/support.conversation';
+import { adminReplyConversation } from './conversations/admin-reply.conversation';
+import {
+  adminBroadcastConversation,
+  adminSearchConversation,
+  adminSendMessageConversation
+} from './conversations/admin.conversation';
+import { supportHandler } from './handlers/support.handler';
+import {
+  handleReplyButton,
+  handleCloseButton,
+  handleBlockButton,
+  handleViewReplyButton
+} from './handlers/admin-reply.handler';
+import {
+  adminMenuHandler,
+  adminUsersHandler,
+  adminUsersPaginationHandler,
+  adminUserDetailHandler,
+  adminBlockSupportHandler,
+  adminUnblockSupportHandler,
+  adminStatsHandler,
+  adminExportHandler,
+  adminBackToMenuHandler,
+  adminBackToMainMenuHandler,
+  adminBroadcastHandler,
+  adminSendMessageHandler
+} from './handlers/admin.handler';
 import {
   settingsHandler,
   changeNameHandler,
@@ -36,12 +71,19 @@ export const bot = new Bot<BotContext>(config.BOT_TOKEN);
 bot.use(loggerMiddleware);
 bot.use(session({ initial: (): SessionData => ({}) }));
 bot.use(i18n);
+bot.use(sessionRestorerMiddleware);
+
 bot.use(conversations());
 
 bot.use(createConversation(exampleConversation));
 bot.use(createConversation(registrationConversation));
 bot.use(createConversation(changeNameConversation));
 bot.use(createConversation(changePhoneConversation));
+bot.use(createConversation(supportConversation));
+bot.use(createConversation(adminReplyConversation));
+bot.use(createConversation(adminBroadcastConversation));
+bot.use(createConversation(adminSearchConversation));
+bot.use(createConversation(adminSendMessageConversation));
 
 // Error Handling
 bot.catch((err) => {
@@ -59,6 +101,7 @@ bot.catch((err) => {
 bot.command('start', startHandler);
 bot.command('help', helpHandler);
 bot.command('about', aboutHandler);
+bot.command('admin', adminMenuHandler);
 
 // Callbacks
 bot.callbackQuery('help', helpHandler);
@@ -68,8 +111,24 @@ bot.callbackQuery('start', startHandler);
 // Contracts menu button handler (matches text from keyboard)
 bot.hears([/📄 Shartnomalarim/, /📄 Мои контракты/], contractsHandler);
 
+// Payments menu button handler (matches text from keyboard)
+bot.hears([/💳 To'lovlarim/, /💳 Мои платежи/], paymentsHandler);
+
 // Settings menu button handler
 bot.hears([/⚙️ Sozlamalar/, /⚙️ Настройки/], settingsHandler);
+
+// Support menu button handler
+bot.hears([/📞 Qo'llab-quvvatlash/, /📞 Поддержка/], supportHandler);
+
+// Admin panel button handler
+bot.hears([/👨‍💼 Admin panel/, /👨‍💼 Админ панель/], adminMenuHandler);
+
+// Admin panel keyboard handlers
+bot.hears([/👥 Foydalanuvchilar/, /👥 Пользователи/], adminUsersHandler);
+bot.hears([/📢 Xabar yuborish/, /📢 Отправить сообщение/], adminBroadcastHandler);
+bot.hears([/📊 Statistika/, /📊 Статистика/], adminStatsHandler);
+bot.hears([/📥 Excel yuklab olish/, /📥 Скачать Excel/], adminExportHandler);
+bot.hears([/👤 Foydalanuvchi menyusi/, /👤 Меню пользователя/], adminBackToMainMenuHandler);
 
 // Settings keyboard handlers
 bot.hears([/👤 Ismni o'zgartirish/, /👤 Изменить имя/], changeNameHandler);
@@ -107,14 +166,50 @@ bot.callbackQuery('back_to_contracts', backToContractsHandler);
 bot.callbackQuery('back_to_menu', backToMenuHandler);
 bot.callbackQuery('download_pdf', downloadPdfHandler);
 
-// Generic listener for contract selection from reply keyboard
-bot.hears(/^\d+\./, contractSelectionHandler);
+// Generic listener for numbered selection from reply keyboard
+// This handler checks session to determine if it's contracts or payments
+bot.hears(/^\d+\./, async (ctx) => {
+  // If payments are in session, use payments handler
+  if (ctx.session.payments && ctx.session.payments.length > 0) {
+    return paymentSelectionHandler(ctx);
+  }
+  // Otherwise default to contracts handler
+  return contractSelectionHandler(ctx);
+});
 
-// Back to menu from contracts keyboard
-bot.hears([/🔙 Orqaga/, /🔙 Назад/], backFromContractsToMenuHandler);
+// Back to menu from contracts/payments keyboard
+bot.hears([/🔙 Orqaga/, /🔙 Назад/], async (ctx) => {
+  // If payments are in session, clear payments and go back
+  if (ctx.session.payments && ctx.session.payments.length > 0) {
+    return backFromPaymentsToMenuHandler(ctx);
+  }
+  // Otherwise use contracts back handler
+  return backFromContractsToMenuHandler(ctx);
+});
 
 // Settings callback handlers
 bot.callbackQuery('change_name', changeNameHandler);
 bot.callbackQuery('change_phone', changePhoneHandler);
 bot.callbackQuery('change_language', changeLanguageHandler);
 bot.callbackQuery('open_settings', settingsHandler);
+
+// Support ticket callback handlers (Admin Group)
+bot.callbackQuery(/^support_reply:.+$/, handleReplyButton);
+bot.callbackQuery(/^support_close:.+$/, handleCloseButton);
+bot.callbackQuery(/^support_block:.+$/, handleBlockButton);
+bot.callbackQuery(/^support_view_reply:.+$/, handleViewReplyButton);
+
+// Admin panel callback handlers
+bot.callbackQuery(/^admin_users_page:\d+$/, adminUsersPaginationHandler);
+bot.callbackQuery(/^admin_user_detail:\d+$/, adminUserDetailHandler);
+bot.callbackQuery(/^admin_block_support:\d+$/, adminBlockSupportHandler);
+bot.callbackQuery(/^admin_unblock_support:\d+$/, adminUnblockSupportHandler);
+bot.callbackQuery(/^admin_send_message:\d+$/, adminSendMessageHandler);
+bot.callbackQuery('admin_back_to_menu', adminBackToMenuHandler);
+bot.callbackQuery('admin_back_to_users', adminUsersHandler);
+bot.callbackQuery('admin_cancel', adminBackToMainMenuHandler);
+bot.callbackQuery('admin_broadcast_all', (ctx) => ctx.answerCallbackQuery());
+bot.callbackQuery('admin_broadcast_single', (ctx) => ctx.answerCallbackQuery());
+bot.callbackQuery('admin_broadcast_confirm', (ctx) => ctx.answerCallbackQuery());
+bot.callbackQuery('noop', (ctx) => ctx.answerCallbackQuery());
+

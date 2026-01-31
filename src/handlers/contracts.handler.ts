@@ -1,12 +1,13 @@
-import { InlineKeyboard, InputFile } from 'grammy';
+import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../types/context';
 import { Contract } from '../data/contracts.mock';
 import { getMainKeyboardByLocale, getContractsKeyboard } from '../keyboards';
 import { ContractService } from '../services/contract.service';
 import { UserService } from '../services/user.service';
+import { i18n } from '../i18n';
+import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { logger } from '../utils/logger';
 import { formatDate, formatCurrency } from '../utils/formatter.util';
-import { minioService } from '../services/minio.service';
 
 const PAGE_SIZE = 10;
 
@@ -317,6 +318,24 @@ export const backToContractsHandler = async (ctx: BotContext) => {
  * Handler for back to menu callback
  */
 export const backToMenuHandler = async (ctx: BotContext) => {
+  const telegramId = ctx.from?.id;
+  if (telegramId) {
+    const user = await UserService.getUserByTelegramId(telegramId);
+    if (user?.is_admin) {
+      const locale = (await ctx.i18n.getLocale()) || 'uz';
+      const text = i18n.t(locale, 'admin-menu-header');
+      const keyboard = getAdminMenuKeyboard(locale);
+
+      if (ctx.callbackQuery) {
+        await ctx.deleteMessage().catch(() => { });
+        await ctx.answerCallbackQuery();
+      }
+
+      await ctx.reply(text, { reply_markup: keyboard });
+      return;
+    }
+  }
+
   await ctx.deleteMessage().catch(() => { });
   await ctx.answerCallbackQuery();
 };
@@ -326,25 +345,15 @@ export const backToMenuHandler = async (ctx: BotContext) => {
  */
 export const downloadPdfHandler = async (ctx: BotContext) => {
   const locale = (await ctx.i18n.getLocale()) || 'uz';
-  const objectName = 'bp-files/5672248725/test.pdf';
 
-  try {
-    await ctx.answerCallbackQuery({
-      text: locale === 'uz' ? 'Fayl tayyorlanmoqda...' : 'Файл подготавливается...'
-    });
+  const message = locale === 'uz'
+    ? '🚧 Bu funksiya hozirda ishlab chiqilmoqda. Tez orada ishga tushiriladi!'
+    : '🚧 Эта функция находится в разработке. Скоро будет запущена!';
 
-    const fileBuffer = await minioService.getFileAsBuffer(objectName);
-
-    await ctx.replyWithDocument(new InputFile(fileBuffer, 'shartnoma.pdf'), {
-      caption: locale === 'uz' ? '📄 Sizning shartnomangiz' : '📄 Ваш контракт'
-    });
-  } catch (err) {
-    logger.error(`[CONTRACTS] Error downloading PDF from MinIO: ${err}`);
-    const errorMsg = locale === 'uz'
-      ? '❌ PDF faylni yuklab olishda xatolik yuz berdi.'
-      : '❌ Ошибка при загрузке PDF файла.';
-    await ctx.reply(errorMsg);
-  }
+  await ctx.answerCallbackQuery({
+    text: message,
+    show_alert: true
+  });
 };
 
 /**
@@ -387,6 +396,18 @@ export const contractSelectionHandler = async (ctx: BotContext) => {
  */
 export const backFromContractsToMenuHandler = async (ctx: BotContext) => {
   const locale = (await ctx.i18n.getLocale()) || 'uz';
+  const telegramId = ctx.from?.id;
+
+  if (telegramId) {
+    const user = await UserService.getUserByTelegramId(telegramId);
+    if (user?.is_admin) {
+      const text = i18n.t(locale, 'admin-menu-header');
+      const keyboard = getAdminMenuKeyboard(locale);
+      await ctx.reply(text, { reply_markup: keyboard });
+      return;
+    }
+  }
+
   const welcomeMsg = locale === 'uz' ? 'Bosh menyu' : 'Главное меню';
   await ctx.reply(welcomeMsg, {
     reply_markup: getMainKeyboardByLocale(locale),
