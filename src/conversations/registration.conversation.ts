@@ -1,5 +1,6 @@
 import { BotConversation, BotContext } from '../types/context';
-import { Keyboard, InlineKeyboard } from 'grammy';
+import { Keyboard, InlineKeyboard, Api } from 'grammy';
+import { config } from '../config';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { i18n } from '../i18n';
@@ -83,53 +84,97 @@ export async function performOtpVerification(
   locale: string
 ): Promise<{ verified: boolean, lastCtx: BotContext }> {
   const isDevelopment = process.env.NODE_ENV === 'development';
+  let timerId: NodeJS.Timeout | null = null;
 
-  const otp = await conversation.external(() => OtpService.createOtp(phoneNumber));
-  const otpMessage = `${i18n.t(locale, 'otp-sent')}\n\n${i18n.t(locale, 'ask-otp')}`;
-  const messageWithCode = isDevelopment ? `${otpMessage}\n\n🔑 Dev code: ${otp}` : otpMessage;
-  await ctx.reply(messageWithCode);
-
-  while (true) {
-    const otpContext = await conversation.wait();
-
-    // Handle Resend
-    if (otpContext.callbackQuery?.data === 'resend_otp') {
-      await otpContext.answerCallbackQuery();
-      const resendOtp = await conversation.external(() => OtpService.createOtp(phoneNumber));
-      const resendMessage = isDevelopment ? `${otpMessage}\n\n🔑 Dev code: ${resendOtp}` : otpMessage;
-      await otpContext.reply(resendMessage);
-      continue;
+  const clearTimer = () => {
+    if (timerId) {
+      clearTimeout(timerId);
+      timerId = null;
     }
+  };
 
-    // Handle /start
-    if (otpContext.message?.text === '/start') {
-      return { verified: false, lastCtx: otpContext };
-    }
+  const startResendTimer = (currentCtx: BotContext) => {
+    clearTimer();
+    const chatId = currentCtx.chat?.id;
+    if (!chatId) return;
 
-    const text = otpContext.message?.text;
+    timerId = setTimeout(async () => {
+      try {
+        const api = new Api(config.BOT_TOKEN);
+        const resendKeyboard = new Keyboard()
+          .text(i18n.t(locale, 'resend-otp-button'))
+          .resized()
+          .oneTime();
 
-    // Valid OTP format check
-    if (text && /^\d{6}$/.test(text)) {
-      const isCorrect = await conversation.external(() => OtpService.verifyOtp(phoneNumber, text));
+        await api.sendMessage(chatId, i18n.t(locale, 'otp-resend-info'), {
+          reply_markup: resendKeyboard,
+        });
+      } catch (error) {
+        logger.error('Error sending automatic resend button:', error);
+      }
+    }, 60000);
+  };
 
-      if (isCorrect) {
-        return { verified: true, lastCtx: otpContext };
+  const sendOtp = async (targetCtx: BotContext) => {
+    const otp = await conversation.external(() => OtpService.createOtp(phoneNumber));
+    const otpMessage = `${i18n.t(locale, 'otp-sent-wait')}\n\n${i18n.t(locale, 'ask-otp')}`;
+    const messageWithCode = isDevelopment ? `${otpMessage}\n\n🔑 Dev code: ${otp}` : otpMessage;
+    await targetCtx.reply(messageWithCode);
+    startResendTimer(targetCtx);
+  };
+
+  await sendOtp(ctx);
+
+  try {
+    while (true) {
+      const otpContext = await conversation.wait();
+      clearTimer(); // Stop timer on any activity
+
+      // Handle Resend (Callback or Keyboard Button text)
+      const isResendButton = otpContext.message?.text === i18n.t(locale, 'resend-otp-button');
+      const isResendCallback = otpContext.callbackQuery?.data === 'resend_otp';
+
+      if (isResendButton || isResendCallback) {
+        if (isResendCallback) await otpContext.answerCallbackQuery();
+        await sendOtp(otpContext);
+        continue;
+      }
+
+      // Handle /start
+      if (otpContext.message?.text === '/start') {
+        return { verified: false, lastCtx: otpContext };
+      }
+
+      const text = otpContext.message?.text;
+
+      // Valid OTP format check
+      if (text && /^\d{6}$/.test(text)) {
+        const isCorrect = await conversation.external(() => OtpService.verifyOtp(phoneNumber, text));
+
+        if (isCorrect) {
+          return { verified: true, lastCtx: otpContext };
+        }
+      }
+
+      // If we reach here, OTP was incorrect or invalid format (but not /start and not resend)
+      if (otpContext.message) {
+        await conversation.external(() => OtpService.clearOtp(phoneNumber));
+
+        const resendKeyboard = new InlineKeyboard().text(
+          i18n.t(locale, 'resend-otp-button'),
+          'resend_otp'
+        );
+
+        await otpContext.reply(i18n.t(locale, 'invalid-otp'), {
+          reply_markup: resendKeyboard,
+        });
+
+        // After an error, we should probably restart the timer if the user doesn't act
+        startResendTimer(otpContext);
       }
     }
-
-    // If we reach here, OTP was incorrect or invalid format (but not /start)
-    if (otpContext.message) {
-      await conversation.external(() => OtpService.clearOtp(phoneNumber));
-
-      const resendKeyboard = new InlineKeyboard().text(
-        i18n.t(locale, 'resend-otp-button'),
-        'resend_otp'
-      );
-
-      await otpContext.reply(i18n.t(locale, 'invalid-otp'), {
-        reply_markup: resendKeyboard
-      });
-    }
+  } finally {
+    clearTimer();
   }
 }
 
