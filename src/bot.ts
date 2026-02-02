@@ -213,3 +213,12 @@ bot.callbackQuery('admin_broadcast_single', (ctx) => ctx.answerCallbackQuery());
 bot.callbackQuery('admin_broadcast_confirm', (ctx) => ctx.answerCallbackQuery());
 bot.callbackQuery('noop', (ctx) => ctx.answerCallbackQuery());
 
+// Registration prompt callback handler
+// When user clicks the "Register" button from the registration prompt message
+bot.callbackQuery('start_registration', async (ctx) => {
+  // Delete the prompt message
+  await ctx.deleteMessage().catch(() => { });
+  await ctx.answerCallbackQuery();
+  // Start the registration conversation
+  await ctx.conversation.enter('registrationConversation');
+});

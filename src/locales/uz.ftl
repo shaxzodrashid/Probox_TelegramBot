@@ -61,6 +61,10 @@ settings-name-updated = ✅ Ismingiz muvaffaqiyatli o'zgartirildi!
 settings-phone-updated = ✅ Telefon raqamingiz muvaffaqiyatli o'zgartirildi!
 settings-back = 🔙 Orqaga
 
+# Registration Prompt
+registration-required = ⚠️ Bu bo'limga kirish uchun ro'yxatdan o'tishingiz kerak. Ro'yxatdan o'tish uchun quyidagi tugmani bosing.
+registration-button = 📝 Ro'yxatdan o'tish
+
 # Support
 support-header = 📞 Qo'llab-quvvatlash
 support-ask-message = Iltimos, murojaatingizni yozing. Matn yoki rasm yuborishingiz mumkin.

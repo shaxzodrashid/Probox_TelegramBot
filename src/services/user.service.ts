@@ -80,4 +80,26 @@ export class UserService {
       .andWhere('is_blocked', true)
       .update({ is_blocked: false, updated_at: new Date() });
   }
+
+  static async getUsersWithoutSapCardCode(): Promise<User[]> {
+    return db('users')
+      .whereNull('sap_card_code')
+      .whereNotNull('phone_number')
+      .select('*');
+  }
+
+  static async syncUserWithSap(telegramId: number, sapCardCode: string, isAdmin?: boolean): Promise<void> {
+    const updateData: Partial<User> & { updated_at: Date } = { 
+      sap_card_code: sapCardCode, 
+      updated_at: new Date() 
+    };
+
+    if (isAdmin !== undefined) {
+      updateData.is_admin = isAdmin;
+    }
+
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update(updateData);
+  }
 }

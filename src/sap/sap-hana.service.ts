@@ -50,4 +50,29 @@ export class SapService {
       throw new Error(`SAP query failed (getBPpurchasesByCardCode)`);
     }
   }
+
+  async getBusinessPartnersByPhones(phones: string[]): Promise<IBusinessPartner[]> {
+    if (phones.length === 0) return [];
+
+    const normalizedPhones = phones.map((p) => normalizeUzPhone(p).last9);
+    const placeholders = normalizedPhones.map(() => '?').join(',');
+
+    const sql = loadSQL('sap/queries/get-business-partners-batch.sql')
+      .replace(/{{schema}}/g, this.schema)
+      .replace(/{{phones}}/g, placeholders);
+
+    this.logger.info(`📦 [SAP] Fetching batch business partners (${normalizedPhones.length} phones)`);
+
+    try {
+      // The query uses IN ({{phones}}) twice: once for Phone1 and once for Phone2
+      const params = [...normalizedPhones, ...normalizedPhones];
+      return await this.hana.executeOnce<IBusinessPartner>(sql, params);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getBusinessPartnersByPhones failed', message);
+
+      throw new Error(`SAP query failed (getBusinessPartnersByPhones)`);
+    }
+  }
 }

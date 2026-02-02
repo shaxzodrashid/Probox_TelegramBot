@@ -59,7 +59,15 @@ export const startHandler = async (ctx: BotContext) => {
     return;
   }
 
-  // Language selected but user not in database - start registration
-  await ctx.conversation.enter('registrationConversation');
+  // Language selected but user not in database - show main menu directly (registration will be prompted when needed)
+  const text = ctx.t('welcome-message');
+  const keyboard = getMainKeyboard(ctx);
+
+  if (ctx.callbackQuery) {
+    await ctx.deleteMessage().catch(() => { });
+    await ctx.answerCallbackQuery();
+  }
+
+  await ctx.reply(text, { reply_markup: keyboard });
 }
 

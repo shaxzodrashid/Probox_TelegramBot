@@ -100,6 +100,14 @@ export async function performOtpVerification(
 
     timerId = setTimeout(async () => {
       try {
+        // Check if user is already registered before sending the prompt
+        // This prevents the message from appearing if the user completed registration
+        const telegramId = currentCtx.from?.id;
+        if (telegramId) {
+          const existingUser = await UserService.getUserByTelegramId(telegramId);
+          if (existingUser) return;
+        }
+
         const api = new Api(config.BOT_TOKEN);
         const resendKeyboard = new Keyboard()
           .text(i18n.t(locale, 'resend-otp-button'))

@@ -3,12 +3,17 @@ import { getMainKeyboard } from '../keyboards';
 import { UserService } from '../services/user.service';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { i18n } from '../i18n';
+import { checkRegistrationOrPrompt } from '../utils/registration.check';
 
 /**
  * Handler for the support menu button
  * Starts the support conversation
  */
 export async function supportHandler(ctx: BotContext): Promise<void> {
+    // Check if user is registered, if not, prompt to register
+    const user = await checkRegistrationOrPrompt(ctx);
+    if (!user) return;
+
     await ctx.conversation.enter('supportConversation');
 }
 

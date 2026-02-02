@@ -7,6 +7,7 @@ import { i18n } from '../i18n';
 import { logger } from '../utils/logger';
 import { formatDate, formatCurrency } from '../utils/formatter.util';
 import { PaymentContract } from '../interfaces/payment.interface';
+import { checkRegistrationOrPrompt } from '../utils/registration.check';
 
 /**
  * Gets the status emoji for a payment installment
@@ -110,11 +111,11 @@ const buildPaymentDetailMessage = (payment: PaymentContract, locale: string) => 
 export const paymentsHandler = async (ctx: BotContext) => {
     logger.info(`[PAYMENTS] User ${ctx.from?.id} opened payments list`);
 
-    const telegramId = ctx.from?.id;
-    if (!telegramId) return;
+    // Check if user is registered, if not, prompt to register
+    const user = await checkRegistrationOrPrompt(ctx);
+    if (!user) return;
 
-    const user = await UserService.getUserByTelegramId(telegramId);
-    const cardCode = user?.sap_card_code;
+    const cardCode = user.sap_card_code;
 
     if (!cardCode) {
         await ctx.reply(ctx.t('payments-no-access'));

@@ -1,13 +1,11 @@
 import { BotContext } from '../types/context';
-import { UserService } from '../services/user.service';
 import { getSettingsKeyboard, getSettingsLanguageKeyboard } from '../keyboards';
 import { formatUzPhone } from '../utils/uz-phone.util';
+import { checkRegistrationOrPrompt } from '../utils/registration.check';
 
 export async function settingsHandler(ctx: BotContext) {
-  const telegramId = ctx.from?.id;
-  if (!telegramId) return;
-
-  const user = await UserService.getUserByTelegramId(telegramId);
+  // Check if user is registered, if not, prompt to register
+  const user = await checkRegistrationOrPrompt(ctx);
   if (!user) return;
 
   const locale = ctx.session?.__language_code || 'uz';

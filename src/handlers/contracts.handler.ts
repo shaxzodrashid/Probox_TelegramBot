@@ -8,6 +8,7 @@ import { i18n } from '../i18n';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { logger } from '../utils/logger';
 import { formatDate, formatCurrency } from '../utils/formatter.util';
+import { checkRegistrationOrPrompt } from '../utils/registration.check';
 
 const PAGE_SIZE = 10;
 
@@ -162,11 +163,11 @@ const buildContractDetailMessage = (contract: Contract, locale: string) => {
 export const contractsHandler = async (ctx: BotContext) => {
   logger.info(`[CONTRACTS] User ${ctx.from?.id} opened contracts list`);
 
-  const telegramId = ctx.from?.id;
-  if (!telegramId) return;
+  // Check if user is registered, if not, prompt to register
+  const user = await checkRegistrationOrPrompt(ctx);
+  if (!user) return;
 
-  const user = await UserService.getUserByTelegramId(telegramId);
-  const cardCode = user?.sap_card_code;
+  const cardCode = user.sap_card_code;
 
   if (!cardCode) {
     await ctx.reply(ctx.t('contracts-no-access'));
