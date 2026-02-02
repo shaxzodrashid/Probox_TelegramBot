@@ -24,7 +24,7 @@ async function testSapService() {
       logger.info('⚠️ No business partner found for this phone number.');
     } else {
       logger.info('✅ Found Business Partners:');
-      console.table(bpResults);
+      logger.table(bpResults);
       
       // 📝 TEST 2: Purchases by CardCode (using the first found BP)
       const testCardCode = bpResults[0].CardCode;
@@ -36,7 +36,7 @@ async function testSapService() {
         logger.info('⚠️ No purchases found for this CardCode.');
       } else {
         logger.info('✅ Found Purchases/Installments:');
-        console.info(purchaseResults);
+        logger.table(purchaseResults);
       }
     }
   } catch (error) {

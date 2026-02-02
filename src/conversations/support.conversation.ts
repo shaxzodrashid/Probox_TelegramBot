@@ -225,7 +225,7 @@ async function processSupport(
 
         if (!adminGroupId) {
             logger.error('ADMIN_GROUP_ID not configured');
-            await ctx.reply(i18n.t(locale, 'support-sent', { ticket: ticket.ticket_number }), {
+            await ctx.reply(i18n.t(locale, 'support-sent'), {
                 reply_markup: getMainKeyboardByLocale(locale),
             });
             return;
@@ -255,11 +255,11 @@ async function processSupport(
 
         // 5. Confirm to user
         if (user?.is_admin) {
-            await ctx.reply(i18n.t(locale, 'support-sent', { ticket: ticket.ticket_number }) + "\n\n" + i18n.t(locale, 'admin-menu-header'), {
+            await ctx.reply(i18n.t(locale, 'support-sent') + "\n\n" + i18n.t(locale, 'admin-menu-header'), {
                 reply_markup: getAdminMenuKeyboard(locale),
             });
         } else {
-            await ctx.reply(i18n.t(locale, 'support-sent', { ticket: ticket.ticket_number }), {
+            await ctx.reply(i18n.t(locale, 'support-sent'), {
                 reply_markup: getMainKeyboardByLocale(locale),
             });
         }

@@ -16,4 +16,9 @@ export const logger = {
   warn: (message: string, ...args: unknown[]) => {
     console.warn(`[WARN] ${new Date().toISOString()} - ${message}`, ...args);
   },
+  table: (data: unknown, properties?: string[]) => {
+    if (isDevelopment) {
+      console.table(data, properties);
+    }
+  }
 };

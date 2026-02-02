@@ -64,7 +64,7 @@ settings-back = 🔙 Orqaga
 # Support
 support-header = 📞 Qo'llab-quvvatlash
 support-ask-message = Iltimos, murojaatingizni yozing. Matn yoki rasm yuborishingiz mumkin.
-support-sent = ✅ Murojaatingiz #{$ticket} raqami bilan qabul qilindi. Tez orada javob beramiz!
+support-sent = ✅ Murojaatingiz qabul qilindi. Tez orada javob beramiz!
 support-banned = 🚫 Sizga qo'llab-quvvatlash xizmatidan foydalanish taqiqlangan.
 support-cancel = 🔙 Bekor qilish
 support-not-registered = ⚠️ Avval ro'yxatdan o'ting.

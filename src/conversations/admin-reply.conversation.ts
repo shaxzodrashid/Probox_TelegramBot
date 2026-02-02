@@ -126,8 +126,6 @@ export async function adminReplyConversation(
         return;
     }
 
-    const userLocale = user.language_code || 'uz';
-
     // Show cancel keyboard and ask for message
     const cancelKeyboard = getAdminReplyCancelKeyboard();
 
@@ -167,8 +165,7 @@ export async function adminReplyConversation(
                 user,
                 message.text,
                 undefined,
-                adminId,
-                userLocale
+                adminId
             );
             return;
         }
@@ -185,8 +182,7 @@ export async function adminReplyConversation(
                 user,
                 caption,
                 photoFileId,
-                adminId,
-                userLocale
+                adminId
             );
             return;
         }
@@ -225,8 +221,7 @@ async function processReply(
     user: NonNullable<Awaited<ReturnType<typeof UserService.getUserByTelegramId>>>,
     replyText: string,
     photoFileId: string | undefined,
-    adminId: number,
-    userLocale: string
+    adminId: number
 ): Promise<void> {
     try {
         // 1. Confirm reply (prevents duplicate processing)
@@ -256,22 +251,25 @@ async function processReply(
         );
 
         // 4. Send reply to user
-        const userNotification = i18n.t(userLocale, 'support-reply-received', {
-            ticket: ticket.ticket_number
-        });
-
-        const fullReplyMessage = `${userNotification}\n\n${replyText}`;
-
         try {
+            const replyOptions: {
+                parse_mode: 'Markdown';
+                reply_parameters?: { message_id: number };
+            } = {
+                parse_mode: 'Markdown'
+            };
+
+            if (ticket.message_id) {
+                replyOptions.reply_parameters = { message_id: ticket.message_id };
+            }
+
             if (photoFileId) {
                 await bot.api.sendPhoto(ticket.user_telegram_id, photoFileId, {
-                    caption: fullReplyMessage,
-                    parse_mode: 'Markdown'
+                    caption: replyText,
+                    ...replyOptions
                 });
             } else {
-                await bot.api.sendMessage(ticket.user_telegram_id, fullReplyMessage, {
-                    parse_mode: 'Markdown'
-                });
+                await bot.api.sendMessage(ticket.user_telegram_id, replyText,  replyOptions);
             }
             logger.info(`Reply sent to user ${ticket.user_telegram_id} for ticket ${ticket.ticket_number}`);
 
