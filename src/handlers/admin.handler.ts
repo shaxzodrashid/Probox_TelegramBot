@@ -21,7 +21,8 @@ const requireAdmin = async (ctx: BotContext): Promise<boolean> => {
     try {
         const user = await UserService.getUserByTelegramId(ctx.from!.id);
         if (!user?.is_admin) {
-            await ctx.reply('⛔ Access denied');
+            const locale = getLocale(ctx);
+            await ctx.reply(i18n.t(locale, 'admin_access_denied'));
             return false;
         }
         return true;
@@ -48,13 +49,13 @@ export const adminMenuHandler = async (ctx: BotContext) => {
         const locale = getLocale(ctx);
 
         await ctx.reply(
-            i18n.t(locale, 'admin-menu-header'),
+            i18n.t(locale, 'admin_menu_header'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
     } catch (error) {
         logger.error('Error in adminMenuHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -72,7 +73,7 @@ export const adminUsersHandler = async (ctx: BotContext) => {
     } catch (error) {
         logger.error('Error in adminUsersHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -92,7 +93,7 @@ export const adminUsersPaginationHandler = async (ctx: BotContext) => {
     } catch (error) {
         logger.error('Error in adminUsersPaginationHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -108,11 +109,11 @@ const showUsersList = async (
     try {
         const result = await AdminService.getUsers(page, 10, { isAdmin: false });
 
-        let message = `${i18n.t(locale, 'admin-users-header')}\n\n`;
+        let message = `${i18n.t(locale, 'admin_users_header')}\n\n`;
 
         result.data.forEach((user, index) => {
             const num = (page - 1) * 10 + index + 1;
-            const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Unknown';
+            const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || i18n.t(locale, 'admin_unknown_user');
             const phone = formatUzPhone(user.phone_number);
             const banned = user.is_support_banned ? ' 🚫' : '';
 
@@ -121,7 +122,7 @@ const showUsersList = async (
             message += `   🆔 \`${user.telegram_id}\`\n\n`;
         });
 
-        message += i18n.t(locale, 'admin-users-footer', {
+        message += i18n.t(locale, 'admin_users_footer', {
             current: page.toString(),
             total: result.totalPages.toString(),
             count: result.total.toString(),
@@ -142,7 +143,7 @@ const showUsersList = async (
         }
     } catch (error) {
         logger.error('Error in showUsersList:', error);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -162,21 +163,21 @@ export const adminUserDetailHandler = async (ctx: BotContext) => {
         const user = await AdminService.getUserDetails(telegramId);
 
         if (!user) {
-            await ctx.reply(i18n.t(locale, 'admin-user-not-found'));
+            await ctx.reply(i18n.t(locale, 'admin_user_not_found'));
             return;
         }
 
         const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Unknown';
 
-        let message = `${i18n.t(locale, 'admin-user-detail-header')}\n\n`;
+        let message = `${i18n.t(locale, 'admin_user_detail_header')}\n\n`;
         message += `👤 *${name}*\n`;
         message += `🆔 Telegram: \`${user.telegram_id}\`\n`;
-        message += `📱 ${i18n.t(locale, 'admin-phone')}: ${formatUzPhone(user.phone_number)}\n`;
+        message += `📱 ${i18n.t(locale, 'admin_phone')}: ${formatUzPhone(user.phone_number)}\n`;
         message += `💼 SAP: ${user.sap_card_code || '-'}\n`;
-        message += `🌐 ${i18n.t(locale, 'admin-language')}: ${user.language_code?.toUpperCase() || 'UZ'}\n`;
-        message += `👑 ${i18n.t(locale, 'admin-is-admin')}: ${user.is_admin ? '✅' : '❌'}\n`;
-        message += `🚫 ${i18n.t(locale, 'admin-support-banned')}: ${user.is_support_banned ? '✅' : '❌'}\n`;
-        message += `📅 ${i18n.t(locale, 'admin-registered')}: ${new Date(user.created_at).toLocaleDateString('uz-UZ')}\n`;
+        message += `🌐 ${i18n.t(locale, 'admin_language')}: ${user.language_code?.toUpperCase() || 'UZ'}\n`;
+        message += `👑 ${i18n.t(locale, 'admin_is_admin')}: ${user.is_admin ? i18n.t(locale, 'admin_yes') : i18n.t(locale, 'admin_no')}\n`;
+        message += `🚫 ${i18n.t(locale, 'admin_support_banned')}: ${user.is_support_banned ? i18n.t(locale, 'admin_yes') : i18n.t(locale, 'admin_no')}\n`;
+        message += `📅 ${i18n.t(locale, 'admin_registered')}: ${new Date(user.created_at).toLocaleDateString('uz-UZ')}\n`;
 
         const keyboard = getAdminUserDetailKeyboard(
             telegramId,
@@ -191,7 +192,7 @@ export const adminUserDetailHandler = async (ctx: BotContext) => {
     } catch (error) {
         logger.error('Error in adminUserDetailHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -211,16 +212,16 @@ export const adminBlockSupportHandler = async (ctx: BotContext) => {
         const result = await AdminService.banUserFromSupport(telegramId, true);
 
         if (result) {
-            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin-user-blocked'), show_alert: true });
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_user_blocked'), show_alert: true });
             // Refresh the user detail view
             await adminUserDetailHandler(ctx);
         } else {
-            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin-action-failed'), show_alert: true });
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_action_failed'), show_alert: true });
         }
     } catch (error) {
         logger.error('Error in adminBlockSupportHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin-error'), show_alert: true });
+        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true });
     }
 };
 
@@ -240,16 +241,16 @@ export const adminUnblockSupportHandler = async (ctx: BotContext) => {
         const result = await AdminService.banUserFromSupport(telegramId, false);
 
         if (result) {
-            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin-user-unblocked'), show_alert: true });
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_user_unblocked'), show_alert: true });
             // Refresh the user detail view
             await adminUserDetailHandler(ctx);
         } else {
-            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin-action-failed'), show_alert: true });
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_action_failed'), show_alert: true });
         }
     } catch (error) {
         logger.error('Error in adminUnblockSupportHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin-error'), show_alert: true });
+        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true });
     }
 };
 
@@ -265,27 +266,27 @@ export const adminStatsHandler = async (ctx: BotContext) => {
         const userStats = await AdminService.getUserStats();
         const ticketStats = await SupportService.getTicketStats();
 
-        let message = `${i18n.t(locale, 'admin-stats-header')}\n\n`;
+        let message = `${i18n.t(locale, 'admin_stats_header')}\n\n`;
 
         // User statistics
-        message += `📊 *${i18n.t(locale, 'admin-stats-users')}*\n`;
-        message += `├ ${i18n.t(locale, 'admin-stats-total')}: ${userStats.total}\n`;
-        message += `├ ${i18n.t(locale, 'admin-stats-admins')}: ${userStats.admins}\n`;
-        message += `├ ${i18n.t(locale, 'admin-stats-with-sap')}: ${userStats.withSapCode}\n`;
-        message += `└ ${i18n.t(locale, 'admin-stats-support-banned')}: ${userStats.supportBanned}\n\n`;
+        message += `📊 *${i18n.t(locale, 'admin_stats_users')}*\n`;
+        message += `├ ${i18n.t(locale, 'admin_stats_total')}: ${userStats.total}\n`;
+        message += `├ ${i18n.t(locale, 'admin_stats_admins')}: ${userStats.admins}\n`;
+        message += `├ ${i18n.t(locale, 'admin_stats_with_sap')}: ${userStats.withSapCode}\n`;
+        message += `└ ${i18n.t(locale, 'admin_stats_support_banned')}: ${userStats.supportBanned}\n\n`;
 
         // Ticket statistics
-        message += `🎫 *${i18n.t(locale, 'admin-stats-tickets')}*\n`;
-        message += `├ ${i18n.t(locale, 'admin-stats-total')}: ${ticketStats.total}\n`;
-        message += `├ 🔵 ${i18n.t(locale, 'admin-stats-open')}: ${ticketStats.open}\n`;
-        message += `├ 🟢 ${i18n.t(locale, 'admin-stats-replied')}: ${ticketStats.replied}\n`;
-        message += `└ ⚫ ${i18n.t(locale, 'admin-stats-closed')}: ${ticketStats.closed}\n`;
+        message += `🎫 *${i18n.t(locale, 'admin_stats_tickets')}*\n`;
+        message += `├ ${i18n.t(locale, 'admin_stats_total')}: ${ticketStats.total}\n`;
+        message += `├ 🔵 ${i18n.t(locale, 'admin_stats_open')}: ${ticketStats.open}\n`;
+        message += `├ 🟢 ${i18n.t(locale, 'admin_stats_replied')}: ${ticketStats.replied}\n`;
+        message += `└ ⚫ ${i18n.t(locale, 'admin_stats_closed')}: ${ticketStats.closed}\n`;
 
         await ctx.reply(message, { parse_mode: 'Markdown' });
     } catch (error) {
         logger.error('Error in adminStatsHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -305,12 +306,12 @@ export const adminExportHandler = async (ctx: BotContext) => {
         if (!canExport) {
             const remaining = await ExportService.getRateLimitRemaining(adminId);
             const minutes = Math.ceil(remaining / 60);
-            await ctx.reply(i18n.t(locale, 'admin-export-rate-limit', { minutes: minutes.toString() }));
+            await ctx.reply(i18n.t(locale, 'admin_export_rate_limit', { minutes: minutes.toString() }));
             return;
         }
 
         // Send "generating" message
-        const statusMsg = await ctx.reply(i18n.t(locale, 'admin-export-generating'));
+        const statusMsg = await ctx.reply(i18n.t(locale, 'admin_export_generating'));
 
         // Generate Excel
         const buffer = await ExportService.exportUsersToExcel();
@@ -324,7 +325,7 @@ export const adminExportHandler = async (ctx: BotContext) => {
         await ctx.replyWithDocument(
             new InputFile(buffer, fileName),
             {
-                caption: i18n.t(locale, 'admin-export-ready'),
+                caption: i18n.t(locale, 'admin_export_ready'),
             }
         );
 
@@ -333,7 +334,7 @@ export const adminExportHandler = async (ctx: BotContext) => {
     } catch (error) {
         logger.error('Export error:', error);
         const locale = getLocale(ctx); // Re-fetch locale or pass it in? It is available in scope.
-        await ctx.reply(i18n.t(locale, 'admin-export-error'));
+        await ctx.reply(i18n.t(locale, 'admin_export_error'));
     }
 };
 
@@ -350,13 +351,13 @@ export const adminBackToMenuHandler = async (ctx: BotContext) => {
         }
 
         await ctx.reply(
-            i18n.t(locale, 'admin-menu-header'),
+            i18n.t(locale, 'admin_menu_header'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
     } catch (error) {
         logger.error('Error in adminBackToMenuHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -368,7 +369,7 @@ export const adminBackToMainMenuHandler = async (ctx: BotContext) => {
         const locale = getLocale(ctx);
 
         await ctx.reply(
-            i18n.t(locale, 'welcome-message'),
+            i18n.t(locale, 'welcome_message'),
             { reply_markup: getMainKeyboardByLocale(locale, true) }
         );
     } catch (error) {
@@ -388,7 +389,7 @@ export const adminSearchHandler = async (ctx: BotContext) => {
     } catch (error) {
         logger.error('Error in adminSearchHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -403,7 +404,7 @@ export const adminBroadcastHandler = async (ctx: BotContext) => {
     } catch (error) {
         logger.error('Error in adminBroadcastHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 
@@ -425,6 +426,6 @@ export const adminSendMessageHandler = async (ctx: BotContext) => {
     } catch (error) {
         logger.error('Error in adminSendMessageHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };

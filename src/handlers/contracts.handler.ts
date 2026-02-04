@@ -28,14 +28,13 @@ const buildContractsMessage = (paginatedData: PaginatedContracts, locale: string
   const { items, currentPage, totalPages, totalItems, hasNextPage, hasPrevPage } = paginatedData;
 
   // Build message text
-  const isUzbek = locale === 'uz';
-  const header = isUzbek
-    ? `📄 *Sizning shartnomalaringiz*\n\n`
-    : `📄 *Ваши контракты*\n\n`;
+  const header = i18n.t(locale, 'contracts_header') + '\n\n';
 
-  const pageInfo = isUzbek
-    ? `📋 Jami: ${totalItems} ta shartnoma | Sahifa: ${currentPage}/${totalPages}\n\n`
-    : `📋 Всего: ${totalItems} контрактов | Страница: ${currentPage}/${totalPages}\n\n`;
+  const pageInfo = i18n.t(locale, 'contracts_page_info', {
+    total: totalItems.toString(),
+    current: currentPage.toString(),
+    pages: totalPages.toString()
+  }) + '\n\n';
 
   // Simple list with only item names
   let contractsList = '';
@@ -65,7 +64,7 @@ const buildContractsMessage = (paginatedData: PaginatedContracts, locale: string
   }
 
   // Add pagination row
-  const backToMenuText = isUzbek ? '🔙 Menyuga' : '🔙 В меню';
+  const backToMenuText = i18n.t(locale, 'contracts_back_to_menu');
 
   if (hasPrevPage) {
     keyboard.text('⬅️', `contracts_page:${currentPage - 1}`);
@@ -84,75 +83,43 @@ const buildContractsMessage = (paginatedData: PaginatedContracts, locale: string
  * Build the contract detail message
  */
 const buildContractDetailMessage = (contract: Contract, locale: string) => {
-  const isUzbek = locale === 'uz';
 
   // Find next payment (first Open installment)
   const sortedInst = [...contract.installments].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   const nextPayment = sortedInst.find(inst => inst.status === 'O');
 
-  let text = isUzbek
-    ? `📄 *SHARTNOMA MA'LUMOTLARI*\n\n`
-    : `📄 *ИНФОРМАЦИЯ О КОНТРАКТЕ*\n\n`;
+  let text = i18n.t(locale, 'contracts_detail_header') + '\n\n';
 
-  text += isUzbek
-    ? `👤 *Hamkor:* ${contract.cardName}\n`
-    : `👤 *Партнер:* ${contract.cardName}\n`;
+  text += i18n.t(locale, 'contracts_partner_label', { name: contract.cardName }) + '\n';
+  text += i18n.t(locale, 'contracts_product_label', { name: contract.itemName }) + '\n';
+  text += i18n.t(locale, 'contracts_number_label', { number: contract.contractNumber }) + '\n\n';
 
-  text += isUzbek
-    ? `🛠 *Mahsulot:* ${contract.itemName}\n`
-    : `🛠 *Товар:* ${contract.itemName}\n`;
+  text += i18n.t(locale, 'contracts_purchase_date_label', { date: formatDate(contract.purchaseDate) }) + '\n';
+  text += i18n.t(locale, 'contracts_due_date_label', { date: formatDate(contract.dueDate) }) + '\n\n';
 
-  text += isUzbek
-    ? `🔢 *Shartnoma raqami:* \`${contract.contractNumber}\`\n\n`
-    : `🔢 *Номер контракта:* \`${contract.contractNumber}\`\n\n`;
-
-  text += isUzbek
-    ? `📅 *Sotib olingan sana:* ${formatDate(contract.purchaseDate)}\n`
-    : `📅 *Дата покупки:* ${formatDate(contract.purchaseDate)}\n`;
-
-  text += isUzbek
-    ? `🏁 *Yakunlanish sanasi:* ${formatDate(contract.dueDate)}\n\n`
-    : `🏁 *Дата окончания:* ${formatDate(contract.dueDate)}\n\n`;
-
-  text += isUzbek
-    ? `💰 *Shartnoma summasi:* ${formatCurrency(contract.totalAmount, contract.currency)}\n`
-    : `💰 *Сумма контракта:* ${formatCurrency(contract.totalAmount, contract.currency)}\n`;
-
-  text += isUzbek
-    ? `✅ *To'langan:* ${formatCurrency(contract.totalPaid, contract.currency)}\n\n`
-    : `✅ *Оплачено:* ${formatCurrency(contract.totalPaid, contract.currency)}\n\n`;
+  text += i18n.t(locale, 'contracts_total_amount_label', { amount: formatCurrency(contract.totalAmount, contract.currency) }) + '\n';
+  text += i18n.t(locale, 'contracts_paid_label', { amount: formatCurrency(contract.totalPaid, contract.currency) }) + '\n\n';
 
   if (nextPayment) {
-    text += isUzbek
-      ? `⏳ *Navbatdagi to'lov:*\n`
-      : `⏳ *Следующий платеж:*\n`;
-
-    text += isUzbek
-      ? `📅 *Sana:* ${formatDate(nextPayment.dueDate)}\n`
-      : `📅 *Дата:* ${formatDate(nextPayment.dueDate)}\n`;
-
-    text += isUzbek
-      ? `💵 *Summa:* ${formatCurrency(nextPayment.total, contract.currency)}\n`
-      : `💵 *Сумма:* ${formatCurrency(nextPayment.total, contract.currency)}\n`;
+    text += i18n.t(locale, 'contracts_next_payment_label') + '\n';
+    text += i18n.t(locale, 'contracts_date_label', { date: formatDate(nextPayment.dueDate) }) + '\n';
+    text += i18n.t(locale, 'contracts_amount_label', { amount: formatCurrency(nextPayment.total, contract.currency) }) + '\n';
 
     const remainingForInst = nextPayment.total - nextPayment.paid;
     if (nextPayment.paid > 0) {
-      text += isUzbek
-        ? `⚠️ *Eslatma:* Ushbu to'lovdan ${formatCurrency(nextPayment.paid, contract.currency)} to'langan. Qolgan summa: ${formatCurrency(remainingForInst, contract.currency)}\n`
-        : `⚠️ *Примечание:* Из этого платежа оплачено ${formatCurrency(nextPayment.paid, contract.currency)}. Остаток: ${formatCurrency(remainingForInst, contract.currency)}\n`;
+      text += i18n.t(locale, 'contracts_payment_note_paid', {
+        paid: formatCurrency(nextPayment.paid, contract.currency),
+        remaining: formatCurrency(remainingForInst, contract.currency)
+      }) + '\n';
     } else {
-      text += isUzbek
-        ? `⚠️ *Eslatma:* Ushbu to'lov hali amalga oshirilmagan.\n`
-        : `⚠️ *Примечание:* Этот платеж еще не произведен.\n`;
+      text += i18n.t(locale, 'contracts_payment_note_unpaid') + '\n';
     }
   } else {
-    text += isUzbek
-      ? `🎉 *Tabriklaymiz!* Barcha to'lovlar amalga oshirilgan.`
-      : `🎉 *Поздравляем!* Все платежи произведены.`;
+    text += i18n.t(locale, 'contracts_all_paid');
   }
 
   const keyboard = new InlineKeyboard()
-    .text(isUzbek ? ' 📄 PDF yuklab olish' : '📄 PDF загрузить', 'download_pdf');
+    .text(i18n.t(locale, 'contracts_download_pdf'), 'download_pdf');
 
   return { text, keyboard };
 };
@@ -170,7 +137,7 @@ export const contractsHandler = async (ctx: BotContext) => {
   const cardCode = user.sap_card_code;
 
   if (!cardCode) {
-    await ctx.reply(ctx.t('contracts-no-access'));
+    await ctx.reply(ctx.t('contracts_no_access'));
     return;
   }
 
@@ -178,7 +145,7 @@ export const contractsHandler = async (ctx: BotContext) => {
     const contracts = await ContractService.getContractsByCardCode(cardCode);
 
     if (!contracts || contracts.length === 0) {
-      await ctx.reply(ctx.t('contracts-not-found'));
+      await ctx.reply(ctx.t('contracts_not_found'));
       return;
     }
 
@@ -188,7 +155,7 @@ export const contractsHandler = async (ctx: BotContext) => {
     const locale = (await ctx.i18n.getLocale()) || 'uz';
     const keyboard = getContractsKeyboard(contracts, locale);
 
-    const text = `${ctx.t('contracts-header')}\n\n${ctx.t('contracts-total', {
+    const text = `${ctx.t('contracts_header')}\n\n${ctx.t('contracts_total', {
       total: contracts.length
     })}`;
 
@@ -198,7 +165,7 @@ export const contractsHandler = async (ctx: BotContext) => {
     });
   } catch (err) {
     logger.error(`[CONTRACTS] Error fetching contracts for ${cardCode}: ${err}`);
-    await ctx.reply(ctx.t('contracts-error'));
+    await ctx.reply(ctx.t('contracts_error'));
   }
 };
 
@@ -223,7 +190,7 @@ export const contractsPaginationHandler = async (ctx: BotContext) => {
 
     if (!cardCode) {
       return ctx.answerCallbackQuery({
-        text: locale === 'uz' ? '⚠️ Shartnoma topilmadi.' : '⚠️ Контракт не найден.',
+        text: i18n.t(locale, 'contracts_not_found_alert'),
         show_alert: true
       });
     }
@@ -270,7 +237,7 @@ export const contractDetailHandler = async (ctx: BotContext) => {
   const contract = contracts?.find(c => c.id === contractId);
   if (!contract) {
     await ctx.answerCallbackQuery({
-      text: locale === 'uz' ? '❌ Shartnoma topilmadi.' : '❌ Контракт не найден.',
+      text: i18n.t(locale, 'contracts_not_found_alert'),
       show_alert: true
     });
     return;
@@ -324,7 +291,7 @@ export const backToMenuHandler = async (ctx: BotContext) => {
     const user = await UserService.getUserByTelegramId(telegramId);
     if (user?.is_admin) {
       const locale = (await ctx.i18n.getLocale()) || 'uz';
-      const text = i18n.t(locale, 'admin-menu-header');
+      const text = i18n.t(locale, 'admin_menu_header');
       const keyboard = getAdminMenuKeyboard(locale);
 
       if (ctx.callbackQuery) {
@@ -347,9 +314,7 @@ export const backToMenuHandler = async (ctx: BotContext) => {
 export const downloadPdfHandler = async (ctx: BotContext) => {
   const locale = (await ctx.i18n.getLocale()) || 'uz';
 
-  const message = locale === 'uz'
-    ? '🚧 Bu funksiya hozirda ishlab chiqilmoqda. Tez orada ishga tushiriladi!'
-    : '🚧 Эта функция находится в разработке. Скоро будет запущена!';
+  const message = i18n.t(locale, 'contracts_coming_soon');
 
   await ctx.answerCallbackQuery({
     text: message,
@@ -382,7 +347,7 @@ export const contractSelectionHandler = async (ctx: BotContext) => {
 
   const contract = contracts?.[index];
   if (!contract) {
-    return ctx.reply(locale === 'uz' ? '❌ Shartnoma topilmadi.' : '❌ Контракт не найден.');
+    return ctx.reply(i18n.t(locale, 'contracts_not_found_alert'));
   }
 
   const { text: detailText, keyboard } = buildContractDetailMessage(contract, locale);
@@ -402,14 +367,14 @@ export const backFromContractsToMenuHandler = async (ctx: BotContext) => {
   if (telegramId) {
     const user = await UserService.getUserByTelegramId(telegramId);
     if (user?.is_admin) {
-      const text = i18n.t(locale, 'admin-menu-header');
+      const text = i18n.t(locale, 'admin_menu_header');
       const keyboard = getAdminMenuKeyboard(locale);
       await ctx.reply(text, { reply_markup: keyboard });
       return;
     }
   }
 
-  const welcomeMsg = locale === 'uz' ? 'Bosh menyu' : 'Главное меню';
+  const welcomeMsg = i18n.t(locale, 'payments_main_menu');
   await ctx.reply(welcomeMsg, {
     reply_markup: getMainKeyboardByLocale(locale),
   });

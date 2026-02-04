@@ -1,6 +1,7 @@
 import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../types/context';
 import { UserService, User } from '../services/user.service';
+import { i18n } from '../i18n';
 
 /**
  * Checks if the user is registered. If not, sends a one-time message
@@ -20,8 +21,10 @@ export async function checkRegistrationOrPrompt(ctx: BotContext): Promise<User |
   }
 
   // User is not registered - send prompt message using i18n
-  const message = ctx.t('registration-required');
-  const buttonText = ctx.t('registration-button');
+  const locale = (await ctx.i18n.getLocale()) || 'uz';
+  
+  const message = i18n.t(locale, 'registration_required');
+  const buttonText = i18n.t(locale, 'registration_button');
 
   const keyboard = new InlineKeyboard()
     .text(buttonText, 'start_registration');

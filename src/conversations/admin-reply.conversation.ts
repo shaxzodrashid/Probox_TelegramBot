@@ -26,9 +26,10 @@ function formatRepliedMessage(
     originalMessage: string,
     ticketNumber: string,
     adminName: string,
-    repliedAt: Date
+    repliedAt: Date,
+    locale: string
 ): string {
-    const dateStr = repliedAt.toLocaleString('uz-UZ', {
+    const dateStr = repliedAt.toLocaleString(locale === 'ru' ? 'ru-RU' : 'uz-UZ', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -47,18 +48,20 @@ function formatRepliedMessage(
         header = lines.slice(0, 8).join('\n');
     }
 
-    // Replace the first line with replied status
+    // Replace the first line with replied status (matches both Uzbek and Russian patterns)
+    const ticketRepliedTitle = i18n.t(locale, 'admin_ticket_replied_title', { ticket: ticketNumber });
     header = header.replace(
-        /📩 Yangi murojaat #\w+/,
-        `📩 Murojaat #${ticketNumber} ✅ JAVOB BERILDI`
+        /📩 (Yangi murojaat|Новое обращение) #\w+/,
+        ticketRepliedTitle
     );
+
+    const repliedAtFull = i18n.t(locale, 'admin_replied_at_full', { admin: adminName, date: dateStr });
 
     return `${header}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-✅ Javob berildi: ${adminName}
-   🕐 ${dateStr}`;
+${repliedAtFull}`;
 }
 
 /**
@@ -84,7 +87,9 @@ export async function adminReplyConversation(
 
     if (!replySession || !replySession.ticketNumber || !replySession.ticketId) {
         logger.error('Admin reply conversation: Missing ticket info in Redis');
-        await ctx.reply('❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko\'ring.', {
+        // Use default locale for error since we don't have admin info yet
+        const adminLocale = ctx.session?.__language_code || 'uz';
+        await ctx.reply(i18n.t(adminLocale, 'admin_error_generic'), {
             reply_markup: { remove_keyboard: true }
         });
         return;
@@ -104,8 +109,11 @@ export async function adminReplyConversation(
         SupportService.getTicketById(ticketId)
     );
 
+    // Get admin's locale from session
+    const adminLocale = ctx.session?.__language_code || 'uz';
+
     if (!ticket || ticket.status !== 'open') {
-        await ctx.reply(i18n.t('uz', 'admin-already-replied'));
+        await ctx.reply(i18n.t(adminLocale, 'admin_already_replied'));
         // Release lock
         await conversation.external(() =>
             LockService.releaseReplyLock(ticketId, adminId)
@@ -119,7 +127,7 @@ export async function adminReplyConversation(
     );
 
     if (!user) {
-        await ctx.reply(i18n.t('uz', 'admin-ticket-not-found'));
+        await ctx.reply(i18n.t(adminLocale, 'admin_ticket_not_found'));
         await conversation.external(() =>
             LockService.releaseReplyLock(ticketId, adminId)
         );
@@ -129,8 +137,8 @@ export async function adminReplyConversation(
     // Show cancel keyboard and ask for message
     const cancelKeyboard = getAdminReplyCancelKeyboard();
 
-    await ctx.reply(i18n.t('uz', 'admin-reply-ask-message'), {
-        reply_markup: cancelKeyboard,
+    await ctx.reply(i18n.t(adminLocale, 'admin_reply_ask_message'), {
+        reply_markup: getAdminReplyCancelKeyboard(adminLocale),
     });
 
     // Wait for admin's reply message
@@ -148,7 +156,7 @@ export async function adminReplyConversation(
                 LockService.releaseReplyLock(ticketId, adminId)
             );
 
-            await messageContext.reply('❌ Javob bekor qilindi.', {
+            await messageContext.reply(i18n.t(adminLocale, 'admin_reply_cancelled'), {
                 reply_markup: { remove_keyboard: true }
             });
 
@@ -165,7 +173,8 @@ export async function adminReplyConversation(
                 user,
                 message.text,
                 undefined,
-                adminId
+                adminId,
+                adminLocale
             );
             return;
         }
@@ -182,7 +191,8 @@ export async function adminReplyConversation(
                 user,
                 caption,
                 photoFileId,
-                adminId
+                adminId,
+                adminLocale
             );
             return;
         }
@@ -193,7 +203,7 @@ export async function adminReplyConversation(
         );
 
         if (stillHoldsLock !== adminId) {
-            await messageContext.reply(i18n.t('uz', 'admin-lock-expired'), {
+            await messageContext.reply(i18n.t(adminLocale, 'admin_lock_expired'), {
                 reply_markup: { remove_keyboard: true }
             });
             return;
@@ -205,7 +215,7 @@ export async function adminReplyConversation(
         );
 
         // Invalid input, ask again
-        await messageContext.reply(i18n.t('uz', 'admin-reply-ask-message'), {
+        await messageContext.reply(i18n.t(adminLocale, 'admin_reply_ask_message'), {
             reply_markup: cancelKeyboard,
         });
     }
@@ -221,7 +231,8 @@ async function processReply(
     user: NonNullable<Awaited<ReturnType<typeof UserService.getUserByTelegramId>>>,
     replyText: string,
     photoFileId: string | undefined,
-    adminId: number
+    adminId: number,
+    adminLocale: string
 ): Promise<void> {
     try {
         // 1. Confirm reply (prevents duplicate processing)
@@ -231,7 +242,7 @@ async function processReply(
 
         if (!confirmed) {
             // Reply was already confirmed by someone else
-            await ctx.reply(i18n.t('uz', 'admin-already-replied'), {
+            await ctx.reply(i18n.t(adminLocale, 'admin_already_replied'), {
                 reply_markup: { remove_keyboard: true }
             });
             return;
@@ -241,9 +252,9 @@ async function processReply(
         const admin = await conversation.external(() =>
             UserService.getUserByTelegramId(adminId)
         );
-        const adminName = admin
-            ? `${admin.first_name || ''} ${admin.last_name || ''}`.trim() || 'Admin'
-            : 'Admin';
+    const adminName = admin
+            ? `${admin.first_name || ''} ${admin.last_name || ''}`.trim() || i18n.t(adminLocale, 'admin_unknown_user')
+            : i18n.t(adminLocale, 'admin_unknown_user');
 
         // 3. Mark ticket as replied in database
         await conversation.external(() =>
@@ -286,7 +297,7 @@ async function processReply(
                         UserService.markUserAsBlocked(ticket.user_telegram_id)
                     );
                     // Notify admin that user has blocked the bot
-                    await ctx.reply(`⚠️ Foydalanuvchi botni bloklagan. Xabar yetkazilmadi, lekin murojaat javob berilgan deb belgilandi.`);
+                    await ctx.reply(i18n.t(adminLocale, 'admin_user_has_blocked_bot'));
                 } catch (dbError) {
                     logger.error(`Failed to mark user ${ticket.user_telegram_id} as blocked:`, dbError);
                 }
@@ -304,7 +315,8 @@ async function processReply(
                     ticket.message_text,
                     ticket.ticket_number,
                     adminName,
-                    new Date()
+                    new Date(),
+                    adminLocale
                 );
 
                 if (ticket.photo_file_id) {
@@ -313,7 +325,7 @@ async function processReply(
                         ticket.group_message_id,
                         {
                             caption: repliedMessage,
-                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number)
+                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale)
                         }
                     );
                 } else {
@@ -322,7 +334,7 @@ async function processReply(
                         ticket.group_message_id,
                         repliedMessage,
                         {
-                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number)
+                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale)
                         }
                     );
                 }
@@ -338,7 +350,7 @@ async function processReply(
         );
 
         // 7. Confirm to admin
-        await ctx.reply(i18n.t('uz', 'admin-reply-sent'), {
+        await ctx.reply(i18n.t(adminLocale, 'admin_reply_sent'), {
             reply_markup: { remove_keyboard: true }
         });
 
@@ -346,7 +358,7 @@ async function processReply(
 
     } catch (error) {
         logger.error('Error processing admin reply:', error);
-        await ctx.reply('❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko\'ring.', {
+        await ctx.reply(i18n.t(adminLocale, 'admin_error_generic'), {
             reply_markup: { remove_keyboard: true }
         });
 

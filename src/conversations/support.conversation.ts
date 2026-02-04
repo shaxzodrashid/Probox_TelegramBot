@@ -28,11 +28,11 @@ function formatAdminGroupMessage(
     messageText: string,
     createdAt: Date
 ): string {
-    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Nomaʼlum';
+    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || i18n.t(user.language_code, 'admin_unknown_user');
     const phone = formatUzPhone(user.phone_number);
-    const username = user.username ? `@${user.username}` : 'Yo\'q';
-    const sapCode = user.sap_card_code || 'Yo\'q';
-    const language = user.language_code === 'ru' ? 'Русский' : "O'zbekcha";
+    const username = user.username ? `@${user.username}` : i18n.t(user.language_code, 'admin_no');
+    const sapCode = user.sap_card_code || i18n.t(user.language_code, 'admin_no');
+    const language = user.language_code === 'ru' ? i18n.t('ru', 'ru_button') : i18n.t('uz', 'uz_button');
     const dateStr = createdAt.toLocaleString('uz-UZ', {
         year: 'numeric',
         month: '2-digit',
@@ -76,7 +76,7 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
 
         if (!user) {
             // User not registered, shouldn't happen but handle gracefully
-            await ctx.reply(i18n.t(locale, 'support-not-registered'), {
+            await ctx.reply(i18n.t(locale, 'support_not_registered'), {
                 reply_markup: getMainKeyboardByLocale(locale),
             });
             return;
@@ -87,11 +87,11 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
             const isAdmin = user.is_admin || false;
 
             if (isAdmin) {
-                await ctx.reply(i18n.t(locale, 'admin-menu-header'), {
+                await ctx.reply(i18n.t(locale, 'admin_menu_header'), {
                     reply_markup: getAdminMenuKeyboard(locale),
                 });
             } else {
-                await ctx.reply(i18n.t(locale, 'support-banned'), {
+                await ctx.reply(i18n.t(locale, 'support_banned'), {
                     reply_markup: getMainKeyboardByLocale(locale),
                 });
             }
@@ -100,11 +100,11 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
 
         // 3. Show cancel keyboard and ask for message
         const cancelKeyboard = new Keyboard()
-            .text(i18n.t(locale, 'support-cancel'))
+            .text(i18n.t(locale, 'support_cancel'))
             .resized()
             .oneTime();
 
-        await ctx.reply(i18n.t(locale, 'support-ask-message'), {
+        await ctx.reply(i18n.t(locale, 'support_ask_message'), {
             reply_markup: cancelKeyboard,
         });
 
@@ -114,19 +114,19 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
             const message = messageContext.message;
 
             // Check for cancel
-            if (message?.text === i18n.t(locale, 'support-cancel') ||
+            if (message?.text === i18n.t(locale, 'support_cancel') ||
                 message?.text === '/start' ||
-                message?.text === i18n.t(locale, 'menu-contracts') ||
-                message?.text === i18n.t(locale, 'menu-payments') ||
-                message?.text === i18n.t(locale, 'menu-settings') ||
-                message?.text === i18n.t(locale, 'menu-support')) {
+                message?.text === i18n.t(locale, 'menu_contracts') ||
+                message?.text === i18n.t(locale, 'menu_payments') ||
+                message?.text === i18n.t(locale, 'menu_settings') ||
+                message?.text === i18n.t(locale, 'menu_support')) {
 
                 if (user?.is_admin) {
-                    await messageContext.reply(i18n.t(locale, 'admin-menu-header'), {
+                    await messageContext.reply(i18n.t(locale, 'admin_menu_header'), {
                         reply_markup: getAdminMenuKeyboard(locale),
                     });
                 } else {
-                    await messageContext.reply(i18n.t(locale, 'welcome-message'), {
+                    await messageContext.reply(i18n.t(locale, 'welcome_message'), {
                         reply_markup: getMainKeyboardByLocale(locale),
                     });
                 }
@@ -150,7 +150,7 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
             // Check for photo with caption
             if (message?.photo) {
                 const photoFileId = message.photo[message.photo.length - 1].file_id;
-                const caption = message.caption || '[Rasm yuborildi]';
+                const caption = message.caption || `[${i18n.t(locale, 'admin_broadcast_enter_message')}]`;
 
                 await processSupport(
                     conversation,
@@ -165,13 +165,13 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
             }
 
             // Invalid input, ask again
-            await messageContext.reply(i18n.t(locale, 'support-ask-message'), {
+            await messageContext.reply(i18n.t(locale, 'support_ask_message'), {
                 reply_markup: cancelKeyboard,
             });
         }
     } catch (error) {
         logger.error('Error in support conversation:', error);
-        await ctx.reply(i18n.t(locale, 'support-error'), {
+        await ctx.reply(i18n.t(locale, 'support_error'), {
             reply_markup: getMainKeyboardByLocale(locale),
         });
     }
@@ -225,7 +225,7 @@ async function processSupport(
 
         if (!adminGroupId) {
             logger.error('ADMIN_GROUP_ID not configured');
-            await ctx.reply(i18n.t(locale, 'support-sent'), {
+            await ctx.reply(i18n.t(locale, 'support_sent'), {
                 reply_markup: getMainKeyboardByLocale(locale),
             });
             return;
@@ -237,12 +237,12 @@ async function processSupport(
             // Send photo with caption and buttons
             groupMessage = await bot.api.sendPhoto(adminGroupId, photoFileId, {
                 caption: adminMessage,
-                reply_markup: getSupportTicketKeyboard(ticket.ticket_number),
+                reply_markup: getSupportTicketKeyboard(ticket.ticket_number, locale),
             });
         } else {
             // Send text message with buttons
             groupMessage = await bot.api.sendMessage(adminGroupId, adminMessage, {
-                reply_markup: getSupportTicketKeyboard(ticket.ticket_number),
+                reply_markup: getSupportTicketKeyboard(ticket.ticket_number, locale),
             });
         }
 
@@ -255,11 +255,11 @@ async function processSupport(
 
         // 5. Confirm to user
         if (user?.is_admin) {
-            await ctx.reply(i18n.t(locale, 'support-sent') + "\n\n" + i18n.t(locale, 'admin-menu-header'), {
+            await ctx.reply(i18n.t(locale, 'support_sent') + "\n\n" + i18n.t(locale, 'admin_menu_header'), {
                 reply_markup: getAdminMenuKeyboard(locale),
             });
         } else {
-            await ctx.reply(i18n.t(locale, 'support-sent'), {
+            await ctx.reply(i18n.t(locale, 'support_sent'), {
                 reply_markup: getMainKeyboardByLocale(locale),
             });
         }
@@ -268,11 +268,11 @@ async function processSupport(
         logger.error('Error processing support request:', error);
         const isAdmin = user?.is_admin || false;
         if (isAdmin) {
-            await ctx.reply(i18n.t(locale, 'admin-error'), {
+            await ctx.reply(i18n.t(locale, 'admin_error'), {
                 reply_markup: getAdminMenuKeyboard(locale),
             });
         } else {
-            await ctx.reply(i18n.t(locale, 'support-error'), {
+            await ctx.reply(i18n.t(locale, 'support_error'), {
                 reply_markup: getMainKeyboardByLocale(locale),
             });
         }

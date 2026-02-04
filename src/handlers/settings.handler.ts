@@ -2,6 +2,7 @@ import { BotContext } from '../types/context';
 import { getSettingsKeyboard, getSettingsLanguageKeyboard } from '../keyboards';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
+import { i18n } from '../i18n';
 
 export async function settingsHandler(ctx: BotContext) {
   // Check if user is registered, if not, prompt to register
@@ -13,11 +14,11 @@ export async function settingsHandler(ctx: BotContext) {
 
   const keyboard = getSettingsKeyboard(ctx, isAdmin);
 
-  const message = ctx.t('settings-header', {
+  const message = ctx.t('settings_header', {
     first_name: user.first_name || '',
     last_name: user.last_name || '',
     phone: formatUzPhone(user.phone_number),
-    language: locale === 'uz' ? "O'zbekcha" : "Русский"
+    language: locale === 'uz' ? i18n.t('uz', 'uz_button') : i18n.t('ru', 'ru_button')
   });
 
   if (ctx.callbackQuery) {
@@ -56,7 +57,7 @@ export async function changeLanguageHandler(ctx: BotContext) {
 
   const keyboard = getSettingsLanguageKeyboard(ctx);
 
-  await ctx.reply(ctx.t('start-message'), {
+  await ctx.reply(ctx.t('start_message'), {
     reply_markup: keyboard
   });
 }

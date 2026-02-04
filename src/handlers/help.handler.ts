@@ -2,7 +2,7 @@ import { BotContext } from '../types/context';
 import { getHelpKeyboard } from '../keyboards';
 
 export const helpHandler = async (ctx: BotContext) => {
-  const text = ctx.t('help-message');
+  const text = ctx.t('help_message');
   const keyboard = getHelpKeyboard(ctx);
   
   if (ctx.callbackQuery) {
@@ -14,7 +14,7 @@ export const helpHandler = async (ctx: BotContext) => {
 };
 
 export const aboutHandler = async (ctx: BotContext) => {
-  const text = ctx.t('about-message');
+  const text = ctx.t('about_message');
   const keyboard = getHelpKeyboard(ctx);
 
   if (ctx.callbackQuery) {

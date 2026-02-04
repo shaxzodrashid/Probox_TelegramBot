@@ -25,7 +25,7 @@ export async function adminBroadcastConversation(
 
     if (activeBroadcast) {
         await ctx.reply(
-            i18n.t(locale, 'admin-broadcast-already-in-progress'),
+            i18n.t(locale, 'admin_broadcast_already_in_progress'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
         return;
@@ -33,7 +33,7 @@ export async function adminBroadcastConversation(
 
     // Ask for target type
     await ctx.reply(
-        i18n.t(locale, 'admin-broadcast-select-target'),
+        i18n.t(locale, 'admin_broadcast_select_target'),
         { reply_markup: getBroadcastTargetKeyboard(locale) }
     );
 
@@ -43,7 +43,7 @@ export async function adminBroadcastConversation(
     await targetCtx.answerCallbackQuery();
 
     if (targetData === 'admin_cancel') {
-        await targetCtx.editMessageText(i18n.t(locale, 'admin-cancelled'));
+        await targetCtx.editMessageText(i18n.t(locale, 'admin_cancelled'));
         return;
     }
 
@@ -53,18 +53,18 @@ export async function adminBroadcastConversation(
 
     if (!isAll) {
         // Ask for user ID or phone
-        await targetCtx.editMessageText(i18n.t(locale, 'admin-broadcast-enter-user'));
+        await targetCtx.editMessageText(i18n.t(locale, 'admin_broadcast_enter_user'));
         await ctx.reply(
-            i18n.t(locale, 'admin-broadcast-enter-user-prompt'),
+            i18n.t(locale, 'admin_broadcast_enter_user_prompt'),
             { reply_markup: getAdminCancelKeyboard(locale) }
         );
 
         const userInputCtx = await conversation.waitFor('message:text');
         const userInput = userInputCtx.message.text.trim();
 
-        if (userInput === i18n.t(locale, 'admin-cancel')) {
+        if (userInput === i18n.t(locale, 'admin_cancel')) {
             await ctx.reply(
-                i18n.t(locale, 'admin-cancelled'),
+                i18n.t(locale, 'admin_cancelled'),
                 { reply_markup: getAdminMenuKeyboard(locale) }
             );
             return;
@@ -98,27 +98,27 @@ export async function adminBroadcastConversation(
 
         if (!targetUser) {
             await ctx.reply(
-                i18n.t(locale, 'admin-user-not-found'),
+                i18n.t(locale, 'admin_user_not_found'),
                 { reply_markup: getAdminMenuKeyboard(locale) }
             );
             return;
         }
 
         // Show found user details
-        const name = [targetUser.first_name, targetUser.last_name].filter(Boolean).join(' ') || 'Unknown';
+        const name = [targetUser.first_name, targetUser.last_name].filter(Boolean).join(' ') || i18n.t(locale, 'admin_unknown_user');
         const phone = formatUzPhone(targetUser.phone_number);
-        const lang = targetUser.language_code === 'uz' ? '🇺🇿 O\'zbekcha' : '🇷🇺 Русский';
+        const lang = targetUser.language_code === 'uz' ? i18n.t('uz', 'uz_button') : i18n.t('ru', 'ru_button');
         const registeredDate = new Date(targetUser.created_at).toLocaleDateString(locale === 'uz' ? 'uz-UZ' : 'ru-RU');
 
-        let details = `${i18n.t(locale, 'admin-user-detail-header')}\n\n`;
+        let details = `${i18n.t(locale, 'admin_user_detail_header')}\n\n`;
         details += `🆔 ID: \`${targetUser.telegram_id}\`\n`;
-        details += `👤 ${locale === 'uz' ? 'Ism' : 'Имя'}: ${name}\n`;
-        details += `📱 ${i18n.t(locale, 'admin-phone')}: ${phone}\n`;
-        details += `🌐 ${i18n.t(locale, 'admin-language')}: ${lang}\n`;
+        details += `👤 ${i18n.t(locale, 'admin_user_name')}: ${name}\n`;
+        details += `📱 ${i18n.t(locale, 'admin_phone')}: ${phone}\n`;
+        details += `🌐 ${i18n.t(locale, 'admin_language')}: ${lang}\n`;
         if (targetUser.sap_card_code) {
             details += `💳 SAP: \`${targetUser.sap_card_code}\`\n`;
         }
-        details += `📅 ${i18n.t(locale, 'admin-registered')}: ${registeredDate}`;
+        details += `📅 ${i18n.t(locale, 'admin_registered')}: ${registeredDate}`;
 
         await ctx.reply(details, { parse_mode: 'Markdown' });
 
@@ -133,16 +133,16 @@ export async function adminBroadcastConversation(
 
     // Ask for message
     await ctx.reply(
-        i18n.t(locale, 'admin-broadcast-enter-message'),
+        i18n.t(locale, 'admin_broadcast_enter_message'),
         { reply_markup: getAdminCancelKeyboard(locale) }
     );
 
     const msgCtx = await conversation.wait();
 
     // Check for cancel
-    if (msgCtx.message?.text === i18n.t(locale, 'admin-cancel')) {
+    if (msgCtx.message?.text === i18n.t(locale, 'admin_cancel')) {
         await ctx.reply(
-            i18n.t(locale, 'admin-cancelled'),
+            i18n.t(locale, 'admin_cancelled'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
         return;
@@ -153,7 +153,7 @@ export async function adminBroadcastConversation(
 
     if (!messageText && !photoFileId) {
         await ctx.reply(
-            i18n.t(locale, 'admin-broadcast-invalid-message'),
+            i18n.t(locale, 'admin_broadcast_invalid_message'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
         return;
@@ -161,8 +161,8 @@ export async function adminBroadcastConversation(
 
     // Show confirmation
     const confirmMessage = isAll
-        ? i18n.t(locale, 'admin-broadcast-confirm', { count: userCount.toString() })
-        : i18n.t(locale, 'admin-broadcast-confirm-single', { count: '1' });
+        ? i18n.t(locale, 'admin_broadcast_confirm', { count: userCount.toString() })
+        : i18n.t(locale, 'admin_broadcast_confirm_single', { count: '1' });
 
     await ctx.reply(confirmMessage, { reply_markup: getBroadcastConfirmKeyboard(locale) });
 
@@ -171,7 +171,7 @@ export async function adminBroadcastConversation(
     await confirmCtx.answerCallbackQuery();
 
     if (confirmData !== 'admin_broadcast_confirm') {
-        await confirmCtx.editMessageText(i18n.t(locale, 'admin-cancelled'));
+        await confirmCtx.editMessageText(i18n.t(locale, 'admin_cancelled'));
         return;
     }
 
@@ -186,7 +186,7 @@ export async function adminBroadcastConversation(
         });
     });
 
-    await confirmCtx.editMessageText(i18n.t(locale, 'admin-broadcast-started'));
+    await confirmCtx.editMessageText(i18n.t(locale, 'admin_broadcast_started'));
 
     // Process broadcast
     if (isAll) {
@@ -198,19 +198,19 @@ export async function adminBroadcastConversation(
                 // Notify admin of completion
                 await ctx.api.sendMessage(
                     adminId,
-                    i18n.t(locale, 'admin-broadcast-complete', {
+                    i18n.t(locale, 'admin_broadcast_complete', {
                         success: result.success.toString(),
                         total: userCount.toString(),
                     })
                 );
             } catch (error) {
                 logger.error('Broadcast error:', error);
-                await ctx.api.sendMessage(adminId, i18n.t(locale, 'admin-broadcast-error'));
+                await ctx.api.sendMessage(adminId, i18n.t(locale, 'admin_broadcast_error'));
             }
         });
 
         await ctx.reply(
-            i18n.t(locale, 'admin-broadcast-processing', { count: userCount.toString() }),
+            i18n.t(locale, 'admin_broadcast_processing', { count: userCount.toString() }),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
     } else {
@@ -225,12 +225,12 @@ export async function adminBroadcastConversation(
 
         if (success) {
             await ctx.reply(
-                i18n.t(locale, 'admin-broadcast-sent'),
+                i18n.t(locale, 'admin_broadcast_sent'),
                 { reply_markup: getAdminMenuKeyboard(locale) }
             );
         } else {
             await ctx.reply(
-                i18n.t(locale, 'admin-broadcast-failed'),
+                i18n.t(locale, 'admin_broadcast_failed'),
                 { reply_markup: getAdminMenuKeyboard(locale) }
             );
         }
@@ -259,16 +259,16 @@ export async function adminSearchConversation(
 
     // Ask for search term
     await ctx.reply(
-        i18n.t(locale, 'admin-search-prompt'),
+        i18n.t(locale, 'admin_search_prompt'),
         { reply_markup: getAdminCancelKeyboard(locale) }
     );
 
     const searchCtx = await conversation.waitFor('message:text');
     const searchTerm = searchCtx.message.text.trim();
 
-    if (searchTerm === i18n.t(locale, 'admin-cancel')) {
+    if (searchTerm === i18n.t(locale, 'admin_cancel')) {
         await ctx.reply(
-            i18n.t(locale, 'admin-cancelled'),
+            i18n.t(locale, 'admin_cancelled'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
         return;
@@ -281,17 +281,17 @@ export async function adminSearchConversation(
 
     if (users.length === 0) {
         await ctx.reply(
-            i18n.t(locale, 'admin-search-no-results', { query: searchTerm }),
+            i18n.t(locale, 'admin_search_no_results', { query: searchTerm }),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
         return;
     }
 
     // Build results message
-    let message = i18n.t(locale, 'admin-search-results', { query: searchTerm }) + '\n\n';
+    let message = i18n.t(locale, 'admin_search_results', { query: searchTerm }) + '\n\n';
 
     users.forEach((user, index) => {
-        const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Unknown';
+        const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || i18n.t(locale, 'admin_unknown_user');
         const phone = formatUzPhone(user.phone_number);
         const banned = user.is_support_banned ? ' 🚫' : '';
 
@@ -318,23 +318,23 @@ export async function adminSendMessageConversation(
     const targetUserId = ctx.session.adminSendTargetUser;
 
     if (!targetUserId) {
-        await ctx.reply(i18n.t(locale, 'admin-error'));
+        await ctx.reply(i18n.t(locale, 'admin_error'));
         return;
     }
 
 
     // Ask for message
     await ctx.reply(
-        i18n.t(locale, 'admin-send-enter-message'),
+        i18n.t(locale, 'admin_send_enter_message'),
         { reply_markup: getAdminCancelKeyboard(locale) }
     );
 
     const msgCtx = await conversation.wait();
 
     // Check for cancel
-    if (msgCtx.message?.text === i18n.t(locale, 'admin-cancel')) {
+    if (msgCtx.message?.text === i18n.t(locale, 'admin_cancel')) {
         await ctx.reply(
-            i18n.t(locale, 'admin-cancelled'),
+            i18n.t(locale, 'admin_cancelled'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
         // Clear session
@@ -347,7 +347,7 @@ export async function adminSendMessageConversation(
 
     if (!messageText && !photoFileId) {
         await ctx.reply(
-            i18n.t(locale, 'admin-send-invalid-message'),
+            i18n.t(locale, 'admin_send_invalid_message'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
         return;
@@ -360,12 +360,12 @@ export async function adminSendMessageConversation(
 
     if (success) {
         await ctx.reply(
-            i18n.t(locale, 'admin-send-success'),
+            i18n.t(locale, 'admin_send_success'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
     } else {
         await ctx.reply(
-            i18n.t(locale, 'admin-send-failed'),
+            i18n.t(locale, 'admin_send_failed'),
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
     }

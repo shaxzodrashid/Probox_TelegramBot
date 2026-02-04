@@ -2,6 +2,7 @@ import { Bot, session } from 'grammy';
 import { conversations, createConversation } from '@grammyjs/conversations';
 import { BotContext, SessionData } from './types/context';
 import { i18n } from './i18n';
+import { hears } from '@grammyjs/i18n';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { loggerMiddleware } from './middlewares/logger.middleware';
@@ -108,32 +109,24 @@ bot.callbackQuery('help', helpHandler);
 bot.callbackQuery('about', aboutHandler);
 bot.callbackQuery('start', startHandler);
 
-// Contracts menu button handler (matches text from keyboard)
-bot.hears([/📄 Shartnomalarim/, /📄 Мои контракты/], contractsHandler);
+// Main menu handlers
+bot.filter(hears('menu_contracts'), contractsHandler);
+bot.filter(hears('menu_payments'), paymentsHandler);
+bot.filter(hears('menu_settings'), settingsHandler);
+bot.filter(hears('menu_support'), supportHandler);
+bot.filter(hears('admin_menu'), adminMenuHandler);
 
-// Payments menu button handler (matches text from keyboard)
-bot.hears([/💳 To'lovlarim/, /💳 Мои платежи/], paymentsHandler);
-
-// Settings menu button handler
-bot.hears([/⚙️ Sozlamalar/, /⚙️ Настройки/], settingsHandler);
-
-// Support menu button handler
-bot.hears([/📞 Qo'llab-quvvatlash/, /📞 Поддержка/], supportHandler);
-
-// Admin panel button handler
-bot.hears([/👨‍💼 Admin panel/, /👨‍💼 Админ панель/], adminMenuHandler);
-
-// Admin panel keyboard handlers
-bot.hears([/👥 Foydalanuvchilar/, /👥 Пользователи/], adminUsersHandler);
-bot.hears([/📢 Xabar yuborish/, /📢 Отправить сообщение/], adminBroadcastHandler);
-bot.hears([/📊 Statistika/, /📊 Статистика/], adminStatsHandler);
-bot.hears([/📥 Excel yuklab olish/, /📥 Скачать Excel/], adminExportHandler);
-bot.hears([/👤 Foydalanuvchi menyusi/, /👤 Меню пользователя/], adminBackToMainMenuHandler);
+// Admin panel handlers
+bot.filter(hears('admin_users'), adminUsersHandler);
+bot.filter(hears('admin_broadcast'), adminBroadcastHandler);
+bot.filter(hears('admin_stats'), adminStatsHandler);
+bot.filter(hears('admin_export'), adminExportHandler);
+bot.filter(hears('back_to_user_menu'), adminBackToMainMenuHandler);
 
 // Settings keyboard handlers
-bot.hears([/👤 Ismni o'zgartirish/, /👤 Изменить имя/], changeNameHandler);
-bot.hears([/📱 Raqamni o'zgartirish/, /📱 Изменить номер/], changePhoneHandler);
-bot.hears([/🌐 Tilni o'zgartirish/, /🌐 Изменить язык/], changeLanguageHandler);
+bot.filter(hears('settings_change_name'), changeNameHandler);
+bot.filter(hears('settings_change_phone'), changePhoneHandler);
+bot.filter(hears('settings_change_language'), changeLanguageHandler);
 
 // Language selection handlers for both callback and keyboard
 const handleLanguageSelection = async (ctx: BotContext, lang: 'uz' | 'ru') => {
@@ -156,8 +149,8 @@ const handleLanguageSelection = async (ctx: BotContext, lang: 'uz' | 'ru') => {
 
 bot.callbackQuery('set_lang_uz', (ctx) => handleLanguageSelection(ctx, 'uz'));
 bot.callbackQuery('set_lang_ru', (ctx) => handleLanguageSelection(ctx, 'ru'));
-bot.hears("🇺🇿 O'zbekcha", (ctx) => handleLanguageSelection(ctx, 'uz'));
-bot.hears("🇷🇺 Русский", (ctx) => handleLanguageSelection(ctx, 'ru'));
+bot.filter(hears('uz_button'), (ctx) => handleLanguageSelection(ctx, 'uz'));
+bot.filter(hears('ru_button'), (ctx) => handleLanguageSelection(ctx, 'ru'));
 
 // Contracts callback handlers
 bot.callbackQuery(/^contracts_page:\d+$/, contractsPaginationHandler);
@@ -178,7 +171,7 @@ bot.hears(/^\d+\./, async (ctx) => {
 });
 
 // Back to menu from contracts/payments keyboard
-bot.hears([/🔙 Orqaga/, /🔙 Назад/], async (ctx) => {
+bot.filter(hears('back'), async (ctx) => {
   // If payments are in session, clear payments and go back
   if (ctx.session.payments && ctx.session.payments.length > 0) {
     return backFromPaymentsToMenuHandler(ctx);

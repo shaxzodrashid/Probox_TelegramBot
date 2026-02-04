@@ -24,13 +24,13 @@ export async function backFromSupportHandler(ctx: BotContext): Promise<void> {
     const user = await UserService.getUserByTelegramId(ctx.from!.id);
     if (user?.is_admin) {
         const locale = (await ctx.i18n.getLocale()) || 'uz';
-        await ctx.reply(i18n.t(locale, 'admin-menu-header'), {
+        await ctx.reply(i18n.t(locale, 'admin_menu_header'), {
             reply_markup: getAdminMenuKeyboard(locale),
         });
         return;
     }
 
-    await ctx.reply(ctx.t('welcome-message'), {
+    await ctx.reply(ctx.t('welcome_message'), {
         reply_markup: getMainKeyboard(ctx),
     });
 }

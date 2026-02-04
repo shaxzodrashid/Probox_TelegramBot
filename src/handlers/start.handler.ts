@@ -21,7 +21,7 @@ export const startHandler = async (ctx: BotContext) => {
     }
 
     if (user.is_admin) {
-      const text = ctx.t('admin-menu-header');
+      const text = ctx.t('admin_menu_header');
       const keyboard = getAdminMenuKeyboard(user.language_code || 'uz');
 
       if (ctx.callbackQuery) {
@@ -33,7 +33,7 @@ export const startHandler = async (ctx: BotContext) => {
       return;
     }
 
-    const text = ctx.t('welcome-message');
+    const text = ctx.t('welcome_message');
     const keyboard = getMainKeyboard(ctx);
 
     if (ctx.callbackQuery) {
@@ -47,7 +47,7 @@ export const startHandler = async (ctx: BotContext) => {
 
   // User not found in database - check if language has been selected
   if (!ctx.session?.languageSelected) {
-    const text = ctx.t('start-message');
+    const text = ctx.t('start_message');
     const keyboard = getLanguageKeyboard();
 
     if (ctx.callbackQuery) {
@@ -60,7 +60,7 @@ export const startHandler = async (ctx: BotContext) => {
   }
 
   // Language selected but user not in database - show main menu directly (registration will be prompted when needed)
-  const text = ctx.t('welcome-message');
+  const text = ctx.t('welcome_message');
   const keyboard = getMainKeyboard(ctx);
 
   if (ctx.callbackQuery) {

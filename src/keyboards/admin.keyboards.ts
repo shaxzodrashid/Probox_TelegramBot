@@ -10,11 +10,11 @@ import { i18n } from '../i18n';
  */
 export const getAdminMenuKeyboard = (locale: string) => {
     return new Keyboard()
-        .text(i18n.t(locale, 'admin-users'))
-        .text(i18n.t(locale, 'admin-broadcast')).row()
-        .text(i18n.t(locale, 'admin-stats'))
-        .text(i18n.t(locale, 'admin-export')).row()
-        .text(i18n.t(locale, 'admin-back-to-user-menu'))
+        .text(i18n.t(locale, 'admin_users'))
+        .text(i18n.t(locale, 'admin_broadcast')).row()
+        .text(i18n.t(locale, 'admin_stats'))
+        .text(i18n.t(locale, 'admin_export')).row()
+        .text(i18n.t(locale, 'back_to_user_menu'))
         .resized();
 };
 
@@ -40,7 +40,7 @@ export const getAdminUsersKeyboard = (
         keyboard.row();
     }
 
-    keyboard.text(i18n.t(locale, 'admin-back'), 'admin_back_to_menu');
+    keyboard.text(i18n.t(locale, 'back'), 'admin_back_to_menu');
 
     return keyboard;
 };
@@ -57,18 +57,18 @@ export const getAdminUserDetailKeyboard = (
 
     // Block/Unblock support
     if (isSupportBanned) {
-        keyboard.text(i18n.t(locale, 'admin-unblock-support'), `admin_unblock_support:${telegramId}`);
+        keyboard.text(i18n.t(locale, 'admin_unblock_support'), `admin_unblock_support:${telegramId}`);
     } else {
-        keyboard.text(i18n.t(locale, 'admin-block-support'), `admin_block_support:${telegramId}`);
+        keyboard.text(i18n.t(locale, 'admin_block_support'), `admin_block_support:${telegramId}`);
     }
     keyboard.row();
 
     // Send message
-    keyboard.text(i18n.t(locale, 'admin-send-message'), `admin_send_message:${telegramId}`);
+    keyboard.text(i18n.t(locale, 'admin_send_message'), `admin_send_message:${telegramId}`);
     keyboard.row();
 
     // Back
-    keyboard.text(i18n.t(locale, 'admin-back'), 'admin_back_to_users');
+    keyboard.text(i18n.t(locale, 'back'), 'admin_back_to_users');
 
     return keyboard;
 };
@@ -78,11 +78,11 @@ export const getAdminUserDetailKeyboard = (
  */
 export const getBroadcastTargetKeyboard = (locale: string) => {
     return new InlineKeyboard()
-        .text(i18n.t(locale, 'admin-broadcast-all'), 'admin_broadcast_all')
+        .text(i18n.t(locale, 'admin_broadcast_all'), 'admin_broadcast_all')
         .row()
-        .text(i18n.t(locale, 'admin-broadcast-single'), 'admin_broadcast_single')
+        .text(i18n.t(locale, 'admin_broadcast_single'), 'admin_broadcast_single')
         .row()
-        .text(i18n.t(locale, 'admin-cancel'), 'admin_cancel');
+        .text(i18n.t(locale, 'admin_cancel'), 'admin_cancel');
 };
 
 /**
@@ -90,8 +90,8 @@ export const getBroadcastTargetKeyboard = (locale: string) => {
  */
 export const getBroadcastConfirmKeyboard = (locale: string) => {
     return new InlineKeyboard()
-        .text(i18n.t(locale, 'admin-confirm-yes'), 'admin_broadcast_confirm')
-        .text(i18n.t(locale, 'admin-confirm-no'), 'admin_cancel');
+        .text(i18n.t(locale, 'admin_confirm_yes'), 'admin_broadcast_confirm')
+        .text(i18n.t(locale, 'admin_confirm_no'), 'admin_cancel');
 };
 
 /**
@@ -99,7 +99,7 @@ export const getBroadcastConfirmKeyboard = (locale: string) => {
  */
 export const getAdminCancelKeyboard = (locale: string) => {
     return new Keyboard()
-        .text(i18n.t(locale, 'admin-cancel'))
+        .text(i18n.t(locale, 'admin_cancel'))
         .resized()
         .oneTime();
 };
@@ -120,7 +120,7 @@ export const getSearchResultsKeyboard = (
         keyboard.row();
     });
 
-    keyboard.text(i18n.t(locale, 'admin-back'), 'admin_back_to_menu');
+    keyboard.text(i18n.t(locale, 'back'), 'admin_back_to_menu');
 
     return keyboard;
 };

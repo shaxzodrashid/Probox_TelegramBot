@@ -15,7 +15,7 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
   if (!telegramId) return;
 
   // Ask for First Name
-  await ctx.reply(i18n.t(locale, 'settings-enter-first-name'), {
+  await ctx.reply(i18n.t(locale, 'settings_enter_first_name'), {
     reply_markup: { remove_keyboard: true }
   });
 
@@ -24,7 +24,7 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
   const firstName = firstNameCtx.message?.text || '';
 
   // Ask for Last Name
-  await ctx.reply(i18n.t(locale, 'settings-enter-last-name'));
+  await ctx.reply(i18n.t(locale, 'settings_enter_last_name'));
 
   const lastNameCtx = await conversation.wait();
   if (lastNameCtx.message?.text === '/start') return;
@@ -36,7 +36,7 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
   const user = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
   const isAdmin = user?.is_admin || false;
 
-  await ctx.reply(i18n.t(locale, 'settings-name-updated'), {
+  await ctx.reply(i18n.t(locale, 'settings_name_updated'), {
     reply_markup: getMainKeyboardByLocale(locale, isAdmin)
   });
 }
@@ -50,7 +50,7 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
 
   if (!telegramId) return;
 
-  await ctx.reply(i18n.t(locale, 'settings-enter-phone'), {
+  await ctx.reply(i18n.t(locale, 'settings_enter_phone'), {
     reply_markup: { remove_keyboard: true }
   });
 
@@ -74,12 +74,12 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
       const user = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
       const isAdmin = user?.is_admin || false;
 
-      await lastCtx.reply(i18n.t(locale, 'settings-phone-updated'), {
+      await lastCtx.reply(i18n.t(locale, 'settings_phone_updated'), {
         reply_markup: getMainKeyboardByLocale(locale, isAdmin)
       });
       break;
     } else {
-      await phoneCtx.reply(i18n.t(locale, 'settings-enter-phone'));
+      await phoneCtx.reply(i18n.t(locale, 'settings_enter_phone'));
     }
   }
 }

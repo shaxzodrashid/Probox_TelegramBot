@@ -37,11 +37,11 @@ async function requestPhoneNumber(
   locale: string
 ): Promise<{ phoneNumber: string, ctx: BotContext } | null> {
   const sharePhoneKeyboard = new Keyboard()
-    .requestContact(i18n.t(locale, 'share-phone-button'))
+    .requestContact(i18n.t(locale, 'share_phone_button'))
     .resized()
     .oneTime();
 
-  await ctx.reply(i18n.t(locale, 'ask-phone'), {
+  await ctx.reply(i18n.t(locale, 'ask_phone'), {
     reply_markup: sharePhoneKeyboard,
   });
 
@@ -67,7 +67,7 @@ async function requestPhoneNumber(
 
     // If input is invalid, re-ask (or just loop waiting for valid input).
     // Original behavior re-sends the prompt.
-    await messageContext.reply(i18n.t(locale, 'ask-phone'), {
+    await messageContext.reply(i18n.t(locale, 'ask_phone'), {
       reply_markup: sharePhoneKeyboard,
     });
   }
@@ -110,11 +110,11 @@ export async function performOtpVerification(
 
         const api = new Api(config.BOT_TOKEN);
         const resendKeyboard = new Keyboard()
-          .text(i18n.t(locale, 'resend-otp-button'))
+          .text(i18n.t(locale, 'resend_otp_button'))
           .resized()
           .oneTime();
 
-        await api.sendMessage(chatId, i18n.t(locale, 'otp-resend-info'), {
+        await api.sendMessage(chatId, i18n.t(locale, 'otp_resend_info'), {
           reply_markup: resendKeyboard,
         });
       } catch (error) {
@@ -125,7 +125,7 @@ export async function performOtpVerification(
 
   const sendOtp = async (targetCtx: BotContext) => {
     const otp = await conversation.external(() => OtpService.createOtp(phoneNumber));
-    const otpMessage = `${i18n.t(locale, 'otp-sent-wait')}\n\n${i18n.t(locale, 'ask-otp')}`;
+    const otpMessage = `${i18n.t(locale, 'otp_sent_wait')}\n\n${i18n.t(locale, 'ask_otp')}`;
     const messageWithCode = isDevelopment ? `${otpMessage}\n\n🔑 Dev code: ${otp}` : otpMessage;
     await targetCtx.reply(messageWithCode);
     startResendTimer(targetCtx);
@@ -139,7 +139,7 @@ export async function performOtpVerification(
       clearTimer(); // Stop timer on any activity
 
       // Handle Resend (Callback or Keyboard Button text)
-      const isResendButton = otpContext.message?.text === i18n.t(locale, 'resend-otp-button');
+      const isResendButton = otpContext.message?.text === i18n.t(locale, 'resend_otp_button');
       const isResendCallback = otpContext.callbackQuery?.data === 'resend_otp';
 
       if (isResendButton || isResendCallback) {
@@ -169,11 +169,11 @@ export async function performOtpVerification(
         await conversation.external(() => OtpService.clearOtp(phoneNumber));
 
         const resendKeyboard = new InlineKeyboard().text(
-          i18n.t(locale, 'resend-otp-button'),
+          i18n.t(locale, 'resend_otp_button'),
           'resend_otp'
         );
 
-        await otpContext.reply(i18n.t(locale, 'invalid-otp'), {
+        await otpContext.reply(i18n.t(locale, 'invalid_otp'), {
           reply_markup: resendKeyboard,
         });
 
@@ -230,11 +230,11 @@ export async function registrationConversation(conversation: BotConversation, ct
       logger.info(`User with Telegram ID ${telegramId} is already registered.`);
 
       if (existingUser.is_admin) {
-        await ctx.reply(i18n.t(locale, 'admin-menu-header'), {
+        await ctx.reply(i18n.t(locale, 'admin_menu_header'), {
           reply_markup: getAdminMenuKeyboard(locale),
         });
       } else {
-        await ctx.reply(i18n.t(locale, 'welcome-message'), {
+        await ctx.reply(i18n.t(locale, 'welcome_message'), {
           reply_markup: getMainKeyboardByLocale(locale),
         });
       }
@@ -264,17 +264,17 @@ export async function registrationConversation(conversation: BotConversation, ct
   // 5. Delete all tracked messages from the registration conversation
 
   // 6. Success: Show confirmation and main menu
-  await lastCtx.reply(i18n.t(locale, 'phone-saved'), {
+  await lastCtx.reply(i18n.t(locale, 'phone_saved'), {
     reply_markup: { remove_keyboard: true },
   });
 
   // 7. Show welcome message with appropriate menu keyboard
   if (isAdmin) {
-    await lastCtx.reply(i18n.t(locale, 'admin-menu-header'), {
+    await lastCtx.reply(i18n.t(locale, 'admin_menu_header'), {
       reply_markup: getAdminMenuKeyboard(locale),
     });
   } else {
-    await lastCtx.reply(i18n.t(locale, 'welcome-message'), {
+    await lastCtx.reply(i18n.t(locale, 'welcome_message'), {
       reply_markup: getMainKeyboardByLocale(locale),
     });
   }

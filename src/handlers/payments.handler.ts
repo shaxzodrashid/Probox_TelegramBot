@@ -32,19 +32,13 @@ const getStatusEmoji = (status: 'paid' | 'incomplete' | 'overdue' | 'future'): s
  * Builds the payment detail message
  */
 const buildPaymentDetailMessage = (payment: PaymentContract, locale: string) => {
-    const isUzbek = locale === 'uz';
-
-    let text = isUzbek
-        ? `💳 TO'LOV MA'LUMOTLARI\n\n`
-        : `💳 ИНФОРМАЦИЯ О ПЛАТЕЖЕ\n\n`;
+    let text = i18n.t(locale, 'payments_detail_header') + '\n\n';
 
     // Contract number
-    text += isUzbek
-        ? `🔢 Shartnoma: ${payment.contractNumber}\n\n`
-        : `🔢 Контракт: ${payment.contractNumber}\n\n`;
+    text += i18n.t(locale, 'payments_contract_label', { number: payment.contractNumber }) + '\n\n';
 
     // All items in the contract
-    text += isUzbek ? `📦 Mahsulotlar:\n\n` : `📦 Товары:\n\n`;
+    text += i18n.t(locale, 'payments_products_label') + '\n\n';
     payment.allItems.forEach((item) => {
         text += `${item.name}`;
         if (item.price >= 0) {
@@ -55,34 +49,22 @@ const buildPaymentDetailMessage = (payment: PaymentContract, locale: string) => 
     text += '\n';
 
     // Dates
-    text += isUzbek
-        ? `📅 Shartnoma sanasi: ${formatDate(payment.docDate)}\n`
-        : `📅 Дата контракта: ${formatDate(payment.docDate)}\n`;
-
-    text += isUzbek
-        ? `🏁 Yakunlanish sanasi: ${formatDate(payment.dueDate)}\n\n`
-        : `🏁 Дата окончания: ${formatDate(payment.dueDate)}\n\n`;
+    text += i18n.t(locale, 'payments_doc_date_label', { date: formatDate(payment.docDate) }) + '\n';
+    text += i18n.t(locale, 'payments_due_date_label', { date: formatDate(payment.dueDate) }) + '\n\n';
 
     // Totals
-    text += isUzbek
-        ? `💰 Jami summa: ${formatCurrency(payment.total, payment.currency)}\n`
-        : `💰 Общая сумма: ${formatCurrency(payment.total, payment.currency)}\n`;
-
-    text += isUzbek
-        ? `✅ To'langan: ${formatCurrency(payment.totalPaid, payment.currency)}\n`
-        : `✅ Оплачено: ${formatCurrency(payment.totalPaid, payment.currency)}\n`;
+    text += i18n.t(locale, 'payments_total_label', { amount: formatCurrency(payment.total, payment.currency) }) + '\n';
+    text += i18n.t(locale, 'payments_paid_label', { amount: formatCurrency(payment.totalPaid, payment.currency) }) + '\n';
 
     const remaining = payment.total - payment.totalPaid;
     if (remaining > 0) {
-        text += isUzbek
-            ? `⚠️ Qolgan: ${formatCurrency(remaining, payment.currency)}\n`
-            : `⚠️ Остаток: ${formatCurrency(remaining, payment.currency)}\n`;
+        text += i18n.t(locale, 'payments_remaining_label', { amount: formatCurrency(remaining, payment.currency) }) + '\n';
     }
 
     text += '\n';
 
     // Payment schedule
-    text += isUzbek ? `📋 To'lov jadvali:\n` : `📋 График платежей:\n`;
+    text += i18n.t(locale, 'payments_schedule_label') + '\n';
     text += '─'.repeat(18) + '\n';
 
     payment.installments.forEach((inst, index) => {
@@ -118,7 +100,7 @@ export const paymentsHandler = async (ctx: BotContext) => {
     const cardCode = user.sap_card_code;
 
     if (!cardCode) {
-        await ctx.reply(ctx.t('payments-no-access'));
+        await ctx.reply(ctx.t('payments_no_access'));
         return;
     }
 
@@ -126,7 +108,7 @@ export const paymentsHandler = async (ctx: BotContext) => {
         const payments = await PaymentService.getPaymentsByCardCode(cardCode);
 
         if (!payments || payments.length === 0) {
-            await ctx.reply(ctx.t('payments-not-found'));
+            await ctx.reply(ctx.t('payments_not_found'));
             return;
         }
 
@@ -135,7 +117,7 @@ export const paymentsHandler = async (ctx: BotContext) => {
         const locale = (await ctx.i18n.getLocale()) || 'uz';
         const keyboard = getPaymentsKeyboard(payments, locale);
 
-        const text = `${ctx.t('payments-header')}\n\n${ctx.t('payments-total', {
+        const text = `${ctx.t('payments_header')}\n\n${ctx.t('payments_total', {
             total: payments.length
         })}`;
 
@@ -145,7 +127,7 @@ export const paymentsHandler = async (ctx: BotContext) => {
         });
     } catch (err) {
         logger.error(`[PAYMENTS] Error fetching payments for ${cardCode}: ${err}`);
-        await ctx.reply(ctx.t('payments-error'));
+        await ctx.reply(ctx.t('payments_error'));
     }
 };
 
@@ -180,7 +162,7 @@ export const paymentSelectionHandler = async (ctx: BotContext) => {
 
     const payment = payments?.[index];
     if (!payment) {
-        return ctx.reply(locale === 'uz' ? '❌ To\'lov topilmadi.' : '❌ Платеж не найден.');
+        return ctx.reply(ctx.t('payments_not_found_alert'));
     }
 
     const detailText = buildPaymentDetailMessage(payment, locale);
@@ -202,14 +184,14 @@ export const backFromPaymentsToMenuHandler = async (ctx: BotContext) => {
     if (telegramId) {
         const user = await UserService.getUserByTelegramId(telegramId);
         if (user?.is_admin) {
-            const text = i18n.t(locale, 'admin-menu-header');
+            const text = i18n.t(locale, 'admin_menu_header');
             const keyboard = getAdminMenuKeyboard(locale);
             await ctx.reply(text, { reply_markup: keyboard });
             return;
         }
     }
 
-    const welcomeMsg = locale === 'uz' ? 'Bosh menyu' : 'Главное меню';
+    const welcomeMsg = i18n.t(locale, 'payments_main_menu');
     await ctx.reply(welcomeMsg, {
         reply_markup: getMainKeyboardByLocale(locale),
     });

@@ -34,18 +34,18 @@ export async function handleReplyButton(ctx: BotContext): Promise<void> {
         const ticket = await SupportService.getTicketByTicketNumber(ticketNumber);
 
         if (!ticket) {
-            await ctx.reply(i18n.t('uz', 'admin-ticket-not-found'));
+            await ctx.reply(i18n.t('uz', 'admin_ticket_not_found'));
             return;
         }
 
         // Check if already replied
         if (ticket.status === 'replied') {
-            await ctx.reply(i18n.t('uz', 'admin-already-replied'));
+            await ctx.reply(i18n.t('uz', 'admin_already_replied'));
             return;
         }
 
         if (ticket.status === 'closed') {
-            await ctx.reply(i18n.t('uz', 'admin-ticket-closed'));
+            await ctx.reply(i18n.t('uz', 'admin_ticket_closed'));
             return;
         }
 
@@ -55,7 +55,7 @@ export async function handleReplyButton(ctx: BotContext): Promise<void> {
         if (!lockAcquired) {
             // Another admin is replying
             const lockHolder = await LockService.getLockHolder(ticket.id);
-            await ctx.reply(i18n.t('uz', 'admin-another-replying'));
+            await ctx.reply(i18n.t('uz', 'admin_another_replying'));
             logger.info(`Admin ${adminId} blocked from replying to ticket ${ticketNumber} - lock held by ${lockHolder}`);
             return;
         }
@@ -73,7 +73,7 @@ export async function handleReplyButton(ctx: BotContext): Promise<void> {
         await ctx.conversation.enter('adminReplyConversation');
     } catch (error) {
         logger.error('Error in handleReplyButton:', error);
-        await ctx.reply(i18n.t('uz', 'admin-error'));
+        await ctx.reply(i18n.t('uz', 'admin_error'));
     }
 }
 
@@ -98,12 +98,12 @@ export async function handleCloseButton(ctx: BotContext): Promise<void> {
         const ticket = await SupportService.getTicketByTicketNumber(ticketNumber);
 
         if (!ticket) {
-            await ctx.reply(i18n.t('uz', 'admin-ticket-not-found'));
+            await ctx.reply(i18n.t('uz', 'admin_ticket_not_found'));
             return;
         }
 
         if (ticket.status === 'closed') {
-            await ctx.reply(i18n.t('uz', 'admin-ticket-closed'));
+            await ctx.reply(i18n.t('uz', 'admin_ticket_closed'));
             return;
         }
 
@@ -111,7 +111,7 @@ export async function handleCloseButton(ctx: BotContext): Promise<void> {
         const closed = await SupportService.closeTicket(ticket.id);
 
         if (closed) {
-            await ctx.reply(i18n.t('uz', 'admin-ticket-closed'));
+            await ctx.reply(i18n.t('uz', 'admin_ticket_closed'));
 
             // Update the message in admin group to show closed status
             try {
@@ -141,7 +141,7 @@ export async function handleCloseButton(ctx: BotContext): Promise<void> {
         }
     } catch (error) {
         logger.error('Error in handleCloseButton:', error);
-        await ctx.reply(i18n.t('uz', 'admin-error'));
+        await ctx.reply(i18n.t('uz', 'admin_error'));
     }
 }
 
@@ -165,7 +165,7 @@ export async function handleBlockButton(ctx: BotContext): Promise<void> {
         const ticket = await SupportService.getTicketByTicketNumber(ticketNumber);
 
         if (!ticket) {
-            await ctx.reply(i18n.t('uz', 'admin-ticket-not-found'));
+            await ctx.reply(i18n.t('uz', 'admin_ticket_not_found'));
             return;
         }
 
@@ -173,7 +173,7 @@ export async function handleBlockButton(ctx: BotContext): Promise<void> {
         const user = await UserService.getUserByTelegramId(ticket.user_telegram_id);
 
         if (!user) {
-            await ctx.reply(i18n.t('uz', 'admin-ticket-not-found'));
+            await ctx.reply(i18n.t('uz', 'admin_ticket_not_found'));
             return;
         }
 
@@ -182,15 +182,15 @@ export async function handleBlockButton(ctx: BotContext): Promise<void> {
         await AdminService.banUserFromSupport(ticket.user_telegram_id, newBanStatus);
 
         if (newBanStatus) {
-            await ctx.reply(i18n.t('uz', 'admin-user-blocked'));
+            await ctx.reply(i18n.t('uz', 'admin_user_blocked'));
         } else {
-            await ctx.reply(i18n.t('uz', 'admin-user-unblocked'));
+            await ctx.reply(i18n.t('uz', 'admin_user_unblocked'));
         }
 
         logger.info(`User ${ticket.user_telegram_id} support ${newBanStatus ? 'banned' : 'unbanned'} by admin ${adminId}`);
     } catch (error) {
         logger.error('Error in handleBlockButton:', error);
-        await ctx.reply(i18n.t('uz', 'admin-error'));
+        await ctx.reply(i18n.t('uz', 'admin_error'));
     }
 }
 
@@ -211,7 +211,7 @@ export async function handleViewReplyButton(ctx: BotContext): Promise<void> {
         const ticket = await SupportService.getTicketByTicketNumber(ticketNumber);
 
         if (!ticket) {
-            await ctx.reply(i18n.t('uz', 'admin-ticket-not-found'));
+            await ctx.reply(i18n.t('uz', 'admin_ticket_not_found'));
             return;
         }
 
@@ -244,6 +244,6 @@ export async function handleViewReplyButton(ctx: BotContext): Promise<void> {
         await ctx.reply(replyInfo);
     } catch (error) {
         logger.error('Error in handleViewReplyButton:', error);
-        await ctx.reply(i18n.t('uz', 'admin-error'));
+        await ctx.reply(i18n.t('uz', 'admin_error'));
     }
 }
