@@ -11,6 +11,7 @@ export interface User {
   language_code: string;
   is_admin: boolean;
   is_support_banned?: boolean;
+  is_logged_out?: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -101,5 +102,45 @@ export class UserService {
     await db('users')
       .where('telegram_id', telegramId)
       .update(updateData);
+  }
+
+  /**
+   * Log out user by setting is_logged_out flag
+   */
+  static async logoutUser(telegramId: number): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update({ is_logged_out: true, updated_at: new Date() });
+  }
+
+  /**
+   * Log in user by clearing is_logged_out flag
+   */
+  static async loginUser(telegramId: number): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update({ is_logged_out: false, updated_at: new Date() });
+  }
+
+  /**
+   * Check if user is logged in (exists and not logged out)
+   */
+  static async isUserLoggedIn(telegramId: number): Promise<boolean> {
+    const user = await db('users')
+      .where('telegram_id', telegramId)
+      .andWhere('is_logged_out', false)
+      .first();
+    return !!user;
+  }
+
+  /**
+   * Get user by telegram ID only if logged in (not logged out)
+   */
+  static async getLoggedInUser(telegramId: number): Promise<User | null> {
+    const user = await db('users')
+      .where('telegram_id', telegramId)
+      .andWhere('is_logged_out', false)
+      .first();
+    return user || null;
   }
 }

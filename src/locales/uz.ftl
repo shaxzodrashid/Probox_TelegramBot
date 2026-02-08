@@ -209,3 +209,7 @@ admin_send_success = ✅ Xabar yuborildi!
 admin_send_failed = ❌ Xabar yuborishda xatolik yuz berdi.
 admin_error = ❌ Xatolik yuz berdi.
 
+# Logout/Login
+menu_logout = 🚪 Chiqish
+menu_login = 📝 Kirish / Ro'yxatdan o'tish
+logout_success = ✅ Siz muvaffaqiyatli chiqdingiz. Qayta kirish uchun "Kirish / Ro'yxatdan o'tish" tugmasini bosing.

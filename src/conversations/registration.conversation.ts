@@ -189,7 +189,10 @@ export async function performOtpVerification(
 /**
  * Handles creation of a new user including SAP lookup.
  */
-async function registerNewUser(
+/**
+ * Handles creation or update of a user including SAP lookup.
+ */
+async function registerOrUpdateUser(
   conversation: BotConversation,
   ctx: BotContext,
   phoneNumber: string,
@@ -197,20 +200,32 @@ async function registerNewUser(
 ) {
   const sapUser = await conversation.external(() => verifySapUser(phoneNumber));
 
-  const data_to_store = {
-    telegram_id: ctx.from?.id,
+  const telegramId = ctx.from?.id;
+  if (!telegramId) return false;
+
+  const data_to_store: any = {
     first_name: sapUser?.CardName?.split(' ')[0] || ctx.from?.first_name || '',
     last_name: sapUser?.CardName?.split(' ')[1] || ctx.from?.last_name || '',
     phone_number: phoneNumber,
     language_code: locale,
     sap_card_code: sapUser?.CardCode || '',
     is_admin: sapUser?.U_admin === 'yes',
-    created_at: new Date(),
+    is_logged_out: false,
     updated_at: new Date()
   };
 
-  await conversation.external(() => UserService.createUser(data_to_store));
-  return data_to_store.is_admin;
+  // Check if user exists
+  const existingUser = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
+
+  if (existingUser) {
+    await conversation.external(() => UserService.updateUser(existingUser.id, data_to_store));
+    return data_to_store.is_admin;
+  } else {
+    data_to_store.telegram_id = telegramId;
+    data_to_store.created_at = new Date();
+    await conversation.external(() => UserService.createUser(data_to_store));
+    return data_to_store.is_admin;
+  }
 }
 
 
@@ -221,26 +236,7 @@ export async function registrationConversation(conversation: BotConversation, ct
   const locale = await getLocaleFromConversation(conversation);
   const telegramId = ctx.from?.id;
 
-  // 1. Check if user is already registered by Telegram ID
-  if (telegramId) {
-    const existingUser = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
-
-    if (existingUser) {
-      // User already registered, show main menu directly
-      logger.info(`User with Telegram ID ${telegramId} is already registered.`);
-
-      if (existingUser.is_admin) {
-        await ctx.reply(i18n.t(locale, 'admin_menu_header'), {
-          reply_markup: getAdminMenuKeyboard(locale),
-        });
-      } else {
-        await ctx.reply(i18n.t(locale, 'welcome_message'), {
-          reply_markup: getMainKeyboardByLocale(locale),
-        });
-      }
-      return;
-    }
-  }
+  // 1. (Removed Auto-Login Check) - We now force re-verification for security and data sync
 
   // 2. Get Phone Number (only for new users)
   const phoneResult = await requestPhoneNumber(conversation, ctx, locale);
@@ -258,8 +254,8 @@ export async function registrationConversation(conversation: BotConversation, ct
 
   if (!verified) return; // /start called during OTP
 
-  // 4. Register new user
-  const isAdmin = await registerNewUser(conversation, lastCtx, phoneNumber, locale);
+  // 4. Register or Update user
+  const isAdmin = await registerOrUpdateUser(conversation, lastCtx, phoneNumber, locale);
 
   // 5. Delete all tracked messages from the registration conversation
 
@@ -275,7 +271,8 @@ export async function registrationConversation(conversation: BotConversation, ct
     });
   } else {
     await lastCtx.reply(i18n.t(locale, 'welcome_message'), {
-      reply_markup: getMainKeyboardByLocale(locale),
+      reply_markup: getMainKeyboardByLocale(locale, false, true),
     });
   }
 }
+

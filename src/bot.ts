@@ -61,6 +61,7 @@ import {
   changePhoneHandler,
   changeLanguageHandler
 } from './handlers/settings.handler';
+import { logoutHandler } from './handlers/logout.handler';
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
 
@@ -115,6 +116,10 @@ bot.filter(hears('menu_payments'), paymentsHandler);
 bot.filter(hears('menu_settings'), settingsHandler);
 bot.filter(hears('menu_support'), supportHandler);
 bot.filter(hears('admin_menu'), adminMenuHandler);
+bot.filter(hears('menu_logout'), logoutHandler);
+bot.filter(hears('menu_login'), async (ctx) => {
+  await ctx.conversation.enter('registrationConversation');
+});
 
 // Admin panel handlers
 bot.filter(hears('admin_users'), adminUsersHandler);

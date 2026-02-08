@@ -181,18 +181,23 @@ export const backFromPaymentsToMenuHandler = async (ctx: BotContext) => {
     const locale = (await ctx.i18n.getLocale()) || 'uz';
     const telegramId = ctx.from?.id;
 
+    let isLoggedIn = false;
+
     if (telegramId) {
         const user = await UserService.getUserByTelegramId(telegramId);
-        if (user?.is_admin) {
-            const text = i18n.t(locale, 'admin_menu_header');
-            const keyboard = getAdminMenuKeyboard(locale);
-            await ctx.reply(text, { reply_markup: keyboard });
-            return;
+        if (user) {
+            isLoggedIn = !user.is_logged_out;
+            if (user.is_admin) {
+                const text = i18n.t(locale, 'admin_menu_header');
+                const keyboard = getAdminMenuKeyboard(locale);
+                await ctx.reply(text, { reply_markup: keyboard });
+                return;
+            }
         }
     }
 
     const welcomeMsg = i18n.t(locale, 'payments_main_menu');
     await ctx.reply(welcomeMsg, {
-        reply_markup: getMainKeyboardByLocale(locale),
+        reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
     });
 };

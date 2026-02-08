@@ -30,7 +30,8 @@ export async function backFromSupportHandler(ctx: BotContext): Promise<void> {
         return;
     }
 
+    const isLoggedIn = user ? !user.is_logged_out : false;
     await ctx.reply(ctx.t('welcome_message'), {
-        reply_markup: getMainKeyboard(ctx),
+        reply_markup: getMainKeyboard(ctx, false, isLoggedIn),
     });
 }

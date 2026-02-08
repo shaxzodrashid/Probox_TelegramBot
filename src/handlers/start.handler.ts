@@ -20,7 +20,10 @@ export const startHandler = async (ctx: BotContext) => {
       ctx.session.languageSelected = true;
     }
 
-    if (user.is_admin) {
+    // Check if user is logged in (not logged out)
+    const isLoggedIn = !user.is_logged_out;
+
+    if (user.is_admin && isLoggedIn) {
       const text = ctx.t('admin_menu_header');
       const keyboard = getAdminMenuKeyboard(user.language_code || 'uz');
 
@@ -34,7 +37,7 @@ export const startHandler = async (ctx: BotContext) => {
     }
 
     const text = ctx.t('welcome_message');
-    const keyboard = getMainKeyboard(ctx);
+    const keyboard = getMainKeyboard(ctx, false, isLoggedIn);
 
     if (ctx.callbackQuery) {
       await ctx.deleteMessage().catch(() => { });
@@ -59,9 +62,9 @@ export const startHandler = async (ctx: BotContext) => {
     return;
   }
 
-  // Language selected but user not in database - show main menu directly (registration will be prompted when needed)
+  // Language selected but user not in database - show main menu with login button
   const text = ctx.t('welcome_message');
-  const keyboard = getMainKeyboard(ctx);
+  const keyboard = getMainKeyboard(ctx, false, false);
 
   if (ctx.callbackQuery) {
     await ctx.deleteMessage().catch(() => { });

@@ -126,8 +126,9 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
                         reply_markup: getAdminMenuKeyboard(locale),
                     });
                 } else {
+                    const isLoggedIn = user ? !user.is_logged_out : false;
                     await messageContext.reply(i18n.t(locale, 'welcome_message'), {
-                        reply_markup: getMainKeyboardByLocale(locale),
+                        reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
                     });
                 }
                 return;
@@ -259,8 +260,9 @@ async function processSupport(
                 reply_markup: getAdminMenuKeyboard(locale),
             });
         } else {
+            const isLoggedIn = user ? !user.is_logged_out : false;
             await ctx.reply(i18n.t(locale, 'support_sent'), {
-                reply_markup: getMainKeyboardByLocale(locale),
+                reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
             });
         }
 
@@ -272,8 +274,9 @@ async function processSupport(
                 reply_markup: getAdminMenuKeyboard(locale),
             });
         } else {
+            const isLoggedIn = user ? !user.is_logged_out : false;
             await ctx.reply(i18n.t(locale, 'support_error'), {
-                reply_markup: getMainKeyboardByLocale(locale),
+                reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
             });
         }
     }

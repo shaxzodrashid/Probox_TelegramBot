@@ -4,10 +4,19 @@ import { i18n } from '../i18n';
 import { Contract } from '../data/contracts.mock';
 import { PaymentContract } from '../interfaces/payment.interface';
 
-export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false) => {
+export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false, isLoggedIn: boolean = false) => {
   const keyboard = new Keyboard()
     .text(ctx.t('menu_contracts')).text(ctx.t('menu_payments')).row()
-    .text(ctx.t('menu_settings')).text(ctx.t('menu_support'));
+    .text(ctx.t('menu_support'));
+
+  // Logged in users see Settings and Logout
+  if (isLoggedIn) {
+    keyboard.text(ctx.t('menu_settings')).row();
+    keyboard.text(ctx.t('menu_logout'));
+  } else {
+    // Logged out users see Login button
+    keyboard.row().text(ctx.t('menu_login'));
+  }
 
   if (isAdmin) {
     keyboard.row().text(ctx.t('admin_menu'));
@@ -20,10 +29,19 @@ export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false) =>
  * Locale-based version of getMainKeyboard for use inside conversations
  * where ctx.t() is not available.
  */
-export const getMainKeyboardByLocale = (locale: string, isAdmin: boolean = false) => {
+export const getMainKeyboardByLocale = (locale: string, isAdmin: boolean = false, isLoggedIn: boolean = false) => {
   const keyboard = new Keyboard()
     .text(i18n.t(locale, 'menu_contracts')).text(i18n.t(locale, 'menu_payments')).row()
-    .text(i18n.t(locale, 'menu_settings')).text(i18n.t(locale, 'menu_support'));
+    .text(i18n.t(locale, 'menu_support'));
+
+  // Logged in users see Settings and Logout
+  if (isLoggedIn) {
+    keyboard.text(i18n.t(locale, 'menu_settings')).row();
+    keyboard.text(i18n.t(locale, 'menu_logout'));
+  } else {
+    // Logged out users see Login button
+    keyboard.row().text(i18n.t(locale, 'menu_login'));
+  }
 
   if (isAdmin) {
     keyboard.row().text(i18n.t(locale, 'admin_menu'));
