@@ -18,7 +18,7 @@ export async function logoutHandler(ctx: BotContext) {
   // Clear session
   ctx.session = {};
 
-  // Show confirmation and updated menu
+  // Show confirmation and updated menu (without Logout/Login buttons)
   await ctx.reply(i18n.t(locale, 'logout_success'), {
     reply_markup: getMainKeyboardByLocale(locale, false, false),
   });

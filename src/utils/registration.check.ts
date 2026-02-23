@@ -14,7 +14,7 @@ export async function checkRegistrationOrPrompt(ctx: BotContext): Promise<User |
   const telegramId = ctx.from?.id;
   if (!telegramId) return null;
 
-  const user = await UserService.getUserByTelegramId(telegramId);
+  const user = await UserService.getLoggedInUser(telegramId);
   
   if (user) {
     return user;

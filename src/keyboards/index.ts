@@ -9,17 +9,13 @@ export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false, is
     .text(ctx.t('menu_contracts')).text(ctx.t('menu_payments')).row()
     .text(ctx.t('menu_support'));
 
-  // Logged in users see Settings and Logout
+  // Logged in users see Settings
   if (isLoggedIn) {
-    keyboard.text(ctx.t('menu_settings')).row();
-    keyboard.text(ctx.t('menu_logout'));
-  } else {
-    // Logged out users see Login button
-    keyboard.row().text(ctx.t('menu_login'));
+    keyboard.text(ctx.t('menu_settings'));
   }
 
   if (isAdmin) {
-    keyboard.row().text(ctx.t('admin_menu'));
+    keyboard.text(ctx.t('menu_settings')).row().text(ctx.t('admin_menu'));
   }
 
   return keyboard.resized();
@@ -34,17 +30,13 @@ export const getMainKeyboardByLocale = (locale: string, isAdmin: boolean = false
     .text(i18n.t(locale, 'menu_contracts')).text(i18n.t(locale, 'menu_payments')).row()
     .text(i18n.t(locale, 'menu_support'));
 
-  // Logged in users see Settings and Logout
+  // Logged in users see Settings
   if (isLoggedIn) {
-    keyboard.text(i18n.t(locale, 'menu_settings')).row();
-    keyboard.text(i18n.t(locale, 'menu_logout'));
-  } else {
-    // Logged out users see Login button
-    keyboard.row().text(i18n.t(locale, 'menu_login'));
+    keyboard.text(i18n.t(locale, 'menu_settings'));
   }
 
   if (isAdmin) {
-    keyboard.row().text(i18n.t(locale, 'admin_menu'));
+    keyboard.text(i18n.t(locale, 'menu_settings')).row().text(i18n.t(locale, 'admin_menu'));
   }
 
   return keyboard.resized();

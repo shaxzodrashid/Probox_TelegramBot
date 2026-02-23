@@ -104,6 +104,7 @@ bot.command('start', startHandler);
 bot.command('help', helpHandler);
 bot.command('about', aboutHandler);
 bot.command('admin', adminMenuHandler);
+bot.command('logout', logoutHandler);
 
 // Callbacks
 bot.callbackQuery('help', helpHandler);
@@ -116,10 +117,7 @@ bot.filter(hears('menu_payments'), paymentsHandler);
 bot.filter(hears('menu_settings'), settingsHandler);
 bot.filter(hears('menu_support'), supportHandler);
 bot.filter(hears('admin_menu'), adminMenuHandler);
-bot.filter(hears('menu_logout'), logoutHandler);
-bot.filter(hears('menu_login'), async (ctx) => {
-  await ctx.conversation.enter('registrationConversation');
-});
+bot.filter(hears('admin_menu'), adminMenuHandler);
 
 // Admin panel handlers
 bot.filter(hears('admin_users'), adminUsersHandler);
