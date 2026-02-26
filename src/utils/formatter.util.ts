@@ -37,3 +37,34 @@ export const formatCurrency = (amount: number | string, currency: string = 'UZS'
   
   return `${formattedNum} ${currency}`;
 };
+
+/**
+ * Sanitizes a name by removing emojis and common symbols.
+ * Returns null if the name is empty or contains no valid letters.
+ * @param name - Raw name string
+ * @returns Sanitized name or null
+ */
+export const sanitizeName = (name?: string | null): string | null => {
+  if (!name) return null;
+
+  const cleaned = name
+    .normalize('NFKC')
+    // Remove emojis
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+    // Remove variation selectors and other invisibles
+    .replace(/[\uFE0F\u200D\u200B\u200C]/g, '')
+    .trim();
+
+  // If the result doesn't contain at least one letter, it's invalid
+  if (!/\p{L}/u.test(cleaned)) {
+    return null;
+  }
+
+  // Remove leading/trailing non-alphanumeric noise (like dots, dashes at ends)
+  // but keep what's in between (e.g., "O'Connor" or "Doe-Smith").
+  const final = cleaned
+    .replace(/^[^\p{L}0-9]+/u, '')
+    .replace(/[^\p{L}0-9]+$/u, '');
+
+  return final || null;
+};

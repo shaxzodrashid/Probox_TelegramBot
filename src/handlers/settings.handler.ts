@@ -61,3 +61,15 @@ export async function changeLanguageHandler(ctx: BotContext) {
     reply_markup: keyboard
   });
 }
+
+export async function addPassportHandler(ctx: BotContext) {
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery();
+  }
+  // Exit ALL active conversations before entering a fresh one.
+  // This prevents stale/frozen conversation state in Redis (e.g. from a
+  // previous crash mid-conversation) from silently swallowing incoming
+  // messages during replay.
+  await ctx.conversation.exitAll();
+  await ctx.conversation.enter('addPassportDataConversation');
+}

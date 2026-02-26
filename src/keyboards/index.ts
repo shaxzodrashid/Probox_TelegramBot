@@ -6,16 +6,22 @@ import { PaymentContract } from '../interfaces/payment.interface';
 
 export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false, isLoggedIn: boolean = false) => {
   const keyboard = new Keyboard()
+    .text(ctx.t('menu_application')).row()
     .text(ctx.t('menu_contracts')).text(ctx.t('menu_payments')).row()
     .text(ctx.t('menu_support'));
 
-  // Logged in users see Settings
+  // Logged in users see Settings next to Support
   if (isLoggedIn) {
     keyboard.text(ctx.t('menu_settings'));
   }
 
   if (isAdmin) {
-    keyboard.text(ctx.t('menu_settings')).row().text(ctx.t('admin_menu'));
+    // If admin is NOT logged in (rare), we still want settings somewhere? 
+    // But usually admin is logged in.
+    if (!isLoggedIn) {
+      keyboard.text(ctx.t('menu_settings'));
+    }
+    keyboard.row().text(ctx.t('admin_menu'));
   }
 
   return keyboard.resized();
@@ -27,16 +33,20 @@ export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false, is
  */
 export const getMainKeyboardByLocale = (locale: string, isAdmin: boolean = false, isLoggedIn: boolean = false) => {
   const keyboard = new Keyboard()
+    .text(i18n.t(locale, 'menu_application')).row()
     .text(i18n.t(locale, 'menu_contracts')).text(i18n.t(locale, 'menu_payments')).row()
     .text(i18n.t(locale, 'menu_support'));
 
-  // Logged in users see Settings
+  // Logged in users see Settings next to Support
   if (isLoggedIn) {
     keyboard.text(i18n.t(locale, 'menu_settings'));
   }
 
   if (isAdmin) {
-    keyboard.text(i18n.t(locale, 'menu_settings')).row().text(i18n.t(locale, 'admin_menu'));
+    if (!isLoggedIn) {
+      keyboard.text(i18n.t(locale, 'menu_settings'));
+    }
+    keyboard.row().text(i18n.t(locale, 'admin_menu'));
   }
 
   return keyboard.resized();
@@ -82,7 +92,8 @@ export const getPaymentsKeyboard = (payments: PaymentContract[], locale: string)
 export const getSettingsKeyboard = (ctx: CustomContext, isAdmin: boolean = false) => {
   const keyboard = new Keyboard()
     .text(ctx.t('settings_change_name')).text(ctx.t('settings_change_phone')).row()
-    .text(ctx.t('settings_change_language')).text(ctx.t('back'));
+    .text(ctx.t('settings_change_language')).text(ctx.t('settings_add_passport')).row()
+    .text(ctx.t('back'));
 
   if (isAdmin) {
     keyboard.row().text(ctx.t('admin_menu'));

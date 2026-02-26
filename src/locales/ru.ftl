@@ -23,6 +23,14 @@ menu_contracts = 📄 Мои контракты
 menu_payments = 💳 Мои платежи
 menu_settings = ⚙️ Настройки
 menu_support = 📞 Поддержка
+menu_application = ✍️ Оставить заявку
+menu_application_placeholder = 🚧 Раздел подачи заявок скоро будет запущен!
+application_passport_required = ⚠️ Для подачи заявки требуются паспортные данные.
+application_start_passport_button = 🪪 Ввести паспортные данные
+application_success = ✅ Ваша заявка успешно принята!
+application_error = ❌ Произошла ошибка при отправке заявки. Пожалуйста, попробуйте позже.
+application_ask_first_name = 👤 Пожалуйста, введите ваше имя и фамилию:
+application_first_name_saved = ✅ Спасибо! Ваше имя сохранено.
 back = 🔙 Назад
 
 # Contracts
@@ -81,6 +89,30 @@ settings_header = ⚙️ *Настройки*
 settings_change_name = 👤 Изменить имя
 settings_change_phone = 📱 Изменить номер
 settings_change_language = 🌐 Изменить язык
+settings_add_passport = 🪪 Добавить паспортные данные
+settings_add_passport_method = Как вы хотите сохранить паспортные данные?
+settings_passport_method_photo = 📸 Загрузить фото
+settings_passport_method_manual = ✍️ Ввести вручную
+settings_passport_prompt = Пожалуйста, отправьте фото документа (паспорт или ID-карта) с основными данными. Обратную сторону ID-карты, паспорт в развернутом виде.
+settings_passport_error = ❌ Извините, не удалось прочитать данные с фотографий. Пожалуйста, сделайте более четкое фото при хорошем освещении и попробуйте снова.
+settings_passport_success = ✅ Ваши данные успешно сохранены!
+settings_passport_processing = ⏳ Проверка фотографий, пожалуйста, подождите...
+settings_passport_enter_series = 🔢 Пожалуйста, введите серию и номер паспорта (например, AB1234567):
+settings_passport_invalid_series = ❌ Неверная серия паспорта. Она должна состоять из 2 букв и 7 цифр. Пожалуйста, введите снова:
+settings_passport_enter_jshshir = 🔢 Пожалуйста, введите ваш 14-значный номер ПИНФЛ (JShShIR):
+settings_passport_invalid_jshshir = ❌ Неверный формат. ПИНФЛ должен состоять ровно из 14 цифр. Пожалуйста, введите снова:
+settings_passport_confirm_data = 📄 *Подтверждение данных*
+    
+    🔢 *Серия паспорта:* { $series }
+    🔢 *ПИНФЛ (JShShIR):* { $jshshir }
+    
+    ✅ Все верно?
+settings_passport_missing_data = ⚠️ Приносим извинения, нам не удалось полностью прочитать данные с фото. Пожалуйста, введите недостающие данные вручную.
+settings_passport_edit_series = ✏️ Изменить серию и номер
+settings_passport_edit_jshshir = ✏️ Изменить ПИНФЛ
+settings_passport_confirm_btn = ✅ Подтвердить
+settings_passport_use_buttons = ⚠️ Пожалуйста, выберите одну из кнопок ниже.
+settings_passport_save_error = ❌ Не удалось сохранить данные. Пожалуйста, попробуйте позже.
 settings_enter_first_name = Пожалуйста, введите ваше новое имя:
 settings_enter_last_name = Пожалуйста, введите вашу новую фамилию:
 settings_enter_phone = Пожалуйста, введите новый номер телефона (+998XXXXXXXXX):
@@ -214,3 +246,4 @@ admin_error = ❌ Произошла ошибка.
 menu_logout = 🚪 Выход
 menu_login = 📝 Войти / Регистрация
 logout_success = ✅ Вы успешно вышли. Для повторного входа нажмите "Войти / Регистрация".
+

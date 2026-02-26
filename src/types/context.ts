@@ -22,4 +22,9 @@ export interface SessionData {
   adminReplyTicketId?: number;
   // Admin send message target
   adminSendTargetUser?: number;
+  passportDraft?: {
+    series: string;
+    jshshir: string;
+    method: string;
+  };
 }

@@ -4,6 +4,7 @@ dotenv.config();
 
 export const config = {
   BOT_TOKEN: process.env.BOT_TOKEN as string,
+  PASSPORT_SCANNER_GIF_ID: process.env.PASSPORT_SCANNER_GIF_ID || null,
   NODE_ENV: process.env.NODE_ENV || 'development',
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
@@ -30,6 +31,12 @@ export const config = {
   EXPORT_RATE_LIMIT: parseInt(process.env.EXPORT_RATE_LIMIT || '5', 10),      // Max exports per hour
   BROADCAST_BATCH_SIZE: parseInt(process.env.BROADCAST_BATCH_SIZE || '25', 10),
   BROADCAST_DELAY_MS: parseInt(process.env.BROADCAST_DELAY_MS || '1000', 10),
+  LOG_LEVEL: process.env.LOG_LEVEL || 'info', 
+
+  // CRM Configuration
+  CRM_URL: process.env.CRM_URL || '',
+  CRM_LOGIN: process.env.CRM_LOGIN || '',
+  CRM_PASS: process.env.CRM_PASS || '',
 };
 
 if (!config.BOT_TOKEN) {

@@ -23,6 +23,14 @@ menu_contracts = 📄 Shartnomalarim
 menu_payments = 💳 To'lovlarim
 menu_settings = ⚙️ Sozlamalar
 menu_support = 📞 Qo'llab-quvvatlash
+menu_application = ✍️ Ariza qoldirish
+menu_application_placeholder = 🚧 Ariza qoldirish bo'limi tez orada ishga tushadi!
+application_passport_required = ⚠️ Ariza qoldirish uchun pasport ma'lumotlari talab qilinadi.
+application_start_passport_button = 🪪 Pasport ma'lumotlarini kiritish
+application_success = ✅ Arizangiz muvaffaqiyatli qabul qilindi!
+application_error = ❌ Arizani yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.
+application_ask_first_name = 👤 Iltimos, ism va familiyangizni kiriting:
+application_first_name_saved = ✅ Rahmat! Ismingiz saqlandi.
 back = 🔙 Orqaga
 
 # Contracts
@@ -81,6 +89,30 @@ settings_header = ⚙️ *Sozlamalar*
 settings_change_name = 👤 Ismni o'zgartirish
 settings_change_phone = 📱 Raqamni o'zgartirish
 settings_change_language = 🌐 Tilni o'zgartirish
+settings_add_passport = 🪪 Pasport ma'lumotlarini qo'shish
+settings_add_passport_method = Pasport ma'lumotlarini qanday saqlamoqchisiz?
+settings_passport_method_photo = 📸 Rasm yuklash
+settings_passport_method_manual = ✍️ Qo'lda kiritish
+settings_passport_prompt = Iltimos, hujjatning (pasport yoki ID-karta) ma'lumotlar bor qismini rasmga olib yuboring. ID-kartaning orqa tomoni, pasportning to'liq holati
+settings_passport_error = ❌ Uzr, rasmlardan ma'lumotlarni o'qib bo'lmadi. Iltimos, yorug' joyda tiniqroq rasmga olib qayta urinib ko'ring.
+settings_passport_success = ✅ Ma'lumotlaringiz muvaffaqiyatli saqlandi!
+settings_passport_processing = ⏳ Rasmlar tekshirilmoqda, iltimos kuting...
+settings_passport_enter_series = 🔢 Iltimos, pasport seriyasi va raqamini kiriting (masalan, AB1234567):
+settings_passport_invalid_series = ❌ Noto'g'ri pasport seriyasi. U 2 ta harf va 7 ta raqamdan iborat bo'lishi kerak. Iltimos, qayta kiriting:
+settings_passport_enter_jshshir = 🔢 Iltimos, 14 xonali JShShIR (PINFL) raqamingizni kiriting:
+settings_passport_invalid_jshshir = ❌ Noto'g'ri format. JShShIR roppa-rosa 14 ta raqamdan iborat bo'lishi kerak. Iltimos, qayta kiriting:
+settings_passport_confirm_data = 📄 *Ma'lumotlarni tasdiqlash*
+    
+    🔢 *Pasport seriyasi:* { $series }
+    🔢 *JShShIR (PINFL):* { $jshshir }
+    
+    ✅ Barchasi to'g'rimi?
+settings_passport_missing_data = ⚠️ Uzr, rasm orqali ma'lumotlarni to'liq o'qib bo'lmadi. Iltimos, yetishmayotgan ma'lumotlarni o'zingiz kiriting.
+settings_passport_edit_series = ✏️ Seriya raqamni o'zgartirish
+settings_passport_edit_jshshir = ✏️ JShShIR'ni o'zgartirish
+settings_passport_confirm_btn = ✅ Tasdiqlash
+settings_passport_use_buttons = ⚠️ Iltimos, quyidagi tugmalardan birini tanlang.
+settings_passport_save_error = ❌ Ma'lumotlarni saqlashda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.
 settings_enter_first_name = Iltimos, yangi ismingizni kiriting:
 settings_enter_last_name = Iltimos, yangi familiyangizni kiriting:
 settings_enter_phone = Iltimos, yangi telefon raqamingizni kiriting (+998XXXXXXXXX):

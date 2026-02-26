@@ -8,6 +8,8 @@ export interface User {
   last_name?: string;
   phone_number?: string;
   sap_card_code?: string;
+  jshshir?: string;
+  passport_series?: string;
   language_code: string;
   is_admin: boolean;
   is_support_banned?: boolean;
@@ -41,7 +43,7 @@ export class UserService {
       .update({ language_code: languageCode, updated_at: new Date() });
   }
 
-  static async updateUserName(telegramId: number, firstName: string, lastName: string): Promise<void> {
+  static async updateUserName(telegramId: number, firstName: string | null, lastName: string | null): Promise<void> {
     await db('users')
       .where('telegram_id', telegramId)
       .update({ first_name: firstName, last_name: lastName, updated_at: new Date() });
@@ -51,6 +53,12 @@ export class UserService {
     await db('users')
       .where('telegram_id', telegramId)
       .update({ phone_number: phoneNumber, updated_at: new Date() });
+  }
+
+  static async updateUserPassportData(telegramId: number, jshshir: string, passportSeries: string): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update({ jshshir, passport_series: passportSeries, updated_at: new Date() });
   }
 
   /**

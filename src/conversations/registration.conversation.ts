@@ -12,6 +12,7 @@ import { HanaService } from '../sap/hana.service';
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
 import { getLocaleFromConversation } from '../utils/locale';
 import { formatUzPhone } from '../utils/uz-phone.util';
+import { sanitizeName } from '../utils/formatter.util';
 
 /**
  * Checks if the user exists in SAP HANA by phone number.
@@ -204,8 +205,8 @@ async function registerOrUpdateUser(
   if (!telegramId) return false;
 
   const data_to_store: any = {
-    first_name: sapUser?.CardName?.split(' ')[0] || ctx.from?.first_name || '',
-    last_name: sapUser?.CardName?.split(' ')[1] || ctx.from?.last_name || '',
+    first_name: sanitizeName(sapUser?.CardName?.split(' ')[0] || ctx.from?.first_name),
+    last_name: sanitizeName(sapUser?.CardName?.split(' ')[1] || ctx.from?.last_name),
     phone_number: phoneNumber,
     language_code: locale,
     sap_card_code: sapUser?.CardCode || '',

@@ -4,6 +4,7 @@ import { UserService } from '../services/user.service';
 import { performOtpVerification } from './registration.conversation';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getLocaleFromConversation } from '../utils/locale';
+import { sanitizeName } from '../utils/formatter.util';
 
 /**
  * Conversation to change user's name
@@ -31,7 +32,10 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
   const lastName = lastNameCtx.message?.text || '';
 
   // Update in DB
-  await conversation.external(() => UserService.updateUserName(telegramId, firstName, lastName));
+  const sanitizedFirstName = sanitizeName(firstName);
+  const sanitizedLastName = sanitizeName(lastName);
+
+  await conversation.external(() => UserService.updateUserName(telegramId, sanitizedFirstName, sanitizedLastName));
 
   const user = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
   const isAdmin = user?.is_admin || false;

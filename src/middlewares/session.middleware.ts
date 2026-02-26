@@ -6,6 +6,15 @@ import { UserService } from '../services/user.service';
  * Middleware to restore user session data from database if it's lost (e.g. after bot restart)
  */
 export const sessionRestorerMiddleware = async (ctx: BotContext, next: NextFunction) => {
+    // If language is already in session, just make sure i18n locale is set
+    if (ctx.session?.__language_code && ctx.session.languageSelected) {
+        const currentLocale = await ctx.i18n.getLocale();
+        if (currentLocale !== ctx.session.__language_code) {
+            await ctx.i18n.setLocale(ctx.session.__language_code);
+        }
+        return next();
+    }
+
     // If we have a user and we haven't checked the database yet for this session
     if (ctx.from && ctx.session.languageSelected === undefined) {
         const user = await UserService.getUserByTelegramId(ctx.from.id);

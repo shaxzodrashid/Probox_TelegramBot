@@ -59,11 +59,18 @@ import {
   settingsHandler,
   changeNameHandler,
   changePhoneHandler,
-  changeLanguageHandler
+  changeLanguageHandler,
+  addPassportHandler
 } from './handlers/settings.handler';
+import { addPassportDataConversation } from './conversations/passport.conversation';
 import { logoutHandler } from './handlers/logout.handler';
+import { applicationHandler } from './handlers/application.handler';
+import { applicationConversation } from './conversations/application.conversation';
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
+
+import { RedisAdapter } from '@grammyjs/storage-redis';
+import { redisService } from './redis/redis.service';
 
 export const bot = new Bot<BotContext>(config.BOT_TOKEN);
 
@@ -71,7 +78,18 @@ export const bot = new Bot<BotContext>(config.BOT_TOKEN);
 
 // Middlewares
 bot.use(loggerMiddleware);
-bot.use(session({ initial: (): SessionData => ({}) }));
+
+const storage = new RedisAdapter({
+  instance: redisService.getClient(),
+  ttl: 3 * 24 * 60 * 60, // 3 days in seconds
+});
+
+bot.use(
+  session({
+    initial: (): SessionData => ({}),
+    storage,
+  }),
+);
 bot.use(i18n);
 bot.use(sessionRestorerMiddleware);
 
@@ -86,6 +104,8 @@ bot.use(createConversation(adminReplyConversation));
 bot.use(createConversation(adminBroadcastConversation));
 bot.use(createConversation(adminSearchConversation));
 bot.use(createConversation(adminSendMessageConversation));
+bot.use(createConversation(addPassportDataConversation));
+bot.use(createConversation(applicationConversation));
 
 // Error Handling
 bot.catch((err) => {
@@ -116,6 +136,9 @@ bot.filter(hears('menu_contracts'), contractsHandler);
 bot.filter(hears('menu_payments'), paymentsHandler);
 bot.filter(hears('menu_settings'), settingsHandler);
 bot.filter(hears('menu_support'), supportHandler);
+bot.filter(hears('menu_application'), async (ctx) => {
+  await ctx.conversation.enter('applicationConversation');
+});
 bot.filter(hears('admin_menu'), adminMenuHandler);
 bot.filter(hears('admin_menu'), adminMenuHandler);
 
@@ -130,6 +153,7 @@ bot.filter(hears('back_to_user_menu'), adminBackToMainMenuHandler);
 bot.filter(hears('settings_change_name'), changeNameHandler);
 bot.filter(hears('settings_change_phone'), changePhoneHandler);
 bot.filter(hears('settings_change_language'), changeLanguageHandler);
+bot.filter(hears('settings_add_passport'), addPassportHandler);
 
 // Language selection handlers for both callback and keyboard
 const handleLanguageSelection = async (ctx: BotContext, lang: 'uz' | 'ru') => {
@@ -207,6 +231,7 @@ bot.callbackQuery('admin_cancel', adminBackToMainMenuHandler);
 bot.callbackQuery('admin_broadcast_all', (ctx) => ctx.answerCallbackQuery());
 bot.callbackQuery('admin_broadcast_single', (ctx) => ctx.answerCallbackQuery());
 bot.callbackQuery('admin_broadcast_confirm', (ctx) => ctx.answerCallbackQuery());
+bot.callbackQuery('start_passport_conv', addPassportHandler);
 bot.callbackQuery('noop', (ctx) => ctx.answerCallbackQuery());
 
 // Registration prompt callback handler
