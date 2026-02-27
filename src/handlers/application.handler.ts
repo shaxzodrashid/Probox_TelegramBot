@@ -7,6 +7,7 @@ import { minioService } from '../services/minio.service';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 import { i18n } from '../i18n';
+import { checkRegistrationOrPrompt } from '../utils/registration.check';
 
 export const applicationHandler = async (ctx: BotContext) => {
   const telegramId = ctx.from?.id;
@@ -15,11 +16,8 @@ export const applicationHandler = async (ctx: BotContext) => {
   const locale = (await ctx.i18n.getLocale()) || 'uz';
 
   // 1. Check registration
-  const user = await UserService.getLoggedInUser(telegramId);
+  const user = await checkRegistrationOrPrompt(ctx);
   if (!user) {
-    await ctx.reply(i18n.t(locale, 'registration_required'), {
-      reply_markup: new InlineKeyboard().text(i18n.t(locale, 'registration_button'), 'start_registration'),
-    });
     return;
   }
 

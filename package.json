@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon src/server.ts",
     "clean": "rimraf dist",
-    "build": "npm run clean && tsc && copyfiles -u 0 \"src/**/*.{ftl,sql}\" dist/",
+    "build": "npm run clean && tsc && copyfiles -u 0 \"src/**/*.{ftl,sql}\" \"src/uploads/**/*\" dist/",
     "start": "node dist/src/server.js",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",

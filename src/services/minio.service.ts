@@ -203,33 +203,39 @@ class MinioServiceClass {
   }
 
   /**
-   * Special helper for passport uploads: deletes old passports for this user and saves the new one.
+   * Special helper for passport uploads: deletes old passports for this user and saves the new one(s).
    * Path format: passports/USER_ID/passport_DATETIME_FILENAME.jpg (or just fixed name if user prefers)
    * We will use a folder structure to "distinguish" them easily.
    * passports/USER_ID/photo.jpg
    */
-  async uploadUserPassport(telegramId: number, buffer: Buffer, userDetails?: { first_name?: string, last_name?: string }): Promise<void> {
+  async uploadUserPassport(telegramId: number, buffers: Buffer | Buffer[], userDetails?: { first_name?: string, last_name?: string }): Promise<void> {
     const folder = `passports/${telegramId}/`;
     
     try {
       // 1. Delete existing passport files for this user
       await this.deleteFilesByPrefix(folder);
       
-      // 2. Generate descriptive filename
+      const bufferArray = Array.isArray(buffers) ? buffers : [buffers];
       const namePart = userDetails ? `_${userDetails.first_name || ''}_${userDetails.last_name || ''}`.replace(/[^a-zA-Z0-9]/g, '_') : '';
-      const filename = `${folder}passport${namePart}.jpg`;
+      
+      for (let i = 0; i < bufferArray.length; i++) {
+        const buffer = bufferArray[i];
+        
+        // 2. Generate descriptive filename
+        const filename = `${folder}passport${namePart}_${i + 1}.jpg`;
 
-      // 3. Compress image before upload
-      logger.info(`[MINIO] Compressing image for user ${telegramId}...`);
-      const compressedBuffer = await sharp(buffer)
-        .jpeg({ quality: 50, mozjpeg: true })
-        .toBuffer();
-      
-      logger.info(`[MINIO] Compression done: ${buffer.length} -> ${compressedBuffer.length} bytes`);
-      
-      // 4. Upload compressed one
-      await this.uploadFile(filename, compressedBuffer);
-      logger.info(`[MINIO] Handled passport update for user ${telegramId}: old deleted, new compressed and uploaded as ${filename}`);
+        // 3. Compress image before upload
+        logger.info(`[MINIO] Compressing image ${i + 1} for user ${telegramId}...`);
+        const compressedBuffer = await sharp(buffer)
+          .jpeg({ quality: 50, mozjpeg: true })
+          .toBuffer();
+        
+        logger.info(`[MINIO] Compression done: ${buffer.length} -> ${compressedBuffer.length} bytes`);
+        
+        // 4. Upload compressed one
+        await this.uploadFile(filename, compressedBuffer);
+        logger.info(`[MINIO] Handled passport update for user ${telegramId}: old deleted, new compressed and uploaded as ${filename}`);
+      }
     } catch (error) {
       logger.error(`[MINIO] Failed to handle user passport update for ${telegramId}: ${error}`);
       throw error;

@@ -1,4 +1,5 @@
 import { bot } from './bot';
+// Triggering restart to apply new locale and handler changes
 import { logger } from './utils/logger';
 
 async function main() {

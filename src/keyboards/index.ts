@@ -6,8 +6,8 @@ import { PaymentContract } from '../interfaces/payment.interface';
 
 export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false, isLoggedIn: boolean = false) => {
   const keyboard = new Keyboard()
-    .text(ctx.t('menu_application')).row()
     .text(ctx.t('menu_contracts')).text(ctx.t('menu_payments')).row()
+    .text(ctx.t('menu_application')).row()
     .text(ctx.t('menu_support'));
 
   // Logged in users see Settings next to Support
@@ -33,8 +33,8 @@ export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false, is
  */
 export const getMainKeyboardByLocale = (locale: string, isAdmin: boolean = false, isLoggedIn: boolean = false) => {
   const keyboard = new Keyboard()
-    .text(i18n.t(locale, 'menu_application')).row()
     .text(i18n.t(locale, 'menu_contracts')).text(i18n.t(locale, 'menu_payments')).row()
+    .text(i18n.t(locale, 'menu_application')).row()
     .text(i18n.t(locale, 'menu_support'));
 
   // Logged in users see Settings next to Support

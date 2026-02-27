@@ -1,7 +1,7 @@
 import { BotConversation, BotContext } from '../types/context';
 import { i18n } from '../i18n';
 import { UserService } from '../services/user.service';
-import { performOtpVerification } from './registration.conversation';
+import { performOtpVerification, verifySapUser } from './registration.conversation';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getLocaleFromConversation } from '../utils/locale';
 import { sanitizeName } from '../utils/formatter.util';
@@ -41,7 +41,7 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
   const isAdmin = user?.is_admin || false;
 
   await ctx.reply(i18n.t(locale, 'settings_name_updated'), {
-    reply_markup: getMainKeyboardByLocale(locale, isAdmin)
+    reply_markup: getMainKeyboardByLocale(locale, isAdmin, true)
   });
 }
 
@@ -53,6 +53,9 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
   const telegramId = ctx.from?.id;
 
   if (!telegramId) return;
+
+  const existingUser = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
+  const isFirstTimePhone = existingUser && !existingUser.phone_number;
 
   await ctx.reply(i18n.t(locale, 'settings_enter_phone'), {
     reply_markup: { remove_keyboard: true }
@@ -72,14 +75,32 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
 
       if (!verified) return;
 
-      // Update in DB
-      await conversation.external(() => UserService.updateUserPhone(telegramId, phoneNumber));
+      if (isFirstTimePhone && existingUser) {
+        const sapUser = await conversation.external(() => verifySapUser(phoneNumber));
+        
+        const dataToUpdate: any = {
+           phone_number: phoneNumber,
+           updated_at: new Date()
+        };
+        
+        if (sapUser) {
+            dataToUpdate.first_name = sanitizeName(sapUser.CardName?.split(' ')[0] || existingUser.first_name || '');
+            dataToUpdate.last_name = sanitizeName(sapUser.CardName?.split(' ')[1] || existingUser.last_name || '');
+            dataToUpdate.sap_card_code = sapUser.CardCode || '';
+            dataToUpdate.is_admin = sapUser.U_admin === 'yes';
+        }
+
+        await conversation.external(() => UserService.updateUser(existingUser.id, dataToUpdate));
+      } else {
+        // Update in DB
+        await conversation.external(() => UserService.updateUserPhone(telegramId, phoneNumber));
+      }
 
       const user = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
       const isAdmin = user?.is_admin || false;
 
       await lastCtx.reply(i18n.t(locale, 'settings_phone_updated'), {
-        reply_markup: getMainKeyboardByLocale(locale, isAdmin)
+        reply_markup: getMainKeyboardByLocale(locale, isAdmin, true)
       });
       break;
     } else {

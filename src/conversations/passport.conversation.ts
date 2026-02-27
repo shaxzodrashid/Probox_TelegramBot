@@ -24,7 +24,7 @@ export async function addPassportDataConversation(conversation: BotConversation,
     let currentSeries = '';
     let currentJshshir = '';
     let method = '';
-    let backFileId = '';
+    let fileIds: string[] = [];
     let extractedFirstName: string | null = null;
     let extractedLastName: string | null = null;
     let currentCtx: BotContext = ctx;
@@ -81,7 +81,7 @@ export async function addPassportDataConversation(conversation: BotConversation,
       currentJshshir = result.jshshir;
       extractedFirstName = result.firstName;
       extractedLastName = result.lastName;
-      backFileId = result.backFileId;
+      fileIds = result.fileIds;
     } else {
       const result = await handleManualMethod(conversation, currentCtx, locale);
       currentSeries = result.series;
@@ -124,15 +124,19 @@ export async function addPassportDataConversation(conversation: BotConversation,
     });
 
     // Background upload to MinIO
-    if (method === 'method_photo' && backFileId) {
+    if (method === 'method_photo' && fileIds.length > 0) {
       // Use conversation.external for side effects or just ensure it's handled safely
       await conversation.external(async (uninterceptedCtx) => {
         try {
-          const buf = await downloadFile(uninterceptedCtx as BotContext, backFileId);
-          if (buf) {
+          const buffers: Buffer[] = [];
+          for (const fileId of fileIds) {
+            const buf = await downloadFile(uninterceptedCtx as BotContext, fileId);
+            if (buf) buffers.push(buf);
+          }
+          if (buffers.length > 0) {
             // New logic: Deletes old passports and saves new one in a descriptive path
             // e.g. passports/12345/passport_John_Doe.jpg
-            await minioService.uploadUserPassport(telegramId, buf, user || undefined);
+            await minioService.uploadUserPassport(telegramId, buffers, user || undefined);
             logger.debug(`[Passport] Image updated in MinIO for user ${telegramId}`);
           }
         } catch (err) {

@@ -3,7 +3,6 @@ import db from '../database/database';
 export interface User {
   id: number;
   telegram_id: number;
-  username?: string;
   first_name?: string;
   last_name?: string;
   phone_number?: string;
@@ -14,6 +13,7 @@ export interface User {
   is_admin: boolean;
   is_support_banned?: boolean;
   is_logged_out?: boolean;
+  is_blocked?: boolean;
   created_at: Date;
   updated_at: Date;
 }

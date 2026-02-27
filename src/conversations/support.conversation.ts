@@ -70,16 +70,19 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
         }
 
         // 1. Get user data (includes ban status)
-        const user = await conversation.external(() =>
+        let user = await conversation.external(() =>
             UserService.getUserByTelegramId(telegramId)
         );
 
         if (!user) {
-            // User not registered, shouldn't happen but handle gracefully
-            await ctx.reply(i18n.t(locale, 'support_not_registered'), {
-                reply_markup: getMainKeyboardByLocale(locale),
-            });
-            return;
+            // This should rarely happen as handler ensures creation, 
+            // but fallback if it does
+            user = await conversation.external(() => UserService.createUser({
+                telegram_id: telegramId,
+                first_name: ctx.from?.first_name,
+                last_name: ctx.from?.last_name,
+                language_code: locale
+            }));
         }
 
         // 2. Check if user is banned from support
@@ -91,8 +94,9 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
                     reply_markup: getAdminMenuKeyboard(locale),
                 });
             } else {
+                const isLoggedIn = user ? !user.is_logged_out : false;
                 await ctx.reply(i18n.t(locale, 'support_banned'), {
-                    reply_markup: getMainKeyboardByLocale(locale),
+                    reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
                 });
             }
             return;
@@ -172,8 +176,9 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
         }
     } catch (error) {
         logger.error('Error in support conversation:', error);
+        // Fallback to basic keyboard if user is not available
         await ctx.reply(i18n.t(locale, 'support_error'), {
-            reply_markup: getMainKeyboardByLocale(locale),
+            reply_markup: getMainKeyboardByLocale(locale, false, true),
         });
     }
 }
@@ -213,7 +218,7 @@ async function processSupport(
                 last_name: user.last_name ?? undefined,
                 phone_number: user.phone_number ?? undefined,
                 telegram_id: user.telegram_id,
-                username: user.username ?? undefined,
+                username: ctx.from?.username ?? undefined,
                 sap_card_code: user.sap_card_code ?? undefined,
                 language_code: user.language_code,
             },
@@ -226,8 +231,9 @@ async function processSupport(
 
         if (!adminGroupId) {
             logger.error('ADMIN_GROUP_ID not configured');
+            const isLoggedIn = user ? !user.is_logged_out : false;
             await ctx.reply(i18n.t(locale, 'support_sent'), {
-                reply_markup: getMainKeyboardByLocale(locale),
+                reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
             });
             return;
         }

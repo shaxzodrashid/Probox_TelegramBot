@@ -17,7 +17,7 @@ import { sanitizeName } from '../utils/formatter.util';
 /**
  * Checks if the user exists in SAP HANA by phone number.
  */
-async function verifySapUser(phoneNumber: string): Promise<IBusinessPartner | undefined> {
+export async function verifySapUser(phoneNumber: string): Promise<IBusinessPartner | undefined> {
   const hanaService = new HanaService();
   const sapService = new SapService(hanaService);
   const user = await sapService.getBusinessPartnerByPhone(phoneNumber);

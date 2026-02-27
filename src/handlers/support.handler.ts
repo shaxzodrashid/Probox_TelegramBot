@@ -3,16 +3,26 @@ import { getMainKeyboard } from '../keyboards';
 import { UserService } from '../services/user.service';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { i18n } from '../i18n';
-import { checkRegistrationOrPrompt } from '../utils/registration.check';
 
 /**
  * Handler for the support menu button
  * Starts the support conversation
  */
 export async function supportHandler(ctx: BotContext): Promise<void> {
-    // Check if user is registered, if not, prompt to register
-    const user = await checkRegistrationOrPrompt(ctx);
-    if (!user) return;
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    // Ensure user exists in database (so support tickets can be created with valid reference)
+    let user = await UserService.getUserByTelegramId(telegramId);
+    if (!user) {
+        const locale = (await ctx.i18n.getLocale()) || 'uz';
+        user = await UserService.createUser({
+            telegram_id: telegramId,
+            first_name: ctx.from?.first_name,
+            last_name: ctx.from?.last_name,
+            language_code: locale,
+        });
+    }
 
     await ctx.conversation.enter('supportConversation');
 }

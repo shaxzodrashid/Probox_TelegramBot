@@ -59,7 +59,6 @@ export class ExportService {
         usersSheet.columns = [
             { header: 'ID', key: 'id', width: 10 },
             { header: 'Telegram ID', key: 'telegram_id', width: 15 },
-            { header: 'Username', key: 'username', width: 20 },
             { header: 'First Name', key: 'first_name', width: 20 },
             { header: 'Last Name', key: 'last_name', width: 20 },
             { header: 'Phone Number', key: 'phone_number', width: 18 },
@@ -84,7 +83,6 @@ export class ExportService {
             usersSheet.addRow({
                 id: user.id,
                 telegram_id: user.telegram_id,
-                username: user.username || '-',
                 first_name: user.first_name || '-',
                 last_name: user.last_name || '-',
                 phone_number: user.phone_number || '-',

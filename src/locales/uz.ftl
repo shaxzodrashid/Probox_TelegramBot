@@ -79,21 +79,25 @@ payments_not_found_alert = ❌ To'lov topilmadi.
 payments_main_menu = Bosh menyu
 
 # Settings
-settings_header = ⚙️ *Sozlamalar*
+settings_header = ⚙️ <b>Sozlamalar</b>
     
-    👤 *Ism:* { $first_name } { $last_name }
-    📱 *Tel:* { $phone }
-    🌐 *Til:* { $language }
+    👤 <b>Ism:</b> { $first_name } { $last_name }
+    📱 <b>Tel:</b> { $phone }
+    🌐 <b>Til:</b> { $language }
+    🪪 <b>Pasport:</b> <tg-spoiler>{ $passport_series }</tg-spoiler>
+    🔢 <b>JShShIR:</b> <tg-spoiler>{ $jshshir }</tg-spoiler>
     
     Kerakli bo'limni tanlang:
+settings_select_language = Iltimos, o'zingizga qulay tilni tanlang 👇
 settings_change_name = 👤 Ismni o'zgartirish
 settings_change_phone = 📱 Raqamni o'zgartirish
 settings_change_language = 🌐 Tilni o'zgartirish
-settings_add_passport = 🪪 Pasport ma'lumotlarini qo'shish
+settings_add_passport = 🪪 Pasport ma'lumotlari
 settings_add_passport_method = Pasport ma'lumotlarini qanday saqlamoqchisiz?
 settings_passport_method_photo = 📸 Rasm yuklash
 settings_passport_method_manual = ✍️ Qo'lda kiritish
-settings_passport_prompt = Iltimos, hujjatning (pasport yoki ID-karta) ma'lumotlar bor qismini rasmga olib yuboring. ID-kartaning orqa tomoni, pasportning to'liq holati
+settings_passport_prompt_front = Iltimos, ID-kartangizning yoki pasportingizning old qismini namuna rasmdagidek rasmga olib yuboring.
+settings_passport_prompt_back = Endi, iltimos, ID-kartaning orqa tomonini rasmga olib yuboring. (Agar pasport bo'lsa, xuddi shu rasmni qayta yuborishingiz mumkin)
 settings_passport_error = ❌ Uzr, rasmlardan ma'lumotlarni o'qib bo'lmadi. Iltimos, yorug' joyda tiniqroq rasmga olib qayta urinib ko'ring.
 settings_passport_success = ✅ Ma'lumotlaringiz muvaffaqiyatli saqlandi!
 settings_passport_processing = ⏳ Rasmlar tekshirilmoqda, iltimos kuting...
@@ -122,6 +126,8 @@ settings_phone_updated = ✅ Telefon raqamingiz muvaffaqiyatli o'zgartirildi!
 # Registration Prompt
 registration_required = ⚠️ Bu bo'limga kirish uchun ro'yxatdan o'tishingiz kerak. Ro'yxatdan o'tish uchun quyidagi tugmani bosing.
 registration_button = 📝 Ro'yxatdan o'tish
+registration_incomplete = ⚠️ Siz ro'yxatdan o'tishni to'liq yakunlamagansiz. Davom etish uchun avval sozlamalar orqali telefon raqamingizni kiriting.
+registration_incomplete_button = ⚙️ Sozlamalar
 
 # Support
 support_header = 📞 Qo'llab-quvvatlash
