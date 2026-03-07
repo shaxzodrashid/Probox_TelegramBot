@@ -8,7 +8,7 @@ export async function runConfirmationLoop(
   ctx: BotContext,
   locale: string,
   initialData: { series: string; jshshir: string }
-): Promise<{ series: string; jshshir: string }> {
+): Promise<{ series: string; jshshir: string; lastCtx: BotContext }> {
   let { series, jshshir } = initialData;
   let confirmed = false;
   let currentCtx = ctx;
@@ -29,10 +29,10 @@ export async function runConfirmationLoop(
       .text(confirmBtn)
       .resized().oneTime();
 
-    await currentCtx.reply(confirmText, { 
+    await ctx.reply(confirmText, { 
       parse_mode: 'Markdown', 
       reply_markup: confirmKeyboard 
-    }).catch(() => currentCtx.reply(confirmText.replace(/[*_`]/g, ''), { reply_markup: confirmKeyboard }));
+    }).catch(() => ctx.reply(confirmText.replace(/[*_`]/g, ''), { reply_markup: confirmKeyboard }));
 
     let action = '';
     while (true) {
@@ -40,7 +40,7 @@ export async function runConfirmationLoop(
       currentCtx = actionCtx;
 
       if (!currentCtx.message?.text) {
-        await currentCtx.reply(i18n.t(locale, 'settings_passport_use_buttons'));
+        await ctx.reply(i18n.t(locale, 'settings_passport_use_buttons'));
         continue;
       }
 
@@ -56,12 +56,12 @@ export async function runConfirmationLoop(
         action = 'confirm_data';
         break;
       } else {
-        await currentCtx.reply(i18n.t(locale, 'settings_passport_use_buttons'));
+        await ctx.reply(i18n.t(locale, 'settings_passport_use_buttons'));
       }
     }
 
     if (action === 'edit_series') {
-      await currentCtx.reply(i18n.t(locale, 'settings_passport_enter_series'));
+      await ctx.reply(i18n.t(locale, 'settings_passport_enter_series'));
       while (true) {
         const seriesCtx = await conversation.waitFor('message:text');
         currentCtx = seriesCtx;
@@ -70,11 +70,11 @@ export async function runConfirmationLoop(
           series = text;
           break;
         } else {
-          await currentCtx.reply(i18n.t(locale, 'settings_passport_invalid_series'));
+          await ctx.reply(i18n.t(locale, 'settings_passport_invalid_series'));
         }
       }
     } else if (action === 'edit_jshshir') {
-      await currentCtx.reply(i18n.t(locale, 'settings_passport_enter_jshshir'));
+      await ctx.reply(i18n.t(locale, 'settings_passport_enter_jshshir'));
       while (true) {
         const jshshirCtx = await conversation.waitFor('message:text');
         currentCtx = jshshirCtx; // Update currentCtx with the latest context
@@ -83,7 +83,7 @@ export async function runConfirmationLoop(
           jshshir = text;
           break;
         } else {
-          await currentCtx.reply(i18n.t(locale, 'settings_passport_invalid_jshshir'));
+          await ctx.reply(i18n.t(locale, 'settings_passport_invalid_jshshir'));
         }
       }
     } else if (action === 'confirm_data') {
@@ -91,6 +91,6 @@ export async function runConfirmationLoop(
     }
   }
 
-  return { series, jshshir };
+  return { series, jshshir, lastCtx: currentCtx };
 }
 

@@ -13,6 +13,7 @@ import { IBusinessPartner } from '../interfaces/business-partner.interface';
 import { getLocaleFromConversation } from '../utils/locale';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { sanitizeName } from '../utils/formatter.util';
+import { redisService } from '../redis/redis.service';
 
 /**
  * Checks if the user exists in SAP HANA by phone number.
@@ -28,15 +29,14 @@ export async function verifySapUser(phoneNumber: string): Promise<IBusinessPartn
   return undefined;
 }
 
-
 /**
  * Requests phone number from the user until a valid one is provided or /start is called.
  */
 async function requestPhoneNumber(
   conversation: BotConversation,
   ctx: BotContext,
-  locale: string
-): Promise<{ phoneNumber: string, ctx: BotContext } | null> {
+  locale: string,
+): Promise<{ phoneNumber: string; ctx: BotContext } | null> {
   const sharePhoneKeyboard = new Keyboard()
     .requestContact(i18n.t(locale, 'share_phone_button'))
     .resized()
@@ -66,8 +66,6 @@ async function requestPhoneNumber(
       }
     }
 
-    // If input is invalid, re-ask (or just loop waiting for valid input).
-    // Original behavior re-sends the prompt.
     await messageContext.reply(i18n.t(locale, 'ask_phone'), {
       reply_markup: sharePhoneKeyboard,
     });
@@ -80,10 +78,10 @@ async function requestPhoneNumber(
  */
 export async function performOtpVerification(
   conversation: BotConversation,
-  ctx: BotContext, // Context to reply to initially
+  ctx: BotContext,
   phoneNumber: string,
-  locale: string
-): Promise<{ verified: boolean, lastCtx: BotContext }> {
+  locale: string,
+): Promise<{ verified: boolean; lastCtx: BotContext }> {
   const isDevelopment = process.env.NODE_ENV === 'development';
   let timerId: NodeJS.Timeout | null = null;
 
@@ -101,8 +99,6 @@ export async function performOtpVerification(
 
     timerId = setTimeout(async () => {
       try {
-        // Check if user is already registered before sending the prompt
-        // This prevents the message from appearing if the user completed registration
         const telegramId = currentCtx.from?.id;
         if (telegramId) {
           const existingUser = await UserService.getUserByTelegramId(telegramId);
@@ -137,9 +133,8 @@ export async function performOtpVerification(
   try {
     while (true) {
       const otpContext = await conversation.wait();
-      clearTimer(); // Stop timer on any activity
+      clearTimer();
 
-      // Handle Resend (Callback or Keyboard Button text)
       const isResendButton = otpContext.message?.text === i18n.t(locale, 'resend_otp_button');
       const isResendCallback = otpContext.callbackQuery?.data === 'resend_otp';
 
@@ -149,14 +144,11 @@ export async function performOtpVerification(
         continue;
       }
 
-      // Handle /start
       if (otpContext.message?.text === '/start') {
         return { verified: false, lastCtx: otpContext };
       }
 
       const text = otpContext.message?.text;
-
-      // Valid OTP format check
       if (text && /^\d{6}$/.test(text)) {
         const isCorrect = await conversation.external(() => OtpService.verifyOtp(phoneNumber, text));
 
@@ -165,20 +157,18 @@ export async function performOtpVerification(
         }
       }
 
-      // If we reach here, OTP was incorrect or invalid format (but not /start and not resend)
       if (otpContext.message) {
         await conversation.external(() => OtpService.clearOtp(phoneNumber));
 
         const resendKeyboard = new InlineKeyboard().text(
           i18n.t(locale, 'resend_otp_button'),
-          'resend_otp'
+          'resend_otp',
         );
 
         await otpContext.reply(i18n.t(locale, 'invalid_otp'), {
           reply_markup: resendKeyboard,
         });
 
-        // After an error, we should probably restart the timer if the user doesn't act
         startResendTimer(otpContext);
       }
     }
@@ -187,17 +177,11 @@ export async function performOtpVerification(
   }
 }
 
-/**
- * Handles creation of a new user including SAP lookup.
- */
-/**
- * Handles creation or update of a user including SAP lookup.
- */
 async function registerOrUpdateUser(
   conversation: BotConversation,
   ctx: BotContext,
   phoneNumber: string,
-  locale: string
+  locale: string,
 ) {
   const sapUser = await conversation.external(() => verifySapUser(phoneNumber));
 
@@ -212,36 +196,32 @@ async function registerOrUpdateUser(
     sap_card_code: sapUser?.CardCode || '',
     is_admin: sapUser?.U_admin === 'yes',
     is_logged_out: false,
-    updated_at: new Date()
+    updated_at: new Date(),
   };
 
-  // Check if user exists
   const existingUser = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
 
   if (existingUser) {
     await conversation.external(() => UserService.updateUser(existingUser.id, data_to_store));
     return data_to_store.is_admin;
-  } else {
-    data_to_store.telegram_id = telegramId;
-    data_to_store.created_at = new Date();
-    await conversation.external(() => UserService.createUser(data_to_store));
-    return data_to_store.is_admin;
   }
+
+  data_to_store.telegram_id = telegramId;
+  data_to_store.created_at = new Date();
+  await conversation.external(() => UserService.createUser(data_to_store));
+  return data_to_store.is_admin;
 }
 
-
-/**
- * Main Registration Conversation
- */
 export async function registrationConversation(conversation: BotConversation, ctx: BotContext) {
-  const locale = await getLocaleFromConversation(conversation);
   const telegramId = ctx.from?.id;
+  if (!telegramId) return;
 
-  // 1. (Removed Auto-Login Check) - We now force re-verification for security and data sync
+  // Read pendingAction from Redis
+  const pendingAction = await conversation.external(() => redisService.get<string>(`pendingAction:${telegramId}`));
+  const locale = await getLocaleFromConversation(conversation);
 
-  // 2. Get Phone Number (only for new users)
   const phoneResult = await requestPhoneNumber(conversation, ctx, locale);
-  if (!phoneResult) return; // /start was called
+  if (!phoneResult) return;
 
   const { phoneNumber, ctx: phoneCtx } = phoneResult;
   logger.info(`Extracted phone number: ${phoneNumber}`);
@@ -250,22 +230,30 @@ export async function registrationConversation(conversation: BotConversation, ct
     ctx.session.user_phone = phoneNumber;
   }
 
-  // 3. Verify OTP for new user
   const { verified, lastCtx } = await performOtpVerification(conversation, phoneCtx, phoneNumber, locale);
+  if (!verified) return;
 
-  if (!verified) return; // /start called during OTP
-
-  // 4. Register or Update user
   const isAdmin = await registerOrUpdateUser(conversation, lastCtx, phoneNumber, locale);
 
-  // 5. Delete all tracked messages from the registration conversation
-
-  // 6. Success: Show confirmation and main menu
   await lastCtx.reply(i18n.t(locale, 'phone_saved'), {
     reply_markup: { remove_keyboard: true },
   });
 
-  // 7. Show welcome message with appropriate menu keyboard
+  if (pendingAction === 'application') {
+    // Inside a conversation, ctx.conversation is unavailable (plain hydrated Context).
+    // The pendingAction key stays in Redis. The bot-level pending-action router will
+    // pick it up on the next update.
+    // Give the user a button to tap so the router fires immediately — clean UX.
+    const continueKeyboard = new InlineKeyboard().text(
+      i18n.t(locale, 'application_continue_button'),
+      'continue_to_application',
+    );
+    await lastCtx.reply(i18n.t(locale, 'registration_success_continue'), {
+      reply_markup: continueKeyboard,
+    });
+    return;
+  }
+
   if (isAdmin) {
     await lastCtx.reply(i18n.t(locale, 'admin_menu_header'), {
       reply_markup: getAdminMenuKeyboard(locale),
@@ -276,4 +264,3 @@ export async function registrationConversation(conversation: BotConversation, ct
     });
   }
 }
-

@@ -11,6 +11,7 @@ export type BotConversation = Conversation<BotContext, BotContext>;
 export interface SessionData {
   // Add session data properties here
   user_phone?: string;
+  pendingAction?: 'application';
   __language_code?: string;
   languageSelected?: boolean;
   contracts?: Contract[];

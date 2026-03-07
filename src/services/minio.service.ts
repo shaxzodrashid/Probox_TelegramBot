@@ -241,6 +241,37 @@ class MinioServiceClass {
       throw error;
     }
   }
+
+  /**
+   * Special helper for face ID uploads: deletes old face IDs for this user and saves the new one.
+   * Path format: face_id/USER_ID/face_id_DATETIME.jpg
+   */
+  async uploadFaceId(telegramId: number, buffer: Buffer): Promise<void> {
+    const folder = `face_id/${telegramId}/`;
+    
+    try {
+      // 1. Delete existing face ID files for this user
+      await this.deleteFilesByPrefix(folder);
+      
+      // 2. Generate filename
+      const filename = `${folder}face_id_${Date.now()}.jpg`;
+
+      // 3. Compress image before upload
+      logger.info(`[MINIO] Compressing face ID image for user ${telegramId}...`);
+      const compressedBuffer = await sharp(buffer)
+        .jpeg({ quality: 50, mozjpeg: true })
+        .toBuffer();
+      
+      logger.info(`[MINIO] Compression done: ${buffer.length} -> ${compressedBuffer.length} bytes`);
+      
+      // 4. Upload compressed one
+      await this.uploadFile(filename, compressedBuffer);
+      logger.info(`[MINIO] Handled face ID upload for user ${telegramId}: old deleted, new compressed and uploaded as ${filename}`);
+    } catch (error) {
+      logger.error(`[MINIO] Failed to handle face ID upload for ${telegramId}: ${error}`);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

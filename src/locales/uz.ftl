@@ -101,6 +101,10 @@ settings_passport_prompt_back = Endi, iltimos, ID-kartaning orqa tomonini rasmga
 settings_passport_error = ❌ Uzr, rasmlardan ma'lumotlarni o'qib bo'lmadi. Iltimos, yorug' joyda tiniqroq rasmga olib qayta urinib ko'ring.
 settings_passport_success = ✅ Ma'lumotlaringiz muvaffaqiyatli saqlandi!
 settings_passport_processing = ⏳ Rasmlar tekshirilmoqda, iltimos kuting...
+settings_passport_ask_face_id = Iltimos, verifikatsiyani yakunlash uchun yuzingiz rasmini (selfi) yuboring.
+settings_passport_face_id_processing = ⏳ Yuz rasmi tekshirilmoqda, iltimos kuting...
+settings_passport_face_id_error = ❌ Afsuski, rasmda yuz aniqlanmadi yoki rasm juda xira. Iltimos, tiniqroq selfi olib qayta urinib ko'ring.
+settings_passport_face_id_success = ✅ Yuz rasmi muvaffaqiyatli tasdiqlandi!
 settings_passport_enter_series = 🔢 Iltimos, pasport seriyasi va raqamini kiriting (masalan, AB1234567):
 settings_passport_invalid_series = ❌ Noto'g'ri pasport seriyasi. U 2 ta harf va 7 ta raqamdan iborat bo'lishi kerak. Iltimos, qayta kiriting:
 settings_passport_enter_jshshir = 🔢 Iltimos, 14 xonali JShShIR (PINFL) raqamingizni kiriting:
@@ -126,6 +130,8 @@ settings_phone_updated = ✅ Telefon raqamingiz muvaffaqiyatli o'zgartirildi!
 # Registration Prompt
 registration_required = ⚠️ Bu bo'limga kirish uchun ro'yxatdan o'tishingiz kerak. Ro'yxatdan o'tish uchun quyidagi tugmani bosing.
 registration_button = 📝 Ro'yxatdan o'tish
+registration_success_continue = ✅ Ro'yxatdan o'tish muvaffaqiyatli yakunlandi! Arizangizni yuborish uchun davom eting.
+application_continue_button = ✍️ Arizani yuborish
 registration_incomplete = ⚠️ Siz ro'yxatdan o'tishni to'liq yakunlamagansiz. Davom etish uchun avval sozlamalar orqali telefon raqamingizni kiriting.
 registration_incomplete_button = ⚙️ Sozlamalar
 

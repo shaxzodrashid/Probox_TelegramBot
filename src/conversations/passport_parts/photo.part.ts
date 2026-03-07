@@ -1,7 +1,7 @@
 import { BotConversation, BotContext } from '../../types/context';
 import { i18n } from '../../i18n';
 import { logger } from '../../utils/logger';
-import { downloadFile } from './utils.part';
+import { downloadFileByPath, getTelegramFilePath } from './utils.part';
 import sharp from 'sharp';
 import jsQR from 'jsqr';
 import { OCRService, PassportDataFields } from '../../services/ocr.service';
@@ -75,11 +75,14 @@ export async function handlePhotoMethod(
   firstName: string | null;
   lastName: string | null;
   fileIds: string[];
+  lastCtx: BotContext;
 }> {
   const chatId = ctx.chat?.id;
 
   let frontFileId = '';
   let backFileId = '';
+  let frontFilePath: string | null = null;
+  let backFilePath: string | null = null;
   let photoCtx: BotContext = ctx;
 
   if (chatId) {
@@ -94,21 +97,17 @@ export async function handlePhotoMethod(
   }
 
   while (true) {
-    photoCtx = await conversation.wait();
-    if (photoCtx.message?.photo) {
-      const photos = photoCtx.message.photo;
-      frontFileId = photos[photos.length - 1].file_id;
-      logger.debug(`[Passport] Front photo received, file_id: ${frontFileId}`);
-      break;
-    } else if (photoCtx.message?.text) {
-      await photoCtx.reply(i18n.t(locale, 'settings_passport_prompt_front'));
-    }
+    photoCtx = await conversation.waitFor('message:photo');
+    const photos = photoCtx.message!.photo!;
+    frontFileId = photos[photos.length - 1].file_id;
+    logger.debug(`[Passport] Front photo received, file_id: ${frontFileId}`);
+    break;
   }
 
   if (chatId) {
     logger.debug('[Passport] Sending BACK photo prompt...');
     const backImg = new InputFile(path.join(__dirname, '../../uploads/back.JPG'));
-    await photoCtx.api
+    await ctx.api
       .sendPhoto(chatId, backImg, {
         caption: i18n.t(locale, 'settings_passport_prompt_back'),
       })
@@ -116,37 +115,50 @@ export async function handlePhotoMethod(
   }
 
   while (true) {
-    photoCtx = await conversation.wait();
-    if (photoCtx.message?.photo) {
-      const photos = photoCtx.message.photo;
-      backFileId = photos[photos.length - 1].file_id;
-      logger.debug(`[Passport] Back photo received, file_id: ${backFileId}`);
-      break;
-    } else if (photoCtx.message?.text) {
-      await photoCtx.reply(i18n.t(locale, 'settings_passport_prompt_back'));
-    }
+    photoCtx = await conversation.waitFor('message:photo');
+    const photos = photoCtx.message!.photo!;
+    backFileId = photos[photos.length - 1].file_id;
+    logger.debug(`[Passport] Back photo received, file_id: ${backFileId}`);
+    break;
   }
+
+  frontFilePath = await getTelegramFilePath(ctx, frontFileId);
+  backFilePath = await getTelegramFilePath(ctx, backFileId);
+  logger.debug(
+    `[Passport] Resolved Telegram file paths. front=${frontFilePath ? 'ok' : 'missing'}, back=${backFilePath ? 'ok' : 'missing'}`,
+  );
 
   let processingMsgId: number | null = null;
   try {
     if (chatId) {
       logger.debug('[Passport] Sending processing message...');
-      const msg = await photoCtx.api.sendMessage(
+      const msg = await ctx.api.sendMessage(
         chatId,
         i18n.t(locale, 'settings_passport_processing'),
       );
+      logger.debug('[Passport] Processing message sent successfully.');
       processingMsgId = msg.message_id;
     }
-  } catch {
-    logger.debug('[Passport] Error sending processing message');
+  } catch (err) {
+    logger.debug(`[Passport] Error sending processing message: ${err}`);
     processingMsgId = null;
   }
 
-  const result = await conversation.external(async (uninterceptedCtx) => {
+  logger.debug('[Passport] Pre-external check. About to call conversation.external().');
+  const result = await conversation.external(async () => {
     logger.debug('[Passport] Inside external: Starting OCR processing');
 
-    const processFile = async (fileId: string) => {
-      const buffer = await downloadFile(uninterceptedCtx as BotContext, fileId);
+    const processFile = async (filePath: string | null) => {
+      if (!filePath) {
+        return {
+          cardNumber: '',
+          jshshir: '',
+          firstName: null as string | null,
+          lastName: null as string | null,
+        };
+      }
+
+      const buffer = await downloadFileByPath(filePath);
       if (!buffer) {
         return {
           cardNumber: '',
@@ -178,8 +190,8 @@ export async function handlePhotoMethod(
       };
     };
 
-    const frontData = await processFile(frontFileId);
-    const backData = await processFile(backFileId);
+    const frontData = await processFile(frontFilePath);
+    const backData = await processFile(backFilePath);
 
     return {
       cardNumber: frontData.cardNumber || backData.cardNumber || '',
@@ -190,9 +202,12 @@ export async function handlePhotoMethod(
   });
   logger.debug('[Passport] Exited conversation.external.');
 
+  logger.debug('[Passport] Pre-delete processing message check.');
   if (processingMsgId && chatId) {
     logger.debug('[Passport] Deleting processing message...');
-    await photoCtx.api.deleteMessage(chatId, processingMsgId).catch(() => {});
+    await ctx.api.deleteMessage(chatId, processingMsgId).catch((err) => {
+      logger.debug(`[Passport] Failed to delete processing message: ${err}`);
+    });
   }
   logger.debug('[Passport] Processing message deleted. Moving to variable assignment.');
 
@@ -201,11 +216,11 @@ export async function handlePhotoMethod(
   let currentCtx = photoCtx;
 
   if (!finalSeries || !finalJshshir) {
-    await currentCtx.reply(i18n.t(locale, 'settings_passport_missing_data'));
+    await ctx.reply(i18n.t(locale, 'settings_passport_missing_data'));
   }
 
   if (!finalSeries) {
-    await currentCtx.reply(i18n.t(locale, 'settings_passport_enter_series'));
+    await ctx.reply(i18n.t(locale, 'settings_passport_enter_series'));
     while (true) {
       const seriesCtx = await conversation.waitFor('message:text');
       currentCtx = seriesCtx;
@@ -214,13 +229,13 @@ export async function handlePhotoMethod(
         finalSeries = text;
         break;
       } else {
-        await currentCtx.reply(i18n.t(locale, 'settings_passport_invalid_series'));
+        await ctx.reply(i18n.t(locale, 'settings_passport_invalid_series'));
       }
     }
   }
 
   if (!finalJshshir) {
-    await currentCtx.reply(i18n.t(locale, 'settings_passport_enter_jshshir'));
+    await ctx.reply(i18n.t(locale, 'settings_passport_enter_jshshir'));
     while (true) {
       const jshshirCtx = await conversation.waitFor('message:text');
       currentCtx = jshshirCtx;
@@ -229,7 +244,7 @@ export async function handlePhotoMethod(
         finalJshshir = text;
         break;
       } else {
-        await currentCtx.reply(i18n.t(locale, 'settings_passport_invalid_jshshir'));
+        await ctx.reply(i18n.t(locale, 'settings_passport_invalid_jshshir'));
       }
     }
   }
@@ -240,5 +255,6 @@ export async function handlePhotoMethod(
     firstName: result.firstName,
     lastName: result.lastName,
     fileIds: [frontFileId, backFileId],
+    lastCtx: currentCtx,
   };
 }

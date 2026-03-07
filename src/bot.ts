@@ -107,15 +107,62 @@ bot.use(createConversation(adminSendMessageConversation));
 bot.use(createConversation(addPassportDataConversation));
 bot.use(createConversation(applicationConversation));
 
+// ─── Pending Action Router ─────────────────────────────────────────────────
+// Fires AFTER all conversations have had a chance to handle the update.
+// When registrationConversation or addPassportDataConversation completes,
+// it leaves pendingAction in Redis. This router picks that up and transitions
+// automatically to applicationConversation — but ONLY when it makes sense:
+//   • No other conversation is currently active for this user
+//   • The current update is not a callback that should start reg/passport itself
+//   • The user is actually logged in (to avoid re-triggering the loop)
+bot.use(async (ctx, next) => {
+  const telegramId = ctx.from?.id;
+
+  if (telegramId) {
+    const pendingAction = await redisService.get<string>(`pendingAction:${telegramId}`);
+
+    if (pendingAction) {
+      // Skip routing if this update is one of the callbacks that transitions
+      // the user INTO registration or passport — let those handlers run normally.
+      const isRegistrationCallback = ctx.callbackQuery?.data === 'start_registration';
+      const isPassportCallback = ctx.callbackQuery?.data === 'start_passport_conv';
+      const isStartCommand = ctx.message?.text === '/start';
+
+      if (!isRegistrationCallback && !isPassportCallback && !isStartCommand) {
+        const active = ctx.conversation.active();
+        const hasActive = Object.values(active).some((count) => count > 0);
+
+        if (!hasActive && pendingAction === 'application') {
+          // Verify the user is actually registered before auto-entering the app flow.
+          // If they're not, clear the stale key and let them go through normal flow.
+          const user = await UserService.getLoggedInUser(telegramId);
+          if (user) {
+            await redisService.delete(`pendingAction:${telegramId}`);
+            if (ctx.callbackQuery) {
+              await ctx.answerCallbackQuery().catch(() => { });
+              await ctx.deleteMessage().catch(() => { });
+            }
+            await ctx.conversation.enter('applicationConversation');
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  await next();
+});
+
+
 // Error Handling
 bot.catch((err) => {
   const ctx = err.ctx;
   logger.error(`Error while handling update ${ctx.update.update_id}:`);
   const e = err.error;
   if (e instanceof Error) {
-    logger.error(e.message);
+    logger.error(e.stack || String(e));
   } else {
-    logger.error(String(e));
+    console.error(e);
   }
 });
 
@@ -137,6 +184,8 @@ bot.filter(hears('menu_payments'), paymentsHandler);
 bot.filter(hears('menu_settings'), settingsHandler);
 bot.filter(hears('menu_support'), supportHandler);
 bot.filter(hears('menu_application'), async (ctx) => {
+  console.log('entering applicationConversation...');
+  await ctx.conversation.exitAll();
   await ctx.conversation.enter('applicationConversation');
 });
 bot.filter(hears('admin_menu'), adminMenuHandler);
@@ -211,6 +260,11 @@ bot.filter(hears('back'), async (ctx) => {
 bot.callbackQuery('change_name', changeNameHandler);
 bot.callbackQuery('change_phone', changePhoneHandler);
 bot.callbackQuery('change_language', changeLanguageHandler);
+bot.callbackQuery('start_registration', async (ctx) => {
+  await ctx.deleteMessage().catch(() => {});
+  await ctx.conversation.exitAll();
+  await ctx.conversation.enter('registrationConversation');
+});
 bot.callbackQuery('open_settings', settingsHandler);
 
 // Support ticket callback handlers (Admin Group)
@@ -231,15 +285,20 @@ bot.callbackQuery('admin_cancel', adminBackToMainMenuHandler);
 bot.callbackQuery('admin_broadcast_all', (ctx) => ctx.answerCallbackQuery());
 bot.callbackQuery('admin_broadcast_single', (ctx) => ctx.answerCallbackQuery());
 bot.callbackQuery('admin_broadcast_confirm', (ctx) => ctx.answerCallbackQuery());
-bot.callbackQuery('start_passport_conv', addPassportHandler);
-bot.callbackQuery('noop', (ctx) => ctx.answerCallbackQuery());
-
-// Registration prompt callback handler
-// When user clicks the "Register" button from the registration prompt message
-bot.callbackQuery('start_registration', async (ctx) => {
-  // Delete the prompt message
-  await ctx.deleteMessage().catch(() => { });
-  await ctx.answerCallbackQuery();
-  // Start the registration conversation
-  await ctx.conversation.enter('registrationConversation');
+bot.callbackQuery('start_passport_conv', async (ctx) => {
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery();
+  }
+  await ctx.deleteMessage().catch(() => {});
+  await ctx.conversation.exitAll();
+  await ctx.conversation.enter('addPassportDataConversation');
 });
+bot.callbackQuery('noop', (ctx) => ctx.answerCallbackQuery());
+// Fallback: if the router didn't handle continue_to_application (e.g. user already logged in
+// but no pending action), just dismiss the spinner.
+bot.callbackQuery('continue_to_application', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await ctx.deleteMessage().catch(() => { });
+});
+
+

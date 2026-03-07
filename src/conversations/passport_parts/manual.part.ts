@@ -5,7 +5,8 @@ export async function handleManualMethod(
   conversation: BotConversation,
   ctx: BotContext,
   locale: string
-): Promise<{ series: string; jshshir: string }> {
+): Promise<{ series: string; jshshir: string; lastCtx: BotContext }> {
+  let currentCtx = ctx;
   // Send prompt directly (not in external - using ctx inside external causes hangs on replay)
   await ctx.reply(i18n.t(locale, 'settings_passport_enter_series'), { 
     reply_markup: { remove_keyboard: true } 
@@ -21,7 +22,7 @@ export async function handleManualMethod(
       currentSeries = text;
       break;
     } else {
-      await seriesCtx.reply(i18n.t(locale, 'settings_passport_invalid_series'));
+      await ctx.reply(i18n.t(locale, 'settings_passport_invalid_series'));
     }
   }
 
@@ -33,10 +34,10 @@ export async function handleManualMethod(
       currentJshshir = text;
       break;
     } else {
-      await jshshirCtx.reply(i18n.t(locale, 'settings_passport_invalid_jshshir'));
+      await ctx.reply(i18n.t(locale, 'settings_passport_invalid_jshshir'));
     }
   }
 
-  return { series: currentSeries, jshshir: currentJshshir };
+  return { series: currentSeries, jshshir: currentJshshir, lastCtx: currentCtx };
 }
 

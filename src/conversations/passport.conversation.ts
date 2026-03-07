@@ -5,10 +5,13 @@ import { getMainKeyboardByLocale } from '../keyboards';
 import { UserService } from '../services/user.service';
 import { minioService } from '../services/minio.service';
 import { logger } from '../utils/logger';
-import { normalizeButtonText, downloadFile } from './passport_parts/utils.part';
+import { normalizeButtonText, downloadFileByPath, getTelegramFilePath } from './passport_parts/utils.part';
 import { handlePhotoMethod } from './passport_parts/photo.part';
 import { handleManualMethod } from './passport_parts/manual.part';
 import { runConfirmationLoop } from './passport_parts/confirmation.part';
+import { submitApplication } from './application.conversation';
+import { redisService } from '../redis/redis.service';
+import { detectFace } from '../utils/face-detection.util';
 
 export async function addPassportDataConversation(conversation: BotConversation, ctx: BotContext) {
   const telegramId = ctx.from?.id;
@@ -20,6 +23,8 @@ export async function addPassportDataConversation(conversation: BotConversation,
   try {
     const user = await UserService.getUserByTelegramId(telegramId);
     const isAdmin = user?.is_admin || false;
+    const pendingAction = await conversation.external(() => redisService.get<string>(`pendingAction:${telegramId}`));
+    const shouldResumeApplication = pendingAction === 'application';
 
     let currentSeries = '';
     let currentJshshir = '';
@@ -34,45 +39,42 @@ export async function addPassportDataConversation(conversation: BotConversation,
     const photoBtnNormalized = normalizeButtonText(photoBtn);
     const manualBtnNormalized = normalizeButtonText(manualBtn);
 
-    const methodKeyboard = new Keyboard()
-      .text(photoBtn)
-      .text(manualBtn)
-      .resized()
-      .oneTime();
+    const methodKeyboard = new Keyboard().text(photoBtn).text(manualBtn).resized().oneTime();
 
     logger.debug('[Passport] Sending method selection keyboard');
     await ctx.reply(i18n.t(locale, 'settings_add_passport_method'), {
-      reply_markup: methodKeyboard
+      reply_markup: methodKeyboard,
     });
 
     while (true) {
       logger.debug('[Passport] Waiting for method selection...');
       const methodCtx = await conversation.wait();
       currentCtx = methodCtx;
-      
-      // If user sent something other than text (e.g. a photo), ask them to use buttons
+
       if (!methodCtx.message?.text) {
         logger.debug('[Passport] Non-text message received during method selection, prompting user');
-        await methodCtx.reply(i18n.t(locale, 'settings_add_passport_method'), {
-          reply_markup: methodKeyboard
+        await ctx.reply(i18n.t(locale, 'settings_add_passport_method'), {
+          reply_markup: methodKeyboard,
         });
         continue;
       }
 
       const text = normalizeButtonText(methodCtx.message.text);
       logger.debug(`[Passport] Method selection received - raw: "${methodCtx.message.text}", normalized: "${text}"`);
-    
+
       if (text === photoBtnNormalized) {
         method = 'method_photo';
         break;
-      } else if (text === manualBtnNormalized) {
+      }
+
+      if (text === manualBtnNormalized) {
         method = 'method_manual';
         break;
-      } else {
-        await methodCtx.reply(i18n.t(locale, 'settings_add_passport_method'), {
-          reply_markup: methodKeyboard
-        });
       }
+
+      await ctx.reply(i18n.t(locale, 'settings_add_passport_method'), {
+        reply_markup: methodKeyboard,
+      });
     }
 
     if (method === 'method_photo') {
@@ -82,70 +84,104 @@ export async function addPassportDataConversation(conversation: BotConversation,
       extractedFirstName = result.firstName;
       extractedLastName = result.lastName;
       fileIds = result.fileIds;
+      currentCtx = result.lastCtx;
     } else {
       const result = await handleManualMethod(conversation, currentCtx, locale);
       currentSeries = result.series;
       currentJshshir = result.jshshir;
+      currentCtx = result.lastCtx;
     }
 
-
-    // Confirmation logic
     const confirmedData = await runConfirmationLoop(conversation, currentCtx, locale, {
       series: currentSeries,
-      jshshir: currentJshshir
+      jshshir: currentJshshir,
     });
-    
+
     currentSeries = confirmedData.series;
     currentJshshir = confirmedData.jshshir;
+    currentCtx = confirmedData.lastCtx;
+    logger.debug(`[Passport] Confirmation done. series=${currentSeries}, jshshir=${currentJshshir}`);
 
-
-    // Save to database
     await conversation.external(async () => {
       await UserService.updateUserPassportData(telegramId, currentJshshir, currentSeries);
-      
-      // Update names if we extracted them and user doesn't have them
+
       if (extractedFirstName || extractedLastName) {
         const currentUser = await UserService.getUserByTelegramId(telegramId);
         if (currentUser) {
           const first = currentUser.first_name || extractedFirstName || null;
           const last = currentUser.last_name || extractedLastName || null;
-          
-          if (!currentUser.first_name && extractedFirstName || !currentUser.last_name && extractedLastName) {
+
+          if ((!currentUser.first_name && extractedFirstName) || (!currentUser.last_name && extractedLastName)) {
             logger.debug(`[Passport] Updating newly extracted names: ${first} ${last}`);
             await UserService.updateUserName(telegramId, first, last);
           }
         }
       }
     });
+
+    // --- Face ID STEP ---
+    logger.debug(`[Passport] Starting Face ID step for user ${telegramId}`);
     
-    // Provide success feedback
-    await currentCtx.reply(i18n.t(locale, 'settings_passport_success'), {
-      reply_markup: getMainKeyboardByLocale(locale, isAdmin, true)
+    await currentCtx.reply(i18n.t(locale, 'settings_passport_ask_face_id'), {
+      reply_markup: { remove_keyboard: true },
     });
 
-    // Background upload to MinIO
-    if (method === 'method_photo' && fileIds.length > 0) {
-      // Use conversation.external for side effects or just ensure it's handled safely
-      await conversation.external(async (uninterceptedCtx) => {
-        try {
-          const buffers: Buffer[] = [];
-          for (const fileId of fileIds) {
-            const buf = await downloadFile(uninterceptedCtx as BotContext, fileId);
-            if (buf) buffers.push(buf);
-          }
-          if (buffers.length > 0) {
-            // New logic: Deletes old passports and saves new one in a descriptive path
-            // e.g. passports/12345/passport_John_Doe.jpg
-            await minioService.uploadUserPassport(telegramId, buffers, user || undefined);
-            logger.debug(`[Passport] Image updated in MinIO for user ${telegramId}`);
-          }
-        } catch (err) {
-          logger.error('[Passport] MinIO update error:', err);
+    while (true) {
+      const faceCtx = await conversation.wait();
+      currentCtx = faceCtx;
+
+      if (faceCtx.message?.photo) {
+        const fileId = faceCtx.message.photo[faceCtx.message.photo.length - 1].file_id;
+        
+        const feedbackMsg = await faceCtx.reply(i18n.t(locale, 'settings_passport_face_id_processing'));
+
+        const filePath = await getTelegramFilePath(faceCtx, fileId);
+        if (!filePath) {
+          await faceCtx.reply(i18n.t(locale, 'admin_error_generic'));
+          continue;
         }
-      }).catch(err => logger.error('[Passport] External minio task error:', err));
+
+        const buffer = await downloadFileByPath(filePath);
+        if (!buffer) {
+          await faceCtx.reply(i18n.t(locale, 'admin_error_generic'));
+          continue;
+        }
+
+        const hasFace = await conversation.external(() => detectFace(buffer));
+        
+        if (hasFace) {
+          await conversation.external(() => minioService.uploadFaceId(telegramId, buffer));
+          await faceCtx.api.editMessageText(faceCtx.chat!.id, feedbackMsg.message_id, i18n.t(locale, 'settings_passport_face_id_success'));
+          break;
+        } else {
+          await faceCtx.api.editMessageText(faceCtx.chat!.id, feedbackMsg.message_id, i18n.t(locale, 'settings_passport_face_id_error'));
+          continue;
+        }
+      } else {
+        await currentCtx.reply(i18n.t(locale, 'settings_passport_ask_face_id'));
+      }
+    }
+    // --- End Face ID STEP ---
+
+    if (shouldResumeApplication) {
+      logger.info(`[Passport] Resuming application flow for user ${telegramId}`);
+      await ctx.reply(i18n.t(locale, 'settings_passport_success'), {
+        reply_markup: { remove_keyboard: true },
+      });
+      try {
+        await submitApplication(conversation, currentCtx, locale);
+      } catch (err) {
+        logger.error('[Passport] Failed to submit application after passport save:', err);
+        await currentCtx.reply(i18n.t(locale, 'application_error')).catch(() => {});
+      } finally {
+        await conversation.external(() => redisService.delete(`pendingAction:${telegramId}`));
+      }
+      return;
     }
 
-
+    await ctx.reply(i18n.t(locale, 'settings_passport_success'), {
+      reply_markup: getMainKeyboardByLocale(locale, isAdmin, true),
+    });
   } catch (err) {
     logger.error('[Passport] UNHANDLED ERROR in conversation:', err);
     await ctx.reply(`❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.`).catch(() => {});

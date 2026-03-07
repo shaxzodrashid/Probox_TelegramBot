@@ -3,14 +3,23 @@ import { config } from '../../config';
 import axios from 'axios';
 import { logger } from '../../utils/logger';
 
-export async function downloadFile(ctx: BotContext, fileId: string): Promise<Buffer | null> {
+export async function getTelegramFilePath(ctx: BotContext, fileId: string): Promise<string | null> {
   try {
     const file = await ctx.api.getFile(fileId);
     if (!file.file_path) return null;
-    const url = `https://api.telegram.org/file/bot${config.BOT_TOKEN}/${file.file_path}`;
-    const response = await axios.get(url, { 
+    return file.file_path;
+  } catch (e) {
+    logger.error('Error resolving passport image file path:', e);
+    return null;
+  }
+}
+
+export async function downloadFileByPath(filePath: string): Promise<Buffer | null> {
+  try {
+    const url = `https://api.telegram.org/file/bot${config.BOT_TOKEN}/${filePath}`;
+    const response = await axios.get(url, {
       responseType: 'arraybuffer',
-      timeout: 15000 
+      timeout: 15000,
     });
     return Buffer.from(response.data);
   } catch (e) {
