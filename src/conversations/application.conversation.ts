@@ -11,6 +11,19 @@ import { i18n } from '../i18n';
 import { getLocaleFromConversation } from '../utils/locale';
 import { redisService } from '../redis/redis.service';
 
+const CRM_FILES_FIELD = 'files';
+
+function appendApplicationFiles(
+  form: FormData,
+  files: { buffer: Buffer; filename: string; contentType: string }[],
+) {
+  // Multipart "arrays" are represented by repeating the same field name.
+  // This keeps the payload as files: [file1, file2, file3] on the receiver side.
+  for (const { buffer, filename, contentType } of files) {
+    form.append(CRM_FILES_FIELD, buffer, { filename, contentType });
+  }
+}
+
 export async function submitApplication(
   conversation: BotConversation,
   ctx: BotContext,
@@ -101,9 +114,7 @@ export async function submitApplication(
         form.append('jshshir', user!.jshshir || '');
         form.append('passportId', user!.passport_series || '');
 
-        imageBuffers.forEach(({ buffer, filename, contentType }) => {
-          form.append('files', buffer, { filename, contentType });
-        });
+        appendApplicationFiles(form, imageBuffers);
 
         const response = await axios.post(config.CRM_URL, form, {
           headers: form.getHeaders(),
@@ -115,6 +126,12 @@ export async function submitApplication(
           maxBodyLength: Infinity,
           timeout: 45000, // 45 seconds timeout for stability
         });
+
+        logger.info(`[CRM] Request for user ${telegramId}: ${JSON.stringify(form)}`);
+
+        logger.info(
+          `[CRM] Response for user ${telegramId}: status=${response.status}, data=${JSON.stringify(response.data)}`,
+        );
 
         return { success: true, data: response.data };
       } catch (error: any) {
@@ -187,3 +204,4 @@ export async function applicationConversation(conversation: BotConversation, ctx
 
   await submitApplication(conversation, ctx, locale, user);
 }
+

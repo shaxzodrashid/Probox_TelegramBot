@@ -97,8 +97,8 @@ export class OCRService {
     const normalized: PassportDataFields = {
       cardNumber: fields.cardNumber ? fields.cardNumber.toUpperCase() : null,
       jshshir: fields.jshshir ? fields.jshshir.replace(/\D/g, '') : null,
-      firstName: fields.firstName || null,
-      lastName: fields.lastName || null,
+      firstName: fields.firstName && fields.firstName.length <= 20 ? fields.firstName : null,
+      lastName: fields.lastName && fields.lastName.length <= 20 ? fields.lastName : null,
     };
 
     return {
@@ -189,8 +189,17 @@ export class OCRService {
       }
     }
 
-    if (firstName) firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
-    if (lastName) lastName = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase();
+    if (firstName && firstName.length <= 20) {
+      firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+    } else {
+      firstName = null;
+    }
+
+    if (lastName && lastName.length <= 20) {
+      lastName = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase();
+    } else {
+      lastName = null;
+    }
 
     return { firstName, lastName };
   }

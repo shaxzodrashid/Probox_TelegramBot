@@ -30,6 +30,7 @@ export async function addPassportDataConversation(conversation: BotConversation,
     let currentJshshir = '';
     let method = '';
     let fileIds: string[] = [];
+    let passportBuffers: Buffer[] = [];
     let extractedFirstName: string | null = null;
     let extractedLastName: string | null = null;
     let currentCtx: BotContext = ctx;
@@ -41,55 +42,68 @@ export async function addPassportDataConversation(conversation: BotConversation,
 
     const methodKeyboard = new Keyboard().text(photoBtn).text(manualBtn).resized().oneTime();
 
-    logger.debug('[Passport] Sending method selection keyboard');
-    await ctx.reply(i18n.t(locale, 'settings_add_passport_method'), {
-      reply_markup: methodKeyboard,
-    });
-
     while (true) {
-      logger.debug('[Passport] Waiting for method selection...');
-      const methodCtx = await conversation.wait();
-      currentCtx = methodCtx;
-
-      if (!methodCtx.message?.text) {
-        logger.debug('[Passport] Non-text message received during method selection, prompting user');
-        await ctx.reply(i18n.t(locale, 'settings_add_passport_method'), {
-          reply_markup: methodKeyboard,
-        });
-        continue;
-      }
-
-      const text = normalizeButtonText(methodCtx.message.text);
-      logger.debug(`[Passport] Method selection received - raw: "${methodCtx.message.text}", normalized: "${text}"`);
-
-      if (text === photoBtnNormalized) {
-        method = 'method_photo';
-        break;
-      }
-
-      if (text === manualBtnNormalized) {
-        method = 'method_manual';
-        break;
-      }
-
+      logger.debug('[Passport] Sending method selection keyboard');
       await ctx.reply(i18n.t(locale, 'settings_add_passport_method'), {
         reply_markup: methodKeyboard,
       });
-    }
 
-    if (method === 'method_photo') {
-      const result = await handlePhotoMethod(conversation, currentCtx, locale);
-      currentSeries = result.series;
-      currentJshshir = result.jshshir;
-      extractedFirstName = result.firstName;
-      extractedLastName = result.lastName;
-      fileIds = result.fileIds;
-      currentCtx = result.lastCtx;
-    } else {
-      const result = await handleManualMethod(conversation, currentCtx, locale);
-      currentSeries = result.series;
-      currentJshshir = result.jshshir;
-      currentCtx = result.lastCtx;
+      while (true) {
+        logger.debug('[Passport] Waiting for method selection...');
+        const methodCtx = await conversation.wait();
+        currentCtx = methodCtx;
+
+        if (!methodCtx.message?.text) {
+          logger.debug('[Passport] Non-text message received during method selection, prompting user');
+          await ctx.reply(i18n.t(locale, 'settings_add_passport_method'), {
+            reply_markup: methodKeyboard,
+          });
+          continue;
+        }
+
+        const text = normalizeButtonText(methodCtx.message.text);
+        logger.debug(`[Passport] Method selection received - raw: "${methodCtx.message.text}", normalized: "${text}"`);
+
+        if (text === photoBtnNormalized) {
+          method = 'method_photo';
+          break;
+        }
+
+        if (text === manualBtnNormalized) {
+          method = 'method_manual';
+          break;
+        }
+
+        await ctx.reply(i18n.t(locale, 'settings_add_passport_method'), {
+          reply_markup: methodKeyboard,
+        });
+      }
+
+      if (method === 'method_photo') {
+        const result = await handlePhotoMethod(conversation, currentCtx, locale);
+        if (!result) {
+          method = '';
+          continue;
+        }
+        currentSeries = result.series;
+        currentJshshir = result.jshshir;
+        extractedFirstName = result.firstName;
+        extractedLastName = result.lastName;
+        fileIds = result.fileIds;
+        passportBuffers = result.buffers || [];
+        currentCtx = result.lastCtx;
+        break;
+      } else {
+        const result = await handleManualMethod(conversation, currentCtx, locale);
+        if (!result) {
+          method = '';
+          continue;
+        }
+        currentSeries = result.series;
+        currentJshshir = result.jshshir;
+        currentCtx = result.lastCtx;
+        break;
+      }
     }
 
     const confirmedData = await runConfirmationLoop(conversation, currentCtx, locale, {
@@ -104,6 +118,11 @@ export async function addPassportDataConversation(conversation: BotConversation,
 
     await conversation.external(async () => {
       await UserService.updateUserPassportData(telegramId, currentJshshir, currentSeries);
+
+      if (passportBuffers.length > 0) {
+        logger.debug(`[Passport] Uploading ${passportBuffers.length} passport images to MinIO for user ${telegramId}`);
+        await minioService.uploadUserPassport(telegramId, passportBuffers);
+      }
 
       if (extractedFirstName || extractedLastName) {
         const currentUser = await UserService.getUserByTelegramId(telegramId);

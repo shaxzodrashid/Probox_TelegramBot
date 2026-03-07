@@ -1,7 +1,8 @@
+import { Keyboard } from 'grammy';
 import { BotConversation, BotContext } from '../../types/context';
 import { i18n } from '../../i18n';
 import { logger } from '../../utils/logger';
-import { downloadFileByPath, getTelegramFilePath } from './utils.part';
+import { downloadFileByPath, getTelegramFilePath, normalizeButtonText } from './utils.part';
 import sharp from 'sharp';
 import jsQR from 'jsqr';
 import { OCRService, PassportDataFields } from '../../services/ocr.service';
@@ -11,7 +12,7 @@ import { buildPassportImageVariants, PassportImageVariant } from '../../utils/pa
 import { findBestPassportScan } from '../../utils/passport-scan.util';
 
 function normalizeNamePart(value: string | null): string | null {
-  if (!value) return null;
+  if (!value || value.length > 20) return null;
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
 
@@ -75,9 +76,13 @@ export async function handlePhotoMethod(
   firstName: string | null;
   lastName: string | null;
   fileIds: string[];
+  buffers: Buffer[];
   lastCtx: BotContext;
-}> {
+} | null> {
   const chatId = ctx.chat?.id;
+  const backBtn = i18n.t(locale, 'back');
+  const backBtnNormalized = normalizeButtonText(backBtn);
+  const backKeyboard = new Keyboard().text(backBtn).resized().oneTime();
 
   let frontFileId = '';
   let backFileId = '';
@@ -91,17 +96,29 @@ export async function handlePhotoMethod(
     await ctx.api
       .sendPhoto(chatId, frontImg, {
         caption: i18n.t(locale, 'settings_passport_prompt_front'),
-        reply_markup: { remove_keyboard: true },
+        reply_markup: backKeyboard,
       })
       .catch((err) => logger.error('[Passport] Failed to send front prompt:', err));
   }
 
   while (true) {
-    photoCtx = await conversation.waitFor('message:photo');
-    const photos = photoCtx.message!.photo!;
-    frontFileId = photos[photos.length - 1].file_id;
-    logger.debug(`[Passport] Front photo received, file_id: ${frontFileId}`);
-    break;
+    photoCtx = await conversation.wait();
+    if (photoCtx.message?.text) {
+      if (normalizeButtonText(photoCtx.message.text) === backBtnNormalized) {
+        return null;
+      }
+    }
+    
+    if (photoCtx.message?.photo) {
+      const photos = photoCtx.message.photo;
+      frontFileId = photos[photos.length - 1].file_id;
+      logger.debug(`[Passport] Front photo received, file_id: ${frontFileId}`);
+      break;
+    }
+
+    await ctx.reply(i18n.t(locale, 'settings_passport_prompt_front'), {
+      reply_markup: backKeyboard,
+    });
   }
 
   if (chatId) {
@@ -110,16 +127,29 @@ export async function handlePhotoMethod(
     await ctx.api
       .sendPhoto(chatId, backImg, {
         caption: i18n.t(locale, 'settings_passport_prompt_back'),
+        reply_markup: backKeyboard,
       })
       .catch((err) => logger.error('[Passport] Failed to send back prompt:', err));
   }
 
   while (true) {
-    photoCtx = await conversation.waitFor('message:photo');
-    const photos = photoCtx.message!.photo!;
-    backFileId = photos[photos.length - 1].file_id;
-    logger.debug(`[Passport] Back photo received, file_id: ${backFileId}`);
-    break;
+    photoCtx = await conversation.wait();
+    if (photoCtx.message?.text) {
+      if (normalizeButtonText(photoCtx.message.text) === backBtnNormalized) {
+        return null;
+      }
+    }
+
+    if (photoCtx.message?.photo) {
+      const photos = photoCtx.message.photo;
+      backFileId = photos[photos.length - 1].file_id;
+      logger.debug(`[Passport] Back photo received, file_id: ${backFileId}`);
+      break;
+    }
+
+    await ctx.reply(i18n.t(locale, 'settings_passport_prompt_back'), {
+      reply_markup: backKeyboard,
+    });
   }
 
   frontFilePath = await getTelegramFilePath(ctx, frontFileId);
@@ -149,24 +179,10 @@ export async function handlePhotoMethod(
     logger.debug('[Passport] Inside external: Starting OCR processing');
 
     const processFile = async (filePath: string | null) => {
-      if (!filePath) {
-        return {
-          cardNumber: '',
-          jshshir: '',
-          firstName: null as string | null,
-          lastName: null as string | null,
-        };
-      }
+      if (!filePath) return null;
 
       const buffer = await downloadFileByPath(filePath);
-      if (!buffer) {
-        return {
-          cardNumber: '',
-          jshshir: '',
-          firstName: null as string | null,
-          lastName: null as string | null,
-        };
-      }
+      if (!buffer) return null;
 
       const { metadata, variants } = await buildPassportImageVariants(buffer);
       logger.debug(
@@ -187,17 +203,23 @@ export async function handlePhotoMethod(
         jshshir: scanResult.jshshir || '',
         firstName: scanResult.firstName,
         lastName: scanResult.lastName,
+        buffer,
       };
     };
 
     const frontData = await processFile(frontFilePath);
     const backData = await processFile(backFilePath);
 
+    const buffers: Buffer[] = [];
+    if (frontData?.buffer) buffers.push(frontData.buffer);
+    if (backData?.buffer) buffers.push(backData.buffer);
+
     return {
-      cardNumber: frontData.cardNumber || backData.cardNumber || '',
-      jshshir: frontData.jshshir || backData.jshshir || '',
-      firstName: frontData.firstName || backData.firstName,
-      lastName: frontData.lastName || backData.lastName,
+      cardNumber: frontData?.cardNumber || backData?.cardNumber || '',
+      jshshir: frontData?.jshshir || backData?.jshshir || '',
+      firstName: frontData?.firstName || backData?.firstName,
+      lastName: frontData?.lastName || backData?.lastName,
+      buffers,
     };
   });
   logger.debug('[Passport] Exited conversation.external.');
@@ -220,41 +242,58 @@ export async function handlePhotoMethod(
   }
 
   if (!finalSeries) {
-    await ctx.reply(i18n.t(locale, 'settings_passport_enter_series'));
+    await ctx.reply(i18n.t(locale, 'settings_passport_enter_series'), {
+      reply_markup: backKeyboard,
+    });
     while (true) {
-      const seriesCtx = await conversation.waitFor('message:text');
+      const seriesCtx = await conversation.wait();
       currentCtx = seriesCtx;
-      const text = currentCtx.message?.text?.toUpperCase().replace(/\s+/g, '') || '';
-      if (/^[A-Z]{2}\d{7}$/.test(text)) {
-        finalSeries = text;
-        break;
-      } else {
-        await ctx.reply(i18n.t(locale, 'settings_passport_invalid_series'));
+      if (seriesCtx.message?.text) {
+        if (normalizeButtonText(seriesCtx.message.text) === backBtnNormalized) {
+          return null;
+        }
+        const text = seriesCtx.message.text.toUpperCase().replace(/\s+/g, '') || '';
+        if (/^[A-Z]{2}\d{7}$/.test(text)) {
+          finalSeries = text;
+          break;
+        }
       }
+      await ctx.reply(i18n.t(locale, 'settings_passport_invalid_series'), {
+        reply_markup: backKeyboard,
+      });
     }
   }
 
   if (!finalJshshir) {
-    await ctx.reply(i18n.t(locale, 'settings_passport_enter_jshshir'));
+    await ctx.reply(i18n.t(locale, 'settings_passport_enter_jshshir'), {
+      reply_markup: backKeyboard,
+    });
     while (true) {
-      const jshshirCtx = await conversation.waitFor('message:text');
+      const jshshirCtx = await conversation.wait();
       currentCtx = jshshirCtx;
-      const text = currentCtx.message?.text?.trim() || '';
-      if (/^\d{14}$/.test(text)) {
-        finalJshshir = text;
-        break;
-      } else {
-        await ctx.reply(i18n.t(locale, 'settings_passport_invalid_jshshir'));
+      if (jshshirCtx.message?.text) {
+        if (normalizeButtonText(jshshirCtx.message.text) === backBtnNormalized) {
+          return null;
+        }
+        const text = jshshirCtx.message.text.trim() || '';
+        if (/^\d{14}$/.test(text)) {
+          finalJshshir = text;
+          break;
+        }
       }
+      await ctx.reply(i18n.t(locale, 'settings_passport_invalid_jshshir'), {
+        reply_markup: backKeyboard,
+      });
     }
   }
 
   return {
     series: finalSeries,
     jshshir: finalJshshir,
-    firstName: result.firstName,
-    lastName: result.lastName,
+    firstName: result.firstName || null,
+    lastName: result.lastName || null,
     fileIds: [frontFileId, backFileId],
+    buffers: result.buffers,
     lastCtx: currentCtx,
   };
 }

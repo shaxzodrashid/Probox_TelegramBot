@@ -46,3 +46,20 @@ test('assessPassportData does not treat partial invalid OCR as credible', () => 
   assert.equal(result.isCredible, false);
   assert.equal(result.score, 3);
 });
+
+test('extractPassportDataFromText rejects names longer than 20 characters', () => {
+  const text = [
+    'Passport',
+    'AA1234567',
+    'PINFL 32165498701234',
+    'SURNAME',
+    'VERYLONGNAMEWAYBEYOND20CHARACTERS',
+    'GIVEN NAMES',
+    'ANOTHERVERYLONGNAMEWAYBEYOND20CHARACTERS',
+  ].join('\n');
+
+  const result = OCRService.extractPassportDataFromText(text);
+
+  assert.equal(result.firstName, null);
+  assert.equal(result.lastName, null);
+});
