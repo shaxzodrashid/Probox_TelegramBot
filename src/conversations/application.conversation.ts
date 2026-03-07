@@ -102,7 +102,7 @@ export async function submitApplication(
         form.append('passportId', user!.passport_series || '');
 
         imageBuffers.forEach(({ buffer, filename, contentType }) => {
-          form.append('file', buffer, { filename, contentType });
+          form.append('files', buffer, { filename, contentType });
         });
 
         const response = await axios.post(config.CRM_URL, form, {
