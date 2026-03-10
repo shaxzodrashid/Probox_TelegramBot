@@ -1,0 +1,1 @@
+Ariza yuborishda passport ma'lumotlari kerak message'dagi inline keyboardni keyboard buttonga ko'chirish kerak. "Orqaga" buttonini keyboardga qo'shish kerak.

@@ -126,9 +126,11 @@ bot.use(async (ctx, next) => {
       // the user INTO registration or passport — let those handlers run normally.
       const isRegistrationCallback = ctx.callbackQuery?.data === 'start_registration';
       const isPassportCallback = ctx.callbackQuery?.data === 'start_passport_conv';
+      const isPassportText = ctx.message?.text === ctx.t('application_start_passport_button');
+      const isBackText = ctx.message?.text === ctx.t('back');
       const isStartCommand = ctx.message?.text === '/start';
 
-      if (!isRegistrationCallback && !isPassportCallback && !isStartCommand) {
+      if (!isRegistrationCallback && !isPassportCallback && !isPassportText && !isBackText && !isStartCommand) {
         const active = ctx.conversation.active();
         const hasActive = Object.values(active).some((count) => count > 0);
 
@@ -203,6 +205,7 @@ bot.filter(hears('settings_change_name'), changeNameHandler);
 bot.filter(hears('settings_change_phone'), changePhoneHandler);
 bot.filter(hears('settings_change_language'), changeLanguageHandler);
 bot.filter(hears('settings_add_passport'), addPassportHandler);
+bot.filter(hears('application_start_passport_button'), addPassportHandler);
 
 // Language selection handlers for both callback and keyboard
 const handleLanguageSelection = async (ctx: BotContext, lang: 'uz' | 'ru') => {

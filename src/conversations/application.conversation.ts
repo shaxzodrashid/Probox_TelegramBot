@@ -1,5 +1,5 @@
 import { BotConversation, BotContext } from '../types/context';
-import { InlineKeyboard } from 'grammy';
+import { InlineKeyboard, Keyboard } from 'grammy';
 import { getMainKeyboardByLocale } from '../keyboards';
 import axios from 'axios';
 import FormData from 'form-data';
@@ -190,15 +190,17 @@ export async function applicationConversation(conversation: BotConversation, ctx
   }
 
   if (!user.jshshir || !user.passport_series) {
-    const passportKeyboard = new InlineKeyboard().text(
-      i18n.t(locale, 'application_start_passport_button'),
-      'start_passport_conv',
-    );
+    const passportKeyboard = new Keyboard()
+      .text(i18n.t(locale, 'application_start_passport_button'))
+      .row()
+      .text(i18n.t(locale, 'back'))
+      .resized();
+
     await ctx.reply(i18n.t(locale, 'application_passport_required'), {
       reply_markup: passportKeyboard,
     });
     
-    // Provide the passport button. The bot.ts handles the start_passport_conv callback.
+    // Provide the passport button. The bot.ts handles the passport button text or "back" text.
     return;
   }
 
