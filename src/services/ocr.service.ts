@@ -47,33 +47,67 @@ export class OCRService {
     let jshshir: string | null = null;
     let cardNumber: string | null = null;
 
-    const lines = text
-      .split('\n')
-      .map((l) => l.replace(/\s+/g, ''))
-      .filter((l) => l.length > 0);
+    const cleanText = text.replace(/[\s\r\n]+/g, '').toUpperCase();
 
-    for (const line of lines) {
-      if (line.length < 42 || line.length > 48) {
-        continue;
+    // Enhanced MRZ Regexes for full-text scan
+    const td3Regex = /([A-Z0-9<]{9})[A-Z0-9<]UZB[A-Z0-9<]{6}[A-Z0-9<][MF<][A-Z0-9<]{6}[A-Z0-9<]([A-Z0-9<]{14})/i;
+    const td1Regex = /[IAC][A-Z<]UZB([A-Z0-9<]{9})[A-Z0-9<]([A-Z0-9<]{14})/i;
+
+    const parseJshshir = (raw: string) => raw.replace(/[Oo]/g, '0').replace(/[Iil]/g, '1').replace(/[Ss]/g, '5').replace(/[^0-9]/g, '');
+    const parseCard = (raw: string) => raw.replace(/</g, '').replace(/[^A-Z0-9]/gi, '');
+
+    const setIfValid = (c: string, j: string) => {
+      let found = false;
+      if (this.isValidCardNumber(c)) {
+        cardNumber = c;
+        found = true;
       }
-
-      const extractedCardNum = line.slice(0, 9).replace(/</g, '').toUpperCase();
-      const lastLetterMatch = [...line.matchAll(/[A-Z]/gi)].pop();
-
-      if (!lastLetterMatch || lastLetterMatch.index === undefined) {
-        continue;
+      if (this.isValidJshshir(j)) {
+        jshshir = j;
+        found = true;
       }
+      return found;
+    };
 
-      const rawJshshir = line.slice(lastLetterMatch.index + 8, lastLetterMatch.index + 22);
-      const cleanedJshshir = rawJshshir
-        .replace(/O|o/g, '0')
-        .replace(/I|i|l/g, '1')
-        .replace(/S|s/g, '5');
+    const td3Match = cleanText.match(td3Regex);
+    if (td3Match) {
+      setIfValid(parseCard(td3Match[1]), parseJshshir(td3Match[2]));
+    }
 
-      if (/^[A-Z0-9]{7,9}$/i.test(extractedCardNum) && /^\d{14}$/.test(cleanedJshshir)) {
-        cardNumber = extractedCardNum;
-        jshshir = cleanedJshshir;
-        break;
+    if (!cardNumber || !jshshir) {
+      const td1Match = cleanText.match(td1Regex);
+      if (td1Match) {
+        setIfValid(parseCard(td1Match[1]), parseJshshir(td1Match[2]));
+      }
+    }
+
+    if (!cardNumber || !jshshir) {
+      // Fallback line-by-line check
+      const lines = text
+        .split('\n')
+        .map((l) => l.replace(/\s+/g, ''))
+        .filter((l) => l.length > 0);
+
+      for (const line of lines) {
+        if (line.length < 42 || line.length > 48) {
+          continue;
+        }
+
+        const extractedCardNum = line.slice(0, 9).replace(/</g, '').toUpperCase();
+        const lastLetterMatch = [...line.matchAll(/[A-Z]/gi)].pop();
+
+        if (!lastLetterMatch || lastLetterMatch.index === undefined) {
+          continue;
+        }
+
+        const rawJshshir = line.slice(lastLetterMatch.index + 8, lastLetterMatch.index + 22);
+        const cleanedJshshir = parseJshshir(rawJshshir);
+
+        if (/^[A-Z0-9]{7,9}$/i.test(extractedCardNum) && /^\d{14}$/.test(cleanedJshshir)) {
+          if (!cardNumber) cardNumber = extractedCardNum;
+          if (!jshshir) jshshir = cleanedJshshir;
+          break;
+        }
       }
     }
 
@@ -145,17 +179,19 @@ export class OCRService {
     let firstName: string | null = null;
     let lastName: string | null = null;
 
-    const mrzIdCardMatch = text.match(/\b([A-Z]+)<<([A-Z]+)<{2,}\b/i);
+    const parseName = (raw: string) => raw.toUpperCase().replace(/0/g, 'O').replace(/1/g, 'I').replace(/5/g, 'S');
+
+    const mrzIdCardMatch = text.match(/\b([A-Z0-9]+)<<([A-Z0-9]+)<{2,}\b/i);
     if (mrzIdCardMatch) {
-      lastName = mrzIdCardMatch[1];
-      firstName = mrzIdCardMatch[2];
+      lastName = parseName(mrzIdCardMatch[1]);
+      firstName = parseName(mrzIdCardMatch[2]);
       return { firstName, lastName };
     }
 
-    const mrzPassportMatch = text.match(/P<UZB([A-Z]+)<<([A-Z]+)<{2,}/i);
+    const mrzPassportMatch = text.match(/P<UZB([A-Z0-9]+)<<([A-Z0-9]+)<{2,}/i);
     if (mrzPassportMatch) {
-      lastName = mrzPassportMatch[1];
-      firstName = mrzPassportMatch[2];
+      lastName = parseName(mrzPassportMatch[1]);
+      firstName = parseName(mrzPassportMatch[2]);
       return { firstName, lastName };
     }
 
