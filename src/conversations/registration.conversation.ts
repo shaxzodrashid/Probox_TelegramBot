@@ -11,6 +11,7 @@ import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
 import { getLocaleFromConversation } from '../utils/locale';
+import { isCallbackQueryExpiredError } from '../utils/telegram-errors';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { sanitizeName } from '../utils/formatter.util';
 import { redisService } from '../redis/redis.service';
@@ -139,7 +140,11 @@ export async function performOtpVerification(
       const isResendCallback = otpContext.callbackQuery?.data === 'resend_otp';
 
       if (isResendButton || isResendCallback) {
-        if (isResendCallback) await otpContext.answerCallbackQuery();
+        if (isResendCallback) {
+          await otpContext.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+          });
+        }
         await sendOtp(otpContext);
         continue;
       }
