@@ -3,6 +3,7 @@ import { getSettingsKeyboard, getSettingsLanguageKeyboard } from '../keyboards';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
 import { i18n } from '../i18n';
+import { isCallbackQueryExpiredError } from '../utils/telegram-errors';
 
 export async function settingsHandler(ctx: BotContext) {
   // Check if user is registered, if not, prompt to register
@@ -40,21 +41,27 @@ export async function settingsHandler(ctx: BotContext) {
 
 export async function changeNameHandler(ctx: BotContext) {
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery().catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
   }
   await ctx.conversation.enter('changeNameConversation');
 }
 
 export async function changePhoneHandler(ctx: BotContext) {
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery().catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
   }
   await ctx.conversation.enter('changePhoneConversation');
 }
 
 export async function changeLanguageHandler(ctx: BotContext) {
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery().catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
   }
 
   const keyboard = getSettingsLanguageKeyboard(ctx);
@@ -66,7 +73,9 @@ export async function changeLanguageHandler(ctx: BotContext) {
 
 export async function addPassportHandler(ctx: BotContext) {
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery().catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
   }
   // Exit ALL active conversations before entering a fresh one.
   // This prevents stale/frozen conversation state in Redis (e.g. from a

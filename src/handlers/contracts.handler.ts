@@ -7,6 +7,7 @@ import { UserService } from '../services/user.service';
 import { i18n } from '../i18n';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { logger } from '../utils/logger';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 import { formatDate, formatCurrency } from '../utils/formatter.util';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
 
@@ -206,8 +207,12 @@ export const contractsPaginationHandler = async (ctx: BotContext) => {
   await ctx.editMessageText(text, {
     parse_mode: 'Markdown',
     reply_markup: keyboard,
+  }).catch((err) => {
+    if (!isMessageToDeleteNotFoundError(err)) throw err;
   });
-  await ctx.answerCallbackQuery();
+  await ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  });
 };
 
 /**
@@ -248,8 +253,12 @@ export const contractDetailHandler = async (ctx: BotContext) => {
   await ctx.editMessageText(text, {
     parse_mode: 'Markdown',
     reply_markup: keyboard,
+  }).catch((err) => {
+    if (!isMessageToDeleteNotFoundError(err)) throw err;
   });
-  await ctx.answerCallbackQuery();
+  await ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  });
 };
 
 /**
@@ -278,8 +287,12 @@ export const backToContractsHandler = async (ctx: BotContext) => {
   await ctx.editMessageText(text, {
     parse_mode: 'Markdown',
     reply_markup: keyboard,
+  }).catch((err) => {
+    if (!isMessageToDeleteNotFoundError(err)) throw err;
   });
-  await ctx.answerCallbackQuery();
+  await ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  });
 };
 
 /**
@@ -295,8 +308,12 @@ export const backToMenuHandler = async (ctx: BotContext) => {
       const keyboard = getAdminMenuKeyboard(locale);
 
       if (ctx.callbackQuery) {
-        await ctx.deleteMessage().catch(() => { });
-        await ctx.answerCallbackQuery();
+        await ctx.deleteMessage().catch((err) => {
+          if (!isMessageToDeleteNotFoundError(err)) throw err;
+        });
+        await ctx.answerCallbackQuery().catch((err) => {
+          if (!isCallbackQueryExpiredError(err)) throw err;
+        });
       }
 
       await ctx.reply(text, { reply_markup: keyboard });
@@ -304,8 +321,14 @@ export const backToMenuHandler = async (ctx: BotContext) => {
     }
   }
 
-  await ctx.deleteMessage().catch(() => { });
-  await ctx.answerCallbackQuery();
+  if (ctx.callbackQuery) {
+    await ctx.deleteMessage().catch((err) => {
+      if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
+    await ctx.answerCallbackQuery().catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
+  }
 };
 
 /**

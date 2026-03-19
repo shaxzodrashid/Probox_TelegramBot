@@ -3,6 +3,7 @@ import { getMainKeyboard, getLanguageKeyboard } from '../keyboards';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { logger } from '../utils/logger';
 import { UserService } from '../services/user.service';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 
 export const startHandler = async (ctx: BotContext) => {
   const telegramId = ctx.from?.id;
@@ -28,8 +29,12 @@ export const startHandler = async (ctx: BotContext) => {
       const keyboard = getAdminMenuKeyboard(user.language_code || 'uz');
 
       if (ctx.callbackQuery) {
-        await ctx.deleteMessage().catch(() => { });
-        await ctx.answerCallbackQuery();
+        await ctx.deleteMessage().catch((err) => {
+          if (!isMessageToDeleteNotFoundError(err)) throw err;
+        });
+        await ctx.answerCallbackQuery().catch((err) => {
+          if (!isCallbackQueryExpiredError(err)) throw err;
+        });
       }
 
       await ctx.reply(text, { reply_markup: keyboard });
@@ -40,8 +45,12 @@ export const startHandler = async (ctx: BotContext) => {
     const keyboard = getMainKeyboard(ctx, false, isLoggedIn);
 
     if (ctx.callbackQuery) {
-      await ctx.deleteMessage().catch(() => { });
-      await ctx.answerCallbackQuery();
+      await ctx.deleteMessage().catch((err) => {
+        if (!isMessageToDeleteNotFoundError(err)) throw err;
+      });
+      await ctx.answerCallbackQuery().catch((err) => {
+        if (!isCallbackQueryExpiredError(err)) throw err;
+      });
     }
 
     await ctx.reply(text, { reply_markup: keyboard });
@@ -54,8 +63,12 @@ export const startHandler = async (ctx: BotContext) => {
     const keyboard = getLanguageKeyboard();
 
     if (ctx.callbackQuery) {
-      await ctx.editMessageText(text, { reply_markup: keyboard });
-      await ctx.answerCallbackQuery();
+      await ctx.editMessageText(text, { reply_markup: keyboard }).catch((err) => {
+        if (!isMessageToDeleteNotFoundError(err)) throw err;
+      });
+      await ctx.answerCallbackQuery().catch((err) => {
+        if (!isCallbackQueryExpiredError(err)) throw err;
+      });
     } else {
       await ctx.reply(text, { reply_markup: keyboard });
     }
@@ -67,8 +80,12 @@ export const startHandler = async (ctx: BotContext) => {
   const keyboard = getMainKeyboard(ctx, false, false);
 
   if (ctx.callbackQuery) {
-    await ctx.deleteMessage().catch(() => { });
-    await ctx.answerCallbackQuery();
+    await ctx.deleteMessage().catch((err) => {
+      if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
+    await ctx.answerCallbackQuery().catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
   }
 
   await ctx.reply(text, { reply_markup: keyboard });
