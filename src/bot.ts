@@ -32,8 +32,10 @@ import { adminReplyConversation } from './conversations/admin-reply.conversation
 import {
   adminBroadcastConversation,
   adminSearchConversation,
-  adminSendMessageConversation
+  adminSendMessageConversation,
+  adminAddBranchConversation
 } from './conversations/admin.conversation';
+import { branchesConversation } from './conversations/branches.conversation';
 import { supportHandler } from './handlers/support.handler';
 import {
   handleReplyButton,
@@ -53,8 +55,19 @@ import {
   adminBackToMenuHandler,
   adminBackToMainMenuHandler,
   adminBroadcastHandler,
-  adminSendMessageHandler
+  adminSendMessageHandler,
+  adminBranchesHandler,
+  adminBranchDetailHandler,
+  adminBranchCreateHandler,
+  adminBranchDeactivateConfirmHandler,
+  adminBranchDeactivateHandler
 } from './handlers/admin.handler';
+import { branchesHandler } from './handlers/branches.handler';
+import {
+  ADMIN_BRANCH_DEACTIVATE_CALLBACK_PREFIX,
+  ADMIN_BRANCH_DEACTIVATE_CONFIRM_CALLBACK_PREFIX,
+  ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX
+} from './keyboards/branch.keyboards';
 import {
   settingsHandler,
   changeNameHandler,
@@ -104,8 +117,10 @@ bot.use(createConversation(adminReplyConversation));
 bot.use(createConversation(adminBroadcastConversation));
 bot.use(createConversation(adminSearchConversation));
 bot.use(createConversation(adminSendMessageConversation));
+bot.use(createConversation(adminAddBranchConversation));
 bot.use(createConversation(addPassportDataConversation));
 bot.use(createConversation(applicationConversation));
+bot.use(createConversation(branchesConversation));
 
 // ─── Pending Action Router ─────────────────────────────────────────────────
 // Fires AFTER all conversations have had a chance to handle the update.
@@ -183,18 +198,18 @@ bot.callbackQuery('start', startHandler);
 // Main menu handlers
 bot.filter(hears('menu_contracts'), contractsHandler);
 bot.filter(hears('menu_payments'), paymentsHandler);
+bot.filter(hears('menu_branches'), branchesHandler);
 bot.filter(hears('menu_settings'), settingsHandler);
 bot.filter(hears('menu_support'), supportHandler);
 bot.filter(hears('menu_application'), async (ctx) => {
-  console.log('entering applicationConversation...');
-  await ctx.conversation.exitAll();
-  await ctx.conversation.enter('applicationConversation');
+  await applicationHandler(ctx);
 });
 bot.filter(hears('admin_menu'), adminMenuHandler);
 bot.filter(hears('admin_menu'), adminMenuHandler);
 
 // Admin panel handlers
 bot.filter(hears('admin_users'), adminUsersHandler);
+bot.filter(hears('admin_branches'), adminBranchesHandler);
 bot.filter(hears('admin_broadcast'), adminBroadcastHandler);
 bot.filter(hears('admin_stats'), adminStatsHandler);
 bot.filter(hears('admin_export'), adminExportHandler);
@@ -282,6 +297,11 @@ bot.callbackQuery(/^admin_user_detail:\d+$/, adminUserDetailHandler);
 bot.callbackQuery(/^admin_block_support:\d+$/, adminBlockSupportHandler);
 bot.callbackQuery(/^admin_unblock_support:\d+$/, adminUnblockSupportHandler);
 bot.callbackQuery(/^admin_send_message:\d+$/, adminSendMessageHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX}.+$`), adminBranchDetailHandler);
+bot.callbackQuery('admin_branch_add', adminBranchCreateHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DEACTIVATE_CONFIRM_CALLBACK_PREFIX}.+$`), adminBranchDeactivateConfirmHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DEACTIVATE_CALLBACK_PREFIX}.+$`), adminBranchDeactivateHandler);
+bot.callbackQuery('admin_branches_back', adminBranchesHandler);
 bot.callbackQuery('admin_back_to_menu', adminBackToMenuHandler);
 bot.callbackQuery('admin_back_to_users', adminUsersHandler);
 bot.callbackQuery('admin_cancel', adminBackToMainMenuHandler);
@@ -296,6 +316,7 @@ bot.callbackQuery('start_passport_conv', async (ctx) => {
   await ctx.conversation.exitAll();
   await ctx.conversation.enter('addPassportDataConversation');
 });
+bot.callbackQuery('promo_application_cta', applicationHandler);
 bot.callbackQuery('noop', (ctx) => ctx.answerCallbackQuery());
 // Fallback: if the router didn't handle continue_to_application (e.g. user already logged in
 // but no pending action), just dismiss the spinner.

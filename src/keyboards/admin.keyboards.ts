@@ -11,8 +11,9 @@ import { i18n } from '../i18n';
 export const getAdminMenuKeyboard = (locale: string) => {
     return new Keyboard()
         .text(i18n.t(locale, 'admin_users'))
-        .text(i18n.t(locale, 'admin_broadcast')).row()
-        .text(i18n.t(locale, 'admin_stats'))
+        .text(i18n.t(locale, 'admin_branches')).row()
+        .text(i18n.t(locale, 'admin_broadcast'))
+        .text(i18n.t(locale, 'admin_stats')).row()
         .text(i18n.t(locale, 'admin_export')).row()
         .text(i18n.t(locale, 'back_to_user_menu'))
         .resized();

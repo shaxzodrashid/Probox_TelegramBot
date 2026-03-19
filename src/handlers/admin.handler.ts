@@ -3,16 +3,23 @@ import { AdminService } from '../services/admin.service';
 import { ExportService } from '../services/export.service';
 import { SupportService } from '../services/support.service';
 import { UserService } from '../services/user.service';
+import { BranchService } from '../services/branch.service';
 import { InputFile } from 'grammy';
 import {
     getAdminMenuKeyboard,
     getAdminUsersKeyboard,
     getAdminUserDetailKeyboard,
 } from '../keyboards/admin.keyboards';
+import {
+    getAdminBranchDeactivateConfirmKeyboard,
+    getAdminBranchDetailKeyboard,
+    getAdminBranchesKeyboard,
+} from '../keyboards/branch.keyboards';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { i18n } from '../i18n';
 import { logger } from '../utils/logger';
 import { formatUzPhone } from '../utils/uz-phone.util';
+import { formatBranchDetails } from '../utils/branch.util';
 
 /**
  * Check if user is an admin
@@ -143,6 +150,42 @@ const showUsersList = async (
         }
     } catch (error) {
         logger.error('Error in showUsersList:', error);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+const showBranchesList = async (
+    ctx: BotContext,
+    locale: string,
+    edit: boolean = false
+) => {
+    try {
+        const branches = await BranchService.listAll();
+        let message = `${i18n.t(locale, 'admin_branches_header')}\n\n`;
+
+        if (branches.length === 0) {
+            message += i18n.t(locale, 'admin_branches_empty');
+        } else {
+            branches.forEach((branch, index) => {
+                const statusKey = branch.is_active
+                    ? 'admin_branch_status_active'
+                    : 'admin_branch_status_inactive';
+
+                message += `${index + 1}. ${branch.name}\n`;
+                message += `   ${i18n.t(locale, 'admin_branch_status_label')}: ${i18n.t(locale, statusKey)}\n`;
+                message += `   ${i18n.t(locale, 'branch_work_time_label')}: ${branch.work_start_time || '--:--'}-${branch.work_end_time || '--:--'}\n\n`;
+            });
+        }
+
+        const keyboard = getAdminBranchesKeyboard(branches, locale);
+
+        if (edit && ctx.callbackQuery) {
+            await ctx.editMessageText(message, { reply_markup: keyboard });
+        } else {
+            await ctx.reply(message, { reply_markup: keyboard });
+        }
+    } catch (error) {
+        logger.error('Error in showBranchesList:', error);
         await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
@@ -290,6 +333,121 @@ export const adminStatsHandler = async (ctx: BotContext) => {
     }
 };
 
+export const adminBranchesHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+
+        if (ctx.callbackQuery) {
+            await ctx.answerCallbackQuery();
+        }
+
+        await showBranchesList(ctx, locale, Boolean(ctx.callbackQuery));
+    } catch (error) {
+        logger.error('Error in adminBranchesHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminBranchDetailHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const callbackData = ctx.callbackQuery?.data || '';
+        const branchId = callbackData.split(':')[1];
+
+        await ctx.answerCallbackQuery();
+
+        const branch = await BranchService.getById(branchId);
+
+        if (!branch) {
+            await ctx.reply(i18n.t(locale, 'admin_branch_not_found'));
+            return;
+        }
+
+        await ctx.editMessageText(
+            `${i18n.t(locale, 'admin_branch_detail_header')}\n\n${formatBranchDetails(branch, locale, { includeStatus: true })}`,
+            { reply_markup: getAdminBranchDetailKeyboard(branch.id, branch.is_active, locale) }
+        );
+    } catch (error) {
+        logger.error('Error in adminBranchDetailHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminBranchCreateHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        if (ctx.callbackQuery) {
+            await ctx.answerCallbackQuery();
+            await ctx.deleteMessage().catch(() => { });
+        }
+
+        await ctx.conversation.exitAll();
+        await ctx.conversation.enter('adminAddBranchConversation');
+    } catch (error) {
+        logger.error('Error in adminBranchCreateHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminBranchDeactivateConfirmHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const callbackData = ctx.callbackQuery?.data || '';
+        const branchId = callbackData.split(':')[1];
+
+        await ctx.answerCallbackQuery();
+
+        const branch = await BranchService.getById(branchId);
+
+        if (!branch) {
+            await ctx.reply(i18n.t(locale, 'admin_branch_not_found'));
+            return;
+        }
+
+        await ctx.editMessageText(
+            i18n.t(locale, 'admin_branch_deactivate_confirm', { name: branch.name }),
+            { reply_markup: getAdminBranchDeactivateConfirmKeyboard(branch.id, locale) }
+        );
+    } catch (error) {
+        logger.error('Error in adminBranchDeactivateConfirmHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminBranchDeactivateHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const callbackData = ctx.callbackQuery?.data || '';
+        const branchId = callbackData.split(':')[1];
+
+        const updated = await BranchService.markInactive(branchId);
+
+        await ctx.answerCallbackQuery({
+            text: updated ? i18n.t(locale, 'admin_branch_deactivated') : i18n.t(locale, 'admin_action_failed'),
+            show_alert: !updated,
+        });
+
+        await showBranchesList(ctx, locale, true);
+    } catch (error) {
+        logger.error('Error in adminBranchDeactivateHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true });
+    }
+};
+
 /**
  * Admin export handler
  */
@@ -368,9 +526,14 @@ export const adminBackToMainMenuHandler = async (ctx: BotContext) => {
     try {
         const locale = getLocale(ctx);
 
+        if (ctx.callbackQuery) {
+            await ctx.answerCallbackQuery().catch(() => { });
+            await ctx.deleteMessage().catch(() => { });
+        }
+
         await ctx.reply(
             i18n.t(locale, 'welcome_message'),
-            { reply_markup: getMainKeyboardByLocale(locale, true) }
+            { reply_markup: getMainKeyboardByLocale(locale, true, true) }
         );
     } catch (error) {
         logger.error('Error in adminBackToMainMenuHandler:', error);

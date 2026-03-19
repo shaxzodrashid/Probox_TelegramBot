@@ -1,11 +1,14 @@
 import { BotConversation, BotContext } from '../types/context';
 import { BroadcastService } from '../services/broadcast.service';
 import { AdminService } from '../services/admin.service';
+import { BranchService } from '../services/branch.service';
 import { UserService } from '../services/user.service';
 import { getAdminCancelKeyboard, getAdminMenuKeyboard, getBroadcastConfirmKeyboard, getBroadcastTargetKeyboard } from '../keyboards/admin.keyboards';
+import { getAdminBranchPhoneKeyboard } from '../keyboards/branch.keyboards';
 import { i18n } from '../i18n';
 import { logger } from '../utils/logger';
 import { formatUzPhone } from '../utils/uz-phone.util';
+import { parseWorkTimeRange } from '../utils/branch.util';
 
 /**
  * Admin Broadcast Conversation
@@ -372,4 +375,181 @@ export async function adminSendMessageConversation(
 
     // Clear session
     ctx.session.adminSendTargetUser = undefined;
+}
+
+export async function adminAddBranchConversation(
+    conversation: BotConversation,
+    ctx: BotContext
+) {
+    const locale = ctx.session?.__language_code || 'uz';
+    const cancelText = i18n.t(locale, 'admin_cancel');
+    const cancelKeyboard = getAdminCancelKeyboard(locale);
+
+    const cancelConversation = async (targetCtx: BotContext) => {
+        await targetCtx.reply(i18n.t(locale, 'admin_cancelled'), {
+            reply_markup: getAdminMenuKeyboard(locale),
+        });
+    };
+
+    await ctx.reply(i18n.t(locale, 'admin_branch_ask_name'), {
+        reply_markup: cancelKeyboard,
+    });
+
+    let branchName = '';
+
+    while (true) {
+        const nameCtx = await conversation.waitFor('message:text');
+        const name = nameCtx.message.text.trim();
+
+        if (name === cancelText) {
+            await cancelConversation(nameCtx);
+            return;
+        }
+
+        if (!name) {
+            await nameCtx.reply(i18n.t(locale, 'admin_branch_name_required'), {
+                reply_markup: cancelKeyboard,
+            });
+            continue;
+        }
+
+        const existingBranch = await conversation.external(() => BranchService.getByName(name));
+        if (existingBranch) {
+            await nameCtx.reply(i18n.t(locale, 'admin_branch_name_exists'), {
+                reply_markup: cancelKeyboard,
+            });
+            continue;
+        }
+
+        branchName = name;
+        break;
+    }
+
+    await ctx.reply(i18n.t(locale, 'admin_branch_ask_location'), {
+        reply_markup: cancelKeyboard,
+    });
+
+    let latitude = 0;
+    let longitude = 0;
+    let address = '';
+
+    while (true) {
+        const locationCtx = await conversation.wait();
+
+        if (locationCtx.message?.text === cancelText) {
+            await cancelConversation(locationCtx);
+            return;
+        }
+
+        if (!locationCtx.message?.location) {
+            await locationCtx.reply(i18n.t(locale, 'admin_branch_location_required'), {
+                reply_markup: cancelKeyboard,
+            });
+            continue;
+        }
+
+        latitude = locationCtx.message.location.latitude;
+        longitude = locationCtx.message.location.longitude;
+
+        const resolvedAddress = await conversation.external(() =>
+            BranchService.reverseGeocode(latitude, longitude)
+        );
+
+        if (!resolvedAddress) {
+            await locationCtx.reply(i18n.t(locale, 'admin_branch_address_lookup_failed'), {
+                reply_markup: cancelKeyboard,
+            });
+            continue;
+        }
+
+        address = resolvedAddress;
+        await locationCtx.reply(i18n.t(locale, 'admin_branch_address_detected', { address }));
+        break;
+    }
+
+    await ctx.reply(i18n.t(locale, 'admin_branch_ask_work_time'), {
+        reply_markup: cancelKeyboard,
+    });
+
+    let workTime = '';
+
+    while (true) {
+        const workTimeCtx = await conversation.waitFor('message:text');
+        const value = workTimeCtx.message.text.trim();
+
+        if (value === cancelText) {
+            await cancelConversation(workTimeCtx);
+            return;
+        }
+
+        if (!parseWorkTimeRange(value)) {
+            await workTimeCtx.reply(i18n.t(locale, 'admin_branch_invalid_work_time'), {
+                reply_markup: cancelKeyboard,
+            });
+            continue;
+        }
+
+        workTime = value;
+        break;
+    }
+
+    await ctx.reply(i18n.t(locale, 'admin_branch_ask_phone'), {
+        reply_markup: getAdminBranchPhoneKeyboard(locale),
+    });
+
+    let supportPhone: string | null = null;
+
+    while (true) {
+        const phoneCtx = await conversation.wait();
+
+        if (phoneCtx.callbackQuery?.data === 'admin_branch_skip_phone') {
+            await phoneCtx.answerCallbackQuery();
+            break;
+        }
+
+        if (phoneCtx.message?.text === cancelText) {
+            await cancelConversation(phoneCtx);
+            return;
+        }
+
+        if (!phoneCtx.message?.text) {
+            await phoneCtx.reply(i18n.t(locale, 'admin_branch_invalid_phone'), {
+                reply_markup: getAdminBranchPhoneKeyboard(locale),
+            });
+            continue;
+        }
+
+        const normalizedPhone = formatUzPhone(phoneCtx.message.text);
+        if (!/^\+998\d{9}$/.test(normalizedPhone)) {
+            await phoneCtx.reply(i18n.t(locale, 'admin_branch_invalid_phone'), {
+                reply_markup: getAdminBranchPhoneKeyboard(locale),
+            });
+            continue;
+        }
+
+        supportPhone = normalizedPhone;
+        break;
+    }
+
+    try {
+        await conversation.external(() =>
+            BranchService.create({
+                name: branchName,
+                address,
+                latitude,
+                longitude,
+                workTime,
+                supportPhone,
+            })
+        );
+
+        await ctx.reply(i18n.t(locale, 'admin_branch_created'), {
+            reply_markup: getAdminMenuKeyboard(locale),
+        });
+    } catch (error) {
+        logger.error('Error creating branch:', error);
+        await ctx.reply(i18n.t(locale, 'admin_branch_create_error'), {
+            reply_markup: getAdminMenuKeyboard(locale),
+        });
+    }
 }

@@ -14,6 +14,7 @@ export interface SessionData {
   pendingAction?: 'application';
   __language_code?: string;
   languageSelected?: boolean;
+  deepLinkSlug?: string;
   contracts?: Contract[];
   currentContractsPage?: number;
   // Payments session data

@@ -21,6 +21,7 @@ otp_resend_info = Kod kelmadimi? Uni qayta yuborishingiz mumkin.
 ask_otp = Iltimos, 6 xonali tasdiqlash kodini kiriting:
 menu_contracts = 📄 Shartnomalarim
 menu_payments = 💳 To'lovlarim
+menu_branches = 📍 Filliallar
 menu_settings = ⚙️ Sozlamalar
 menu_support = 📞 Qo'llab-quvvatlash
 menu_application = ✍️ Ariza qoldirish
@@ -31,7 +32,73 @@ application_success = ✅ Arizangiz muvaffaqiyatli qabul qilindi!
 application_error = ❌ Arizani yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.
 application_ask_first_name = 👤 Iltimos, ism va familiyangizni kiriting:
 application_first_name_saved = ✅ Rahmat! Ismingiz saqlandi.
+promo_application_cta = ✍️ Ariza qoldirish
+promo_video_cta = 🎬 Videoni ko'rish
+promo_aksiya_01 =
+    { $name }, tabriklaymiz ✅
+    
+    Siz BEPUL
+    “Bu videoni ko‘rmasdan iPhone 17 xarid qilmang”
+    nomli video joylashgan botga muvaffaqiyatli ro‘yxatdan o‘tdingiz 🚀
+    
+    Videoni olish uchun quyidagi havola ustiga bosing 👇
+    
+    Hurmat bilan,Probox jamoasi ✅
+
+promo_aksiya_02 =
+    { $name }, yaxshimisiz? ✅
+    
+    Sizning ismingizni bepul videoni yuklab olganlar ro‘yxatida ko‘rdim 🚀
+    Video bilan tanishishga vaqtingiz bo’ldimi yoki yo’qmi shuni bilmoqchi
+    edim ?
+    
+    Ushbu video sizga iPhone 17 Pro Max olishdan oldin to‘g‘ri qaror qilishga yordam beradi ✅
+    
+    Agar niyatingiz jiddiy bo‘lsa, biz bilan qo‘ng‘iroq belgilashingiz mumkin 🚀
+    
+    Jamoamiz sizning talabingizdan kelib chiqib:
+    ✅ Ishonchli va sinalgan iPhone modellarini
+    ✅ Aniq narxlarni
+    ✅ Bo‘lib to‘lash shartlarini batafsil tushuntirib beradi.
+    
+    Hoziroq quyidagi raqamlarga bog’laning : 78 113 4774
+    
+    Aytgancha, qo‘ng‘iroqdan keyin bizdan sotib olishga majbur bo‘lmaysiz ✅
+    
+promo_aksiya_03 =
+    { $name }, ushbu videoni tomosha qiling! ✅
+
+promo_aksiya_04_part1 =
+    { $name }, bilasizmi… ✅
+    
+    7 yildan beri yuzlab mijozlarimizga ular xohlagan Apple mahsulotlarini
+    qulay narxda yetkazib bermoqdamiz 🚀
+    
+    Va O‘zbekistondagi kuchli servis xizmatini taqdim etib kelmoqdamiz ✅
+
+promo_aksiya_04_part2 =
+    Siz ham ular qatorida bo‘lishni istasangiz,
+    hoziroq bog‘laning:
+    78 113 47 74 ✅
+    
+    P.S. Bu sizga yuborayotgan oxirgi xabarimiz bo‘lishi mumkin 🚀
+
 back = 🔙 Orqaga
+branch_name_label = 🏬 Fillial nomi
+branch_address_label = 📍 Manzil
+branch_work_time_label = 🕒 Ish vaqti
+branch_phone_label = 📞 Aloqa raqami
+branches_header = 📍 *Filliallar*
+branches_select_prompt = Fillialni tanlang yoki eng yaqin fillialni toping.
+branches_no_active = Hozircha faol filliallar mavjud emas.
+branches_nearest = Eng yaqin
+branches_share_location = 📍 Joylashuvni yuborish
+branches_send_location_prompt = Eng yaqin fillialni topish uchun joylashuvingizni yuboring.
+branches_location_required = Iltimos, matn emas, Telegram joylashuvini yuboring.
+branches_invalid_selection = Iltimos, quyidagi filliallardan birini tanlang yoki "Eng yaqin" tugmasini bosing.
+branches_nearest_not_found = Eng yaqin fillialni aniqlab bo'lmadi.
+branches_distance_label = 📏 Masofa
+branches_distance_unit = km
 
 # Contracts
 contracts_header = 📄 *Sizning shartnomalaringiz*
@@ -176,6 +243,7 @@ admin_menu_header = 👨‍💼 *Admin Panel*
     
     Kerakli bo'limni tanlang:
 admin_users = 👥 Foydalanuvchilar
+admin_branches = 🏬 Filliallar
 admin_broadcast = 📢 Xabar yuborish
 admin_stats = 📊 Statistika
 admin_export = 📥 Excel yuklab olish
@@ -252,6 +320,32 @@ admin_send_invalid_message = ❌ Xabar bo'sh bo'lmasligi kerak.
 admin_send_success = ✅ Xabar yuborildi!
 admin_send_failed = ❌ Xabar yuborishda xatolik yuz berdi.
 admin_error = ❌ Xatolik yuz berdi.
+admin_branches_header = 🏬 *Filliallar boshqaruvi*
+admin_branches_empty = Hozircha filliallar qo'shilmagan.
+admin_branch_detail_header = 🏬 *Fillial ma'lumotlari*
+admin_branch_status_label = Holati
+admin_branch_status_active = Faol
+admin_branch_status_inactive = Nofaol
+admin_branch_add = ➕ Fillial qo'shish
+admin_branch_back_to_list = 🔙 Ro'yxatga qaytish
+admin_branch_deactivate = ⛔ Nofaol qilish
+admin_branch_deactivate_confirm = "{ $name }" fillialini nofaol holatga o'tkazilsinmi?
+admin_branch_deactivated = ✅ Fillial nofaol qilindi.
+admin_branch_not_found = ❌ Fillial topilmadi.
+admin_branch_ask_name = Yangi fillial nomini kiriting:
+admin_branch_name_required = Fillial nomi bo'sh bo'lmasligi kerak. Qayta kiriting:
+admin_branch_name_exists = Bunday nomli fillial allaqachon mavjud. Boshqa nom kiriting:
+admin_branch_ask_location = Fillial joylashuvini Telegram geolokatsiya sifatida yuboring.
+admin_branch_location_required = Iltimos, fillial manzilini matn emas, geolokatsiya sifatida yuboring.
+admin_branch_address_lookup_failed = Manzilni aniqlab bo'lmadi. Iltimos, geolokatsiyani qayta yuboring.
+admin_branch_address_detected = Aniqlangan manzil: { $address }
+admin_branch_ask_work_time = Ish vaqtini qat'iy formatda kiriting: 00:00-00:00
+admin_branch_invalid_work_time = Noto'g'ri format. Iltimos, vaqtni 00:00-00:00 ko'rinishida kiriting.
+admin_branch_ask_phone = Aloqa raqamini kiriting yoki o'tkazib yuborish tugmasini bosing.
+admin_branch_skip_phone = O'tkazib yuborish
+admin_branch_invalid_phone = Noto'g'ri raqam. Iltimos, +998XXXXXXXXX formatida kiriting yoki o'tkazib yuboring.
+admin_branch_created = ✅ Fillial muvaffaqiyatli qo'shildi.
+admin_branch_create_error = ❌ Fillialni yaratishda xatolik yuz berdi.
 
 # Logout/Login
 menu_logout = 🚪 Chiqish

@@ -97,6 +97,12 @@ src/
 - `npm run lint` - Run ESLint for code quality checks.
 - `npm run format` - Format code using Prettier.
 
+## 🔗 Deep Links
+
+- Set `BOT_USERNAME` in your `.env` so campaign links can be generated consistently.
+- Current promo slug: `aksiya_01`
+- Example deep link: `https://t.me/<your_bot_username>?start=aksiya_01`
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
