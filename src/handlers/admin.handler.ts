@@ -18,6 +18,7 @@ import {
 import { getMainKeyboardByLocale } from '../keyboards';
 import { i18n } from '../i18n';
 import { logger } from '../utils/logger';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { formatBranchDetails } from '../utils/branch.util';
 
@@ -95,7 +96,9 @@ export const adminUsersPaginationHandler = async (ctx: BotContext) => {
         const callbackData = ctx.callbackQuery?.data || '';
         const page = parseInt(callbackData.split(':')[1], 10) || 1;
 
-        await ctx.answerCallbackQuery();
+        await ctx.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
         await showUsersList(ctx, page, locale, true);
     } catch (error) {
         logger.error('Error in adminUsersPaginationHandler:', error);
@@ -141,6 +144,8 @@ const showUsersList = async (
             await ctx.editMessageText(message, {
                 reply_markup: keyboard,
                 parse_mode: 'Markdown',
+            }).catch((err) => {
+                if (!isMessageToDeleteNotFoundError(err)) throw err;
             });
         } else {
             await ctx.reply(message, {
@@ -201,7 +206,9 @@ export const adminUserDetailHandler = async (ctx: BotContext) => {
         const callbackData = ctx.callbackQuery?.data || '';
         const telegramId = parseInt(callbackData.split(':')[1], 10);
 
-        await ctx.answerCallbackQuery();
+        await ctx.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
 
         const user = await AdminService.getUserDetails(telegramId);
 
@@ -231,6 +238,8 @@ export const adminUserDetailHandler = async (ctx: BotContext) => {
         await ctx.editMessageText(message, {
             reply_markup: keyboard,
             parse_mode: 'Markdown',
+        }).catch((err) => {
+            if (!isMessageToDeleteNotFoundError(err)) throw err;
         });
     } catch (error) {
         logger.error('Error in adminUserDetailHandler:', error);
@@ -255,16 +264,22 @@ export const adminBlockSupportHandler = async (ctx: BotContext) => {
         const result = await AdminService.banUserFromSupport(telegramId, true);
 
         if (result) {
-            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_user_blocked'), show_alert: true });
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_user_blocked'), show_alert: true }).catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
             // Refresh the user detail view
             await adminUserDetailHandler(ctx);
         } else {
-            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_action_failed'), show_alert: true });
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_action_failed'), show_alert: true }).catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
         }
     } catch (error) {
         logger.error('Error in adminBlockSupportHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true });
+        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true }).catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
     }
 };
 
@@ -284,16 +299,22 @@ export const adminUnblockSupportHandler = async (ctx: BotContext) => {
         const result = await AdminService.banUserFromSupport(telegramId, false);
 
         if (result) {
-            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_user_unblocked'), show_alert: true });
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_user_unblocked'), show_alert: true }).catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
             // Refresh the user detail view
             await adminUserDetailHandler(ctx);
         } else {
-            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_action_failed'), show_alert: true });
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_action_failed'), show_alert: true }).catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
         }
     } catch (error) {
         logger.error('Error in adminUnblockSupportHandler:', error);
         const locale = getLocale(ctx);
-        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true });
+        await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true }).catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
     }
 };
 
@@ -475,7 +496,9 @@ export const adminExportHandler = async (ctx: BotContext) => {
         const buffer = await ExportService.exportUsersToExcel();
 
         // Delete status message
-        await ctx.api.deleteMessage(ctx.chat!.id, statusMsg.message_id).catch(() => { });
+        await ctx.api.deleteMessage(ctx.chat!.id, statusMsg.message_id).catch((err) => {
+            if (!isMessageToDeleteNotFoundError(err)) throw err;
+        });
 
         // Send file
         const fileName = `users_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -504,8 +527,12 @@ export const adminBackToMenuHandler = async (ctx: BotContext) => {
         const locale = getLocale(ctx);
 
         if (ctx.callbackQuery) {
-            await ctx.answerCallbackQuery();
-            await ctx.deleteMessage().catch(() => { });
+            await ctx.answerCallbackQuery().catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
+            await ctx.deleteMessage().catch((err) => {
+                if (!isMessageToDeleteNotFoundError(err)) throw err;
+            });
         }
 
         await ctx.reply(
@@ -581,7 +608,9 @@ export const adminSendMessageHandler = async (ctx: BotContext) => {
         const callbackData = ctx.callbackQuery?.data || '';
         const telegramId = parseInt(callbackData.split(':')[1], 10);
 
-        await ctx.answerCallbackQuery();
+        await ctx.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
 
         // Store target user in session and enter conversation
         ctx.session.adminSendTargetUser = telegramId;

@@ -58,6 +58,43 @@ export function isRateLimitError(error: unknown): boolean {
 }
 
 /**
+ * Check if an error is for an expired or invalid callback query (400)
+ */
+export function isCallbackQueryExpiredError(error: unknown): boolean {
+  if (error instanceof GrammyError && error.error_code === 400) {
+    const description = error.description.toLowerCase();
+    return description.includes('query is too old') || description.includes('query id is invalid');
+  }
+  return false;
+}
+
+/**
+ * Check if an error is for a message that was already deleted or not found (400)
+ */
+export function isMessageToDeleteNotFoundError(error: unknown): boolean {
+  if (error instanceof GrammyError && error.error_code === 400) {
+    const description = error.description.toLowerCase();
+    return (
+      description.includes('message to delete not found') ||
+      description.includes("message can't be deleted") ||
+      description.includes('message to edit not found')
+    );
+  }
+  return false;
+}
+
+/**
+ * Check if an error is for a message that was not modified (400)
+ */
+export function isMessageNotModifiedError(error: unknown): boolean {
+  if (error instanceof GrammyError && error.error_code === 400) {
+    const description = error.description.toLowerCase();
+    return description.includes('message is not modified');
+  }
+  return false;
+}
+
+/**
  * Get retry-after seconds from rate limit error
  */
 export function getRetryAfterSeconds(error: unknown): number {

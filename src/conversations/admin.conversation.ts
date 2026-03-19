@@ -6,6 +6,7 @@ import { UserService } from '../services/user.service';
 import { getAdminCancelKeyboard, getAdminMenuKeyboard, getBroadcastConfirmKeyboard, getBroadcastTargetKeyboard } from '../keyboards/admin.keyboards';
 import { getAdminBranchPhoneKeyboard } from '../keyboards/branch.keyboards';
 import { i18n } from '../i18n';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 import { logger } from '../utils/logger';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { parseWorkTimeRange } from '../utils/branch.util';
@@ -43,10 +44,14 @@ export async function adminBroadcastConversation(
     // Wait for target selection
     const targetCtx = await conversation.waitFor('callback_query:data');
     const targetData = targetCtx.callbackQuery.data;
-    await targetCtx.answerCallbackQuery();
+    await targetCtx.answerCallbackQuery().catch((err) => {
+        if (!isCallbackQueryExpiredError(err)) throw err;
+    });
 
     if (targetData === 'admin_cancel') {
-        await targetCtx.editMessageText(i18n.t(locale, 'admin_cancelled'));
+        await targetCtx.editMessageText(i18n.t(locale, 'admin_cancelled')).catch((err) => {
+            if (!isMessageToDeleteNotFoundError(err)) throw err;
+        });
         return;
     }
 
@@ -56,7 +61,9 @@ export async function adminBroadcastConversation(
 
     if (!isAll) {
         // Ask for user ID or phone
-        await targetCtx.editMessageText(i18n.t(locale, 'admin_broadcast_enter_user'));
+        await targetCtx.editMessageText(i18n.t(locale, 'admin_broadcast_enter_user')).catch((err) => {
+            if (!isMessageToDeleteNotFoundError(err)) throw err;
+        });
         await ctx.reply(
             i18n.t(locale, 'admin_broadcast_enter_user_prompt'),
             { reply_markup: getAdminCancelKeyboard(locale) }
@@ -171,10 +178,14 @@ export async function adminBroadcastConversation(
 
     const confirmCtx = await conversation.waitFor('callback_query:data');
     const confirmData = confirmCtx.callbackQuery.data;
-    await confirmCtx.answerCallbackQuery();
+    await confirmCtx.answerCallbackQuery().catch((err) => {
+        if (!isCallbackQueryExpiredError(err)) throw err;
+    });
 
     if (confirmData !== 'admin_broadcast_confirm') {
-        await confirmCtx.editMessageText(i18n.t(locale, 'admin_cancelled'));
+        await confirmCtx.editMessageText(i18n.t(locale, 'admin_cancelled')).catch((err) => {
+            if (!isMessageToDeleteNotFoundError(err)) throw err;
+        });
         return;
     }
 
@@ -189,7 +200,9 @@ export async function adminBroadcastConversation(
         });
     });
 
-    await confirmCtx.editMessageText(i18n.t(locale, 'admin_broadcast_started'));
+    await confirmCtx.editMessageText(i18n.t(locale, 'admin_broadcast_started')).catch((err) => {
+        if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
 
     // Process broadcast
     if (isAll) {

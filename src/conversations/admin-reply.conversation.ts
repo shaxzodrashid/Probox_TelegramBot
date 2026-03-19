@@ -5,7 +5,7 @@ import { UserService } from '../services/user.service';
 import { redisService } from '../redis/redis.service';
 import { getSupportTicketRepliedKeyboard, getAdminReplyCancelKeyboard } from '../keyboards';
 import { logger } from '../utils/logger';
-import { isUserBlockedError } from '../utils/telegram-errors';
+import { isUserBlockedError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 import { bot } from '../bot';
 import { config } from '../config';
 import { i18n } from '../i18n';
@@ -320,23 +320,22 @@ async function processReply(
                 );
 
                 if (ticket.photo_file_id) {
-                    await bot.api.editMessageCaption(
-                        config.ADMIN_GROUP_ID,
-                        ticket.group_message_id,
-                        {
+                    await bot.api
+                        .editMessageCaption(config.ADMIN_GROUP_ID, ticket.group_message_id, {
                             caption: repliedMessage,
-                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale)
-                        }
-                    );
+                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale),
+                        })
+                        .catch((err) => {
+                            if (!isMessageToDeleteNotFoundError(err)) throw err;
+                        });
                 } else {
-                    await bot.api.editMessageText(
-                        config.ADMIN_GROUP_ID,
-                        ticket.group_message_id,
-                        repliedMessage,
-                        {
-                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale)
-                        }
-                    );
+                    await bot.api
+                        .editMessageText(config.ADMIN_GROUP_ID, ticket.group_message_id, repliedMessage, {
+                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale),
+                        })
+                        .catch((err) => {
+                            if (!isMessageToDeleteNotFoundError(err)) throw err;
+                        });
                 }
                 logger.info(`Updated admin group message for ticket ${ticket.ticket_number}`);
             } catch (error) {

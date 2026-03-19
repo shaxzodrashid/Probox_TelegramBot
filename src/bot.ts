@@ -81,6 +81,7 @@ import { applicationHandler } from './handlers/application.handler';
 import { applicationConversation } from './conversations/application.conversation';
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from './utils/telegram-errors';
 
 import { RedisAdapter } from '@grammyjs/storage-redis';
 import { redisService } from './redis/redis.service';
@@ -156,8 +157,12 @@ bot.use(async (ctx, next) => {
           if (user) {
             await redisService.delete(`pendingAction:${telegramId}`);
             if (ctx.callbackQuery) {
-              await ctx.answerCallbackQuery().catch(() => { });
-              await ctx.deleteMessage().catch(() => { });
+              await ctx.answerCallbackQuery().catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+              });
+              await ctx.deleteMessage().catch((err) => {
+                if (!isMessageToDeleteNotFoundError(err)) throw err;
+              });
             }
             await ctx.conversation.enter('applicationConversation');
             return;
@@ -174,8 +179,19 @@ bot.use(async (ctx, next) => {
 // Error Handling
 bot.catch((err) => {
   const ctx = err.ctx;
-  logger.error(`Error while handling update ${ctx.update.update_id}:`);
   const e = err.error;
+
+  // Ignore expired callback queries in global error handler as well
+  if (isCallbackQueryExpiredError(e)) {
+    return;
+  }
+
+  // Ignore message to delete not found in global error handler
+  if (isMessageToDeleteNotFoundError(e)) {
+    return;
+  }
+
+  logger.error(`Error while handling update ${ctx.update.update_id}:`);
   if (e instanceof Error) {
     logger.error(e.stack || String(e));
   } else {
@@ -234,8 +250,12 @@ const handleLanguageSelection = async (ctx: BotContext, lang: 'uz' | 'ru') => {
   }
 
   if (ctx.callbackQuery) {
-    await ctx.deleteMessage().catch(() => { });
-    await ctx.answerCallbackQuery();
+    await ctx.deleteMessage().catch((err) => {
+      if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
+    await ctx.answerCallbackQuery().catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
   }
 
   await startHandler(ctx);
@@ -279,7 +299,9 @@ bot.callbackQuery('change_name', changeNameHandler);
 bot.callbackQuery('change_phone', changePhoneHandler);
 bot.callbackQuery('change_language', changeLanguageHandler);
 bot.callbackQuery('start_registration', async (ctx) => {
-  await ctx.deleteMessage().catch(() => {});
+  await ctx.deleteMessage().catch((err) => {
+    if (!isMessageToDeleteNotFoundError(err)) throw err;
+  });
   await ctx.conversation.exitAll();
   await ctx.conversation.enter('registrationConversation');
 });
@@ -305,24 +327,47 @@ bot.callbackQuery('admin_branches_back', adminBranchesHandler);
 bot.callbackQuery('admin_back_to_menu', adminBackToMenuHandler);
 bot.callbackQuery('admin_back_to_users', adminUsersHandler);
 bot.callbackQuery('admin_cancel', adminBackToMainMenuHandler);
-bot.callbackQuery('admin_broadcast_all', (ctx) => ctx.answerCallbackQuery());
-bot.callbackQuery('admin_broadcast_single', (ctx) => ctx.answerCallbackQuery());
-bot.callbackQuery('admin_broadcast_confirm', (ctx) => ctx.answerCallbackQuery());
+bot.callbackQuery('admin_broadcast_all', (ctx) =>
+  ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  }),
+);
+bot.callbackQuery('admin_broadcast_single', (ctx) =>
+  ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  }),
+);
+bot.callbackQuery('admin_broadcast_confirm', (ctx) =>
+  ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  }),
+);
 bot.callbackQuery('start_passport_conv', async (ctx) => {
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery().catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
   }
-  await ctx.deleteMessage().catch(() => {});
+  await ctx.deleteMessage().catch((err) => {
+    if (!isMessageToDeleteNotFoundError(err)) throw err;
+  });
   await ctx.conversation.exitAll();
   await ctx.conversation.enter('addPassportDataConversation');
 });
 bot.callbackQuery('promo_application_cta', applicationHandler);
-bot.callbackQuery('noop', (ctx) => ctx.answerCallbackQuery());
+bot.callbackQuery('noop', (ctx) =>
+  ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  }),
+);
 // Fallback: if the router didn't handle continue_to_application (e.g. user already logged in
 // but no pending action), just dismiss the spinner.
 bot.callbackQuery('continue_to_application', async (ctx) => {
-  await ctx.answerCallbackQuery();
-  await ctx.deleteMessage().catch(() => { });
+  await ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  });
+  await ctx.deleteMessage().catch((err) => {
+    if (!isMessageToDeleteNotFoundError(err)) throw err;
+  });
 });
-
 

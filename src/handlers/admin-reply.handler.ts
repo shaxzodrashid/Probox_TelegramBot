@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { bot } from '../bot';
 import { config } from '../config';
 import { i18n } from '../i18n';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 
 // Redis key prefix for admin reply session data
 const ADMIN_REPLY_KEY_PREFIX = 'admin:reply:';
@@ -20,7 +21,9 @@ const ADMIN_REPLY_KEY_PREFIX = 'admin:reply:';
  */
 export async function handleReplyButton(ctx: BotContext): Promise<void> {
     try {
-        await ctx.answerCallbackQuery();
+        await ctx.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
 
         const callbackData = ctx.callbackQuery?.data;
         if (!callbackData) return;
@@ -84,7 +87,9 @@ export async function handleReplyButton(ctx: BotContext): Promise<void> {
  */
 export async function handleCloseButton(ctx: BotContext): Promise<void> {
     try {
-        await ctx.answerCallbackQuery();
+        await ctx.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
 
         const callbackData = ctx.callbackQuery?.data;
         if (!callbackData) return;
@@ -119,18 +124,19 @@ export async function handleCloseButton(ctx: BotContext): Promise<void> {
                     const closedMessage = `📩 Murojaat #${ticketNumber} ⚫ YOPILDI\n\n✅ Murojaat yopildi.`;
 
                     if (ticket.photo_file_id) {
-                        await bot.api.editMessageCaption(
-                            config.ADMIN_GROUP_ID,
-                            ticket.group_message_id,
-                            { caption: closedMessage }
-                        );
+                        await bot.api
+                            .editMessageCaption(config.ADMIN_GROUP_ID, ticket.group_message_id, { caption: closedMessage })
+                            .catch((err) => {
+                                if (!isMessageToDeleteNotFoundError(err)) throw err;
+                            });
                     } else {
-                        await bot.api.editMessageText(
-                            config.ADMIN_GROUP_ID,
-                            ticket.group_message_id,
-                            closedMessage,
-                            { reply_markup: undefined }
-                        );
+                        await bot.api
+                            .editMessageText(config.ADMIN_GROUP_ID, ticket.group_message_id, closedMessage, {
+                                reply_markup: undefined,
+                            })
+                            .catch((err) => {
+                                if (!isMessageToDeleteNotFoundError(err)) throw err;
+                            });
                     }
                 }
             } catch (error) {
@@ -151,7 +157,9 @@ export async function handleCloseButton(ctx: BotContext): Promise<void> {
  */
 export async function handleBlockButton(ctx: BotContext): Promise<void> {
     try {
-        await ctx.answerCallbackQuery();
+        await ctx.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
 
         const callbackData = ctx.callbackQuery?.data;
         if (!callbackData) return;
@@ -200,7 +208,9 @@ export async function handleBlockButton(ctx: BotContext): Promise<void> {
  */
 export async function handleViewReplyButton(ctx: BotContext): Promise<void> {
     try {
-        await ctx.answerCallbackQuery();
+        await ctx.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
 
         const callbackData = ctx.callbackQuery?.data;
         if (!callbackData) return;

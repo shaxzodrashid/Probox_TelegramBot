@@ -12,6 +12,7 @@ import { runConfirmationLoop } from './passport_parts/confirmation.part';
 import { submitApplication } from './application.conversation';
 import { redisService } from '../redis/redis.service';
 import { detectFace } from '../utils/face-detection.util';
+import { isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 
 export async function addPassportDataConversation(conversation: BotConversation, ctx: BotContext) {
   const telegramId = ctx.from?.id;
@@ -170,10 +171,26 @@ export async function addPassportDataConversation(conversation: BotConversation,
         
         if (hasFace) {
           await conversation.external(() => minioService.uploadFaceId(telegramId, buffer));
-          await faceCtx.api.editMessageText(faceCtx.chat!.id, feedbackMsg.message_id, i18n.t(locale, 'settings_passport_face_id_success'));
+          await faceCtx.api
+            .editMessageText(
+              faceCtx.chat!.id,
+              feedbackMsg.message_id,
+              i18n.t(locale, 'settings_passport_face_id_success'),
+            )
+            .catch((err) => {
+              if (!isMessageToDeleteNotFoundError(err)) throw err;
+            });
           break;
         } else {
-          await faceCtx.api.editMessageText(faceCtx.chat!.id, feedbackMsg.message_id, i18n.t(locale, 'settings_passport_face_id_error'));
+          await faceCtx.api
+            .editMessageText(
+              faceCtx.chat!.id,
+              feedbackMsg.message_id,
+              i18n.t(locale, 'settings_passport_face_id_error'),
+            )
+            .catch((err) => {
+              if (!isMessageToDeleteNotFoundError(err)) throw err;
+            });
           continue;
         }
       } else {
