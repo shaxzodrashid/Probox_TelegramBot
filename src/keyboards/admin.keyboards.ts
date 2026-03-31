@@ -14,6 +14,11 @@ export const getAdminMenuKeyboard = (locale: string) => {
         .text(i18n.t(locale, 'admin_branches')).row()
         .text(i18n.t(locale, 'admin_broadcast'))
         .text(i18n.t(locale, 'admin_stats')).row()
+        .text(i18n.t(locale, 'admin_campaign_promotions'))
+        .text(i18n.t(locale, 'admin_campaign_prizes')).row()
+        .text(i18n.t(locale, 'admin_campaign_templates'))
+        .text(i18n.t(locale, 'admin_campaign_coupon_search')).row()
+        .text(i18n.t(locale, 'admin_campaign_coupon_export'))
         .text(i18n.t(locale, 'admin_export')).row()
         .text(i18n.t(locale, 'back_to_user_menu'))
         .resized();

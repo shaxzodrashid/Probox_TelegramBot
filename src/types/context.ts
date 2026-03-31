@@ -8,13 +8,42 @@ import { PaymentContract } from '../interfaces/payment.interface';
 export type CustomContext = Context & I18nFlavor & SessionFlavor<SessionData>;
 export type BotContext = ConversationFlavor<CustomContext>;
 export type BotConversation = Conversation<BotContext, BotContext>;
+
+export type PromotionEditableField =
+  | 'slug'
+  | 'title_uz'
+  | 'title_ru'
+  | 'about_uz'
+  | 'about_ru'
+  | 'cover_image'
+  | 'starts_at'
+  | 'ends_at'
+  | 'assign_coupons';
+
+export type PromotionPrizeEditableField =
+  | 'promotion_id'
+  | 'title'
+  | 'description';
+
+export type MessageTemplateEditableField =
+  | 'template_key'
+  | 'template_type'
+  | 'title'
+  | 'content_uz'
+  | 'content_ru'
+  | 'channel'
+  | 'is_active';
+
 export interface SessionData {
-  // Add session data properties here
   user_phone?: string;
   pendingAction?: 'application';
   __language_code?: string;
   languageSelected?: boolean;
   deepLinkSlug?: string;
+  promotions?: Array<{
+    id: number;
+    title: string;
+  }>;
   contracts?: Contract[];
   currentContractsPage?: number;
   // Payments session data
@@ -24,6 +53,22 @@ export interface SessionData {
   adminReplyTicketId?: number;
   // Admin send message target
   adminSendTargetUser?: number;
+  adminPromotionListPage?: number;
+  adminPromotionEditTarget?: {
+    promotionId: number;
+    field: PromotionEditableField;
+  };
+  adminPrizeListPage?: number;
+  adminPrizeEditTarget?: {
+    prizeId: number;
+    field: PromotionPrizeEditableField;
+  };
+  adminWinnerCouponCode?: string;
+  adminTemplateListPage?: number;
+  adminTemplateEditTarget?: {
+    templateId: number;
+    field: MessageTemplateEditableField;
+  };
   passportDraft?: {
     series: string;
     jshshir: string;

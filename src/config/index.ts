@@ -2,11 +2,35 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean => {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(normalized);
+};
+
+const isLoopbackHost = (host: string): boolean => {
+  const normalized = host.trim().toLowerCase();
+  return normalized === '127.0.0.1'
+    || normalized === 'localhost'
+    || normalized === '::1'
+    || normalized === '[::1]';
+};
+
 export const config = {
   BOT_TOKEN: process.env.BOT_TOKEN as string,
   BOT_USERNAME: process.env.BOT_USERNAME || '',
   PASSPORT_SCANNER_GIF_ID: process.env.PASSPORT_SCANNER_GIF_ID || null,
   NODE_ENV: process.env.NODE_ENV || 'development',
+  BOT_ENABLED: parseBoolean(process.env.BOT_ENABLED, true),
+  API_ENABLED: parseBoolean(process.env.API_ENABLED, true),
+  API_HOST: process.env.API_HOST || '127.0.0.1',
+  API_PORT: parseInt(process.env.API_PORT || '3000', 10),
+  API_PREFIX: process.env.API_PREFIX || '/api/v1',
+  API_KEY: process.env.API_KEY || '',
+  API_CORS_ORIGIN: process.env.API_CORS_ORIGIN || '',
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
@@ -40,7 +64,17 @@ export const config = {
   CRM_PASS: process.env.CRM_PASS || '',
 };
 
-if (!config.BOT_TOKEN) {
+if (!config.BOT_ENABLED && !config.API_ENABLED) {
+  throw new Error('At least one transport must be enabled: BOT_ENABLED or API_ENABLED');
+}
+
+if (config.BOT_ENABLED && !config.BOT_TOKEN) {
   throw new Error('BOT_TOKEN is missing in environment variables');
 }
+
+if (config.API_ENABLED && !config.API_KEY && !isLoopbackHost(config.API_HOST)) {
+  throw new Error('API_KEY is required when API_HOST is not loopback.');
+}
+
+export const isLoopbackApiHost = isLoopbackHost(config.API_HOST);
 

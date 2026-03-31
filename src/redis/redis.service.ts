@@ -100,6 +100,19 @@ class RedisService {
   getClient(): Redis {
     return this.redis;
   }
+
+  async disconnect(): Promise<void> {
+    if (this.redis.status === 'end') {
+      return;
+    }
+
+    try {
+      await this.redis.quit();
+    } catch (error) {
+      logger.warn('Graceful Redis shutdown failed, forcing disconnect', error);
+      this.redis.disconnect();
+    }
+  }
 }
 
 export const redisService = new RedisService();

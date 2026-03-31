@@ -10,6 +10,7 @@ import { getLocaleFromConversation } from '../utils/locale';
 import { config } from '../config';
 import { bot } from '../bot';
 import { formatUzPhone } from '../utils/uz-phone.util';
+import { escapeHtml } from '../utils/telegram-rich-text.util';
 
 /**
  * Format user support message for admin group
@@ -28,32 +29,32 @@ function formatAdminGroupMessage(
     messageText: string,
     createdAt: Date
 ): string {
-    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || i18n.t(user.language_code, 'admin_unknown_user');
-    const phone = formatUzPhone(user.phone_number);
-    const username = user.username ? `@${user.username}` : i18n.t(user.language_code, 'admin_no');
-    const sapCode = user.sap_card_code || i18n.t(user.language_code, 'admin_no');
+    const fullName = escapeHtml(`${user.first_name || ''} ${user.last_name || ''}`.trim() || i18n.t(user.language_code, 'admin_unknown_user'));
+    const phone = escapeHtml(formatUzPhone(user.phone_number));
+    const username = user.username ? `<b>@${escapeHtml(user.username)}</b>` : i18n.t(user.language_code, 'admin_no');
+    const sapCode = escapeHtml(user.sap_card_code || i18n.t(user.language_code, 'admin_no'));
     const language = user.language_code === 'ru' ? i18n.t('ru', 'ru_button') : i18n.t('uz', 'uz_button');
-    const dateStr = createdAt.toLocaleString('uz-UZ', {
+    const dateStr = escapeHtml(createdAt.toLocaleString('uz-UZ', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit'
-    });
+    }));
 
-    return `📩 Yangi murojaat #${ticketNumber}
+    return `📩 <b>Yangi murojaat #${escapeHtml(ticketNumber)}</b>
 
-👤 Foydalanuvchi: ${fullName}
-📱 Telefon: ${phone}
-🆔 Telegram: ${username} (ID: ${user.telegram_id})
-💼 SAP Kod: ${sapCode}
-🌐 Til: ${language}
-📅 Sana: ${dateStr}
+👤 <b>Foydalanuvchi:</b> ${fullName}
+📱 <b>Telefon:</b> ${phone}
+🆔 <b>Telegram:</b> ${username} (ID: <code>${escapeHtml(user.telegram_id.toString())}</code>)
+💼 <b>SAP Kod:</b> ${sapCode}
+🌐 <b>Til:</b> ${language}
+📅 <b>Sana:</b> ${dateStr}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-💬 Xabar:
-${messageText}`;
+💬 <b>Xabar:</b>
+${escapeHtml(messageText)}`;
 }
 
 /**
@@ -244,11 +245,13 @@ async function processSupport(
             // Send photo with caption and buttons
             groupMessage = await bot.api.sendPhoto(adminGroupId, photoFileId, {
                 caption: adminMessage,
+                parse_mode: 'HTML',
                 reply_markup: getSupportTicketKeyboard(ticket.ticket_number, locale),
             });
         } else {
             // Send text message with buttons
             groupMessage = await bot.api.sendMessage(adminGroupId, adminMessage, {
+                parse_mode: 'HTML',
                 reply_markup: getSupportTicketKeyboard(ticket.ticket_number, locale),
             });
         }

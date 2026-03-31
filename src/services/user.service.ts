@@ -19,6 +19,16 @@ export interface User {
 }
 
 export class UserService {
+  static async getUserByPhoneNumber(phoneNumber: string): Promise<User | null> {
+    const user = await db('users').where('phone_number', phoneNumber).first();
+    return user || null;
+  }
+
+  static async getUserBySapCardCode(sapCardCode: string): Promise<User | null> {
+    const user = await db('users').where('sap_card_code', sapCardCode).first();
+    return user || null;
+  }
+
   static async getUserByTelegramId(telegramId: number): Promise<User | null> {
     const user = await db('users').where('telegram_id', telegramId).first();
     return user || null;
@@ -97,6 +107,12 @@ export class UserService {
       .select('*');
   }
 
+  static async getUsersWithSapCardCode(): Promise<User[]> {
+    return db('users')
+      .whereNotNull('sap_card_code')
+      .select('*');
+  }
+
   static async syncUserWithSap(telegramId: number, sapCardCode: string, isAdmin?: boolean): Promise<void> {
     const updateData: Partial<User> & { updated_at: Date } = { 
       sap_card_code: sapCardCode, 
@@ -150,5 +166,9 @@ export class UserService {
       .andWhere('is_logged_out', false)
       .first();
     return user || null;
+  }
+
+  static async getAdmins(): Promise<User[]> {
+    return db('users').where('is_admin', true).select('*');
   }
 }

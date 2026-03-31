@@ -8,7 +8,8 @@ export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false, is
   const keyboard = new Keyboard()
     .text(ctx.t('menu_contracts')).text(ctx.t('menu_payments')).row()
     .text(ctx.t('menu_branches')).text(ctx.t('menu_application')).row()
-    .text(ctx.t('menu_support'));
+    .text(ctx.t('menu_support')).text(ctx.t('menu_promotions')).row()
+    .text(ctx.t('menu_coupons'));
 
   // Logged in users see Settings next to Support
   if (isLoggedIn) {
@@ -35,7 +36,8 @@ export const getMainKeyboardByLocale = (locale: string, isAdmin: boolean = false
   const keyboard = new Keyboard()
     .text(i18n.t(locale, 'menu_contracts')).text(i18n.t(locale, 'menu_payments')).row()
     .text(i18n.t(locale, 'menu_branches')).text(i18n.t(locale, 'menu_application')).row()
-    .text(i18n.t(locale, 'menu_support'));
+    .text(i18n.t(locale, 'menu_support')).text(i18n.t(locale, 'menu_promotions')).row()
+    .text(i18n.t(locale, 'menu_coupons'));
 
   // Logged in users see Settings next to Support
   if (isLoggedIn) {

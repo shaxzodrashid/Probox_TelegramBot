@@ -2,6 +2,7 @@ import { Keyboard } from 'grammy';
 import { BotConversation, BotContext } from '../../types/context';
 import { i18n } from '../../i18n';
 import { normalizeButtonText } from './utils.part';
+import { escapeHtml } from '../../utils/telegram-rich-text.util';
 
 export async function runConfirmationLoop(
   conversation: BotConversation,
@@ -15,8 +16,8 @@ export async function runConfirmationLoop(
 
   while (!confirmed) {
     const confirmText = i18n.t(locale, 'settings_passport_confirm_data', {
-      series: series,
-      jshshir: jshshir
+      series: escapeHtml(series),
+      jshshir: escapeHtml(jshshir)
     });
     
     const editSeriesBtn = i18n.t(locale, 'settings_passport_edit_series');
@@ -30,9 +31,9 @@ export async function runConfirmationLoop(
       .resized().oneTime();
 
     await ctx.reply(confirmText, { 
-      parse_mode: 'Markdown', 
+      parse_mode: 'HTML', 
       reply_markup: confirmKeyboard 
-    }).catch(() => ctx.reply(confirmText.replace(/[*_`]/g, ''), { reply_markup: confirmKeyboard }));
+    });
 
     let action = '';
     while (true) {

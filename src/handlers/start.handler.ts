@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { UserService } from '../services/user.service';
 import { getDeepLinkConfig, DeepLinkConfig } from '../config/deep-links';
 import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
+import { escapeHtml } from '../utils/telegram-rich-text.util';
 
 const START_COMMAND_REGEX = /^\/start(?:@\w+)?(?:\s+(.+))?$/;
 
@@ -24,7 +25,7 @@ const extractStartPayload = (text?: string) => {
 };
 
 const showPromoMessage = async (ctx: BotContext, config: DeepLinkConfig) => {
-  const name = ctx.from?.first_name || (ctx.from?.username ? `@${ctx.from.username}` : 'Foydalanuvchi');
+  const name = escapeHtml(ctx.from?.first_name || (ctx.from?.username ? `@${ctx.from.username}` : 'Foydalanuvchi'));
   const locale = await ctx.i18n.getLocale();
 
   let keyboard;

@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { formatDate, formatCurrency } from '../utils/formatter.util';
 import { PaymentContract } from '../interfaces/payment.interface';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
+import { escapeHtml } from '../utils/telegram-rich-text.util';
 
 /**
  * Gets the status emoji for a payment installment
@@ -26,8 +27,6 @@ const getStatusEmoji = (status: 'paid' | 'incomplete' | 'overdue' | 'future'): s
     }
 };
 
-
-
 /**
  * Builds the payment detail message
  */
@@ -35,30 +34,30 @@ const buildPaymentDetailMessage = (payment: PaymentContract, locale: string) => 
     let text = i18n.t(locale, 'payments_detail_header') + '\n\n';
 
     // Contract number
-    text += i18n.t(locale, 'payments_contract_label', { number: payment.contractNumber }) + '\n\n';
+    text += i18n.t(locale, 'payments_contract_label', { number: escapeHtml(payment.contractNumber) }) + '\n\n';
 
     // All items in the contract
     text += i18n.t(locale, 'payments_products_label') + '\n\n';
     payment.allItems.forEach((item) => {
-        text += `${item.name}`;
+        text += `${escapeHtml(item.name)}`;
         if (item.price >= 0) {
-            text += ` — ${formatCurrency(item.price, payment.currency)}`;
+            text += ` — ${escapeHtml(formatCurrency(item.price, payment.currency))}`;
         }
         text += '\n';
     });
     text += '\n';
 
     // Dates
-    text += i18n.t(locale, 'payments_doc_date_label', { date: formatDate(payment.docDate) }) + '\n';
-    text += i18n.t(locale, 'payments_due_date_label', { date: formatDate(payment.dueDate) }) + '\n\n';
+    text += i18n.t(locale, 'payments_doc_date_label', { date: escapeHtml(formatDate(payment.docDate)) }) + '\n';
+    text += i18n.t(locale, 'payments_due_date_label', { date: escapeHtml(formatDate(payment.dueDate)) }) + '\n\n';
 
     // Totals
-    text += i18n.t(locale, 'payments_total_label', { amount: formatCurrency(payment.total, payment.currency) }) + '\n';
-    text += i18n.t(locale, 'payments_paid_label', { amount: formatCurrency(payment.totalPaid, payment.currency) }) + '\n';
+    text += i18n.t(locale, 'payments_total_label', { amount: escapeHtml(formatCurrency(payment.total, payment.currency)) }) + '\n';
+    text += i18n.t(locale, 'payments_paid_label', { amount: escapeHtml(formatCurrency(payment.totalPaid, payment.currency)) }) + '\n';
 
     const remaining = payment.total - payment.totalPaid;
     if (remaining > 0) {
-        text += i18n.t(locale, 'payments_remaining_label', { amount: formatCurrency(remaining, payment.currency) }) + '\n';
+        text += i18n.t(locale, 'payments_remaining_label', { amount: escapeHtml(formatCurrency(remaining, payment.currency)) }) + '\n';
     }
 
     text += '\n';
@@ -81,7 +80,7 @@ const buildPaymentDetailMessage = (payment: PaymentContract, locale: string) => 
             line += `${total}`;
         }
 
-        text += line + '\n';
+        text += escapeHtml(line) + '\n';
     });
 
     return text;
@@ -122,7 +121,7 @@ export const paymentsHandler = async (ctx: BotContext) => {
         })}`;
 
         await ctx.reply(text, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_markup: keyboard,
         });
     } catch (err) {
@@ -167,7 +166,7 @@ export const paymentSelectionHandler = async (ctx: BotContext) => {
 
     const detailText = buildPaymentDetailMessage(payment, locale);
     await ctx.reply(detailText, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
     });
 };
 

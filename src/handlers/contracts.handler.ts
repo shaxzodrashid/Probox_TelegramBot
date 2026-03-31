@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 import { formatDate, formatCurrency } from '../utils/formatter.util';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
+import { escapeHtml } from '../utils/telegram-rich-text.util';
 
 const PAGE_SIZE = 10;
 
@@ -32,16 +33,16 @@ const buildContractsMessage = (paginatedData: PaginatedContracts, locale: string
   const header = i18n.t(locale, 'contracts_header') + '\n\n';
 
   const pageInfo = i18n.t(locale, 'contracts_page_info', {
-    total: totalItems.toString(),
-    current: currentPage.toString(),
-    pages: totalPages.toString()
+    total: escapeHtml(totalItems.toString()),
+    current: escapeHtml(currentPage.toString()),
+    pages: escapeHtml(totalPages.toString())
   }) + '\n\n';
 
   // Simple list with only item names
   let contractsList = '';
   items.forEach((contract: Contract, index: number) => {
     const number = (currentPage - 1) * PAGE_SIZE + index + 1;
-    contractsList += `*${number}.* ${contract.itemName}\n`;
+    contractsList += `<b>${number}.</b> ${escapeHtml(contract.itemName)}\n`;
   });
 
   const text = header + pageInfo + contractsList;
@@ -91,26 +92,26 @@ const buildContractDetailMessage = (contract: Contract, locale: string) => {
 
   let text = i18n.t(locale, 'contracts_detail_header') + '\n\n';
 
-  text += i18n.t(locale, 'contracts_partner_label', { name: contract.cardName }) + '\n';
-  text += i18n.t(locale, 'contracts_product_label', { name: contract.itemName }) + '\n';
-  text += i18n.t(locale, 'contracts_number_label', { number: contract.contractNumber }) + '\n\n';
+  text += i18n.t(locale, 'contracts_partner_label', { name: escapeHtml(contract.cardName) }) + '\n';
+  text += i18n.t(locale, 'contracts_product_label', { name: escapeHtml(contract.itemName) }) + '\n';
+  text += i18n.t(locale, 'contracts_number_label', { number: escapeHtml(contract.contractNumber) }) + '\n\n';
 
-  text += i18n.t(locale, 'contracts_purchase_date_label', { date: formatDate(contract.purchaseDate) }) + '\n';
-  text += i18n.t(locale, 'contracts_due_date_label', { date: formatDate(contract.dueDate) }) + '\n\n';
+  text += i18n.t(locale, 'contracts_purchase_date_label', { date: escapeHtml(formatDate(contract.purchaseDate)) }) + '\n';
+  text += i18n.t(locale, 'contracts_due_date_label', { date: escapeHtml(formatDate(contract.dueDate)) }) + '\n\n';
 
-  text += i18n.t(locale, 'contracts_total_amount_label', { amount: formatCurrency(contract.totalAmount, contract.currency) }) + '\n';
-  text += i18n.t(locale, 'contracts_paid_label', { amount: formatCurrency(contract.totalPaid, contract.currency) }) + '\n\n';
+  text += i18n.t(locale, 'contracts_total_amount_label', { amount: escapeHtml(formatCurrency(contract.totalAmount, contract.currency)) }) + '\n';
+  text += i18n.t(locale, 'contracts_paid_label', { amount: escapeHtml(formatCurrency(contract.totalPaid, contract.currency)) }) + '\n\n';
 
   if (nextPayment) {
     text += i18n.t(locale, 'contracts_next_payment_label') + '\n';
-    text += i18n.t(locale, 'contracts_date_label', { date: formatDate(nextPayment.dueDate) }) + '\n';
-    text += i18n.t(locale, 'contracts_amount_label', { amount: formatCurrency(nextPayment.total, contract.currency) }) + '\n';
+    text += i18n.t(locale, 'contracts_date_label', { date: escapeHtml(formatDate(nextPayment.dueDate)) }) + '\n';
+    text += i18n.t(locale, 'contracts_amount_label', { amount: escapeHtml(formatCurrency(nextPayment.total, contract.currency)) }) + '\n';
 
     const remainingForInst = nextPayment.total - nextPayment.paid;
     if (nextPayment.paid > 0) {
       text += i18n.t(locale, 'contracts_payment_note_paid', {
-        paid: formatCurrency(nextPayment.paid, contract.currency),
-        remaining: formatCurrency(remainingForInst, contract.currency)
+        paid: escapeHtml(formatCurrency(nextPayment.paid, contract.currency)),
+        remaining: escapeHtml(formatCurrency(remainingForInst, contract.currency))
       }) + '\n';
     } else {
       text += i18n.t(locale, 'contracts_payment_note_unpaid') + '\n';
@@ -154,14 +155,11 @@ export const contractsHandler = async (ctx: BotContext) => {
     ctx.session.currentContractsPage = 1;
 
     const locale = (await ctx.i18n.getLocale()) || 'uz';
-    const keyboard = getContractsKeyboard(contracts, locale);
-
-    const text = `${ctx.t('contracts_header')}\n\n${ctx.t('contracts_total', {
-      total: contracts.length
-    })}`;
+    const paginatedData = ContractService.paginateContracts(contracts, 1, PAGE_SIZE);
+    const { text, keyboard } = buildContractsMessage(paginatedData, locale);
 
     await ctx.reply(text, {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     });
   } catch (err) {
@@ -205,7 +203,7 @@ export const contractsPaginationHandler = async (ctx: BotContext) => {
   const { text, keyboard } = buildContractsMessage(paginatedData, locale);
 
   await ctx.editMessageText(text, {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   }).catch((err) => {
     if (!isMessageToDeleteNotFoundError(err)) throw err;
@@ -251,7 +249,7 @@ export const contractDetailHandler = async (ctx: BotContext) => {
   const { text, keyboard } = buildContractDetailMessage(contract, locale);
 
   await ctx.editMessageText(text, {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   }).catch((err) => {
     if (!isMessageToDeleteNotFoundError(err)) throw err;
@@ -285,7 +283,7 @@ export const backToContractsHandler = async (ctx: BotContext) => {
   const { text, keyboard } = buildContractsMessage(paginatedData, locale);
 
   await ctx.editMessageText(text, {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   }).catch((err) => {
     if (!isMessageToDeleteNotFoundError(err)) throw err;
@@ -375,7 +373,7 @@ export const contractSelectionHandler = async (ctx: BotContext) => {
 
   const { text: detailText, keyboard } = buildContractDetailMessage(contract, locale);
   await ctx.reply(detailText, {
-    parse_mode: 'Markdown',
+    parse_mode: 'HTML',
     reply_markup: keyboard,
   });
 };
@@ -407,4 +405,3 @@ export const backFromContractsToMenuHandler = async (ctx: BotContext) => {
     reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
   });
 };
-

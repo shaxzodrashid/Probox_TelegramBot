@@ -88,7 +88,7 @@ branch_name_label = 🏬 Fillial nomi
 branch_address_label = 📍 Manzil
 branch_work_time_label = 🕒 Ish vaqti
 branch_phone_label = 📞 Aloqa raqami
-branches_header = 📍 *Filliallar*
+branches_header = 📍 <b>Filliallar</b>
 branches_select_prompt = Fillialni tanlang yoki eng yaqin fillialni toping.
 branches_no_active = Hozircha faol filliallar mavjud emas.
 branches_nearest = Eng yaqin
@@ -101,7 +101,7 @@ branches_distance_label = 📏 Masofa
 branches_distance_unit = km
 
 # Contracts
-contracts_header = 📄 *Sizning shartnomalaringiz*
+contracts_header = 📄 <b>Sizning shartnomalaringiz</b>
 contracts_page_info = 📋 Jami: { $total } ta shartnoma | Sahifa: { $current }/{ $pages }
 contracts_total = 📋 Jami: { $total } ta shartnoma
 contracts_download = 📥 Yuklab olish
@@ -111,24 +111,24 @@ contracts_no_access = ⚠️ Sizda hozircha xaridlar mavjud emas. Probox'dan mah
 contracts_error = ❌ Shartnomalarni yuklashda xatolik yuz berdi.
 contracts_not_found_alert = ❌ Shartnoma topilmadi.
 contracts_back_to_menu = 🔙 Menyuga
-contracts_detail_header = 📄 *SHARTNOMA MA'LUMOTLARI*
-contracts_partner_label = 👤 *Hamkor:* { $name }
-contracts_product_label = 🛠 *Mahsulot:* { $name }
-contracts_number_label = 🔢 *Shartnoma raqami:* `{ $number }`
-contracts_purchase_date_label = 📅 *Sotib olingan sana:* { $date }
-contracts_due_date_label = 🏁 *Yakunlanish sanasi:* { $date }
-contracts_total_amount_label = 💰 *Shartnoma summasi:* { $amount }
-contracts_paid_label = ✅ *To'langan:* { $amount }
-contracts_next_payment_label = ⏳ *Navbatdagi to'lov:*
-contracts_date_label = 📅 *Sana:* { $date }
-contracts_amount_label = 💵 *Summa:* { $amount }
-contracts_payment_note_paid = ⚠️ *Eslatma:* Ushbu to'lovdan { $paid } to'langan. Qolgan summa: { $remaining }
-contracts_payment_note_unpaid = ⚠️ *Eslatma:* Ushbu to'lov hali amalga oshirilmagan.
-contracts_all_paid = 🎉 *Tabriklaymiz!* Barcha to'lovlar amalga oshirilgan.
+contracts_detail_header = 📄 <b>SHARTNOMA MA'LUMOTLARI</b>
+contracts_partner_label = 👤 <b>Hamkor:</b> { $name }
+contracts_product_label = 🛠 <b>Mahsulot:</b> { $name }
+contracts_number_label = 🔢 <b>Shartnoma raqami:</b> <code>{ $number }</code>
+contracts_purchase_date_label = 📅 <b>Sotib olingan sana:</b> { $date }
+contracts_due_date_label = 🏁 <b>Yakunlanish sanasi:</b> { $date }
+contracts_total_amount_label = 💰 <b>Shartnoma summasi:</b> { $amount }
+contracts_paid_label = ✅ <b>To'langan:</b> { $amount }
+contracts_next_payment_label = ⏳ <b>Navbatdagi to'lov:</b>
+contracts_date_label = 📅 <b>Sana:</b> { $date }
+contracts_amount_label = 💵 <b>Summa:</b> { $amount }
+contracts_payment_note_paid = ⚠️ <b>Eslatma:</b> Ushbu to'lovdan { $paid } to'langan. Qolgan summa: { $remaining }
+contracts_payment_note_unpaid = ⚠️ <b>Eslatma:</b> Ushbu to'lov hali amalga oshirilmagan.
+contracts_all_paid = 🎉 <b>Tabriklaymiz!</b> Barcha to'lovlar amalga oshirilgan.
 contracts_download_pdf = 📄 PDF yuklab olish
 
 # Payments
-payments_header = 💳 *Sizning to'lovlaringiz*
+payments_header = 💳 <b>Sizning to'lovlaringiz</b>
 payments_total = 📋 Jami: { $total } ta shartnoma
 payments_not_found = Hozircha sizda faol to'lovlar mavjud emas. 😊
 payments_no_access = ⚠️ Sizda hozircha xaridlar mavjud emas. Probox'dan mahsulot xarid qilganingizdan so'ng, barcha ma'lumotlar bu yerda ko'rinadi.
@@ -176,10 +176,10 @@ settings_passport_enter_series = 🔢 Iltimos, pasport seriyasi va raqamini kiri
 settings_passport_invalid_series = ❌ Noto'g'ri pasport seriyasi. U 2 ta harf va 7 ta raqamdan iborat bo'lishi kerak. Iltimos, qayta kiriting:
 settings_passport_enter_jshshir = 🔢 Iltimos, 14 xonali JShShIR (PINFL) raqamingizni kiriting:
 settings_passport_invalid_jshshir = ❌ Noto'g'ri format. JShShIR roppa-rosa 14 ta raqamdan iborat bo'lishi kerak. Iltimos, qayta kiriting:
-settings_passport_confirm_data = 📄 *Ma'lumotlarni tasdiqlash*
+settings_passport_confirm_data = 📄 <b>Ma'lumotlarni tasdiqlash</b>
     
-    🔢 *Pasport seriyasi:* { $series }
-    🔢 *JShShIR (PINFL):* { $jshshir }
+    🔢 <b>Pasport seriyasi:</b> { $series }
+    🔢 <b>JShShIR (PINFL):</b> { $jshshir }
     
     ✅ Barchasi to'g'rimi?
 settings_passport_missing_data = ⚠️ Uzr, rasm orqali ma'lumotlarni to'liq o'qib bo'lmadi. Iltimos, yetishmayotgan ma'lumotlarni o'zingiz kiriting.
@@ -210,7 +210,7 @@ support_banned = 🚫 Sizga qo'llab-quvvatlash xizmatidan foydalanish taqiqlanga
 support_cancel = 🔙 Bekor qilish
 support_not_registered = ⚠️ Avval ro'yxatdan o'ting.
 support_error = ❌ Xatolik yuz berdi. Iltimos, keyinroq urinib ko'ring.
-support_reply_received = 📩 Murojaatingiz *#{ $ticket }* ga javob:
+support_reply_received = 📩 Murojaatingiz <b>#{ $ticket }</b> ga javob:
 
 # Admin Support
 admin_ticket_reply = ✏️ Javob berish
@@ -239,7 +239,7 @@ admin_replied_at = 🕐 { $date }
 
 # Admin Panel
 admin_menu = 👨‍💼 Admin panel
-admin_menu_header = 👨‍💼 *Admin Panel*
+admin_menu_header = 👨‍💼 <b>Admin Panel</b>
     
     Kerakli bo'limni tanlang:
 admin_users = 👥 Foydalanuvchilar
@@ -251,10 +251,10 @@ back_to_user_menu = 👤 Foydalanuvchi menyusi
 admin_cancel = ❌ Bekor qilish
 
 # Admin Users
-admin_users_header = 👥 *Foydalanuvchilar ro'yxati*
+admin_users_header = 👥 <b>Foydalanuvchilar ro'yxati</b>
 admin_users_footer = 📄 Sahifa: { $current }/{ $total } | Jami: { $count } ta
 admin_user_not_found = ❌ Foydalanuvchi topilmadi.
-admin_user_detail_header = 👤 *Foydalanuvchi ma'lumotlari*
+admin_user_detail_header = 👤 <b>Foydalanuvchi ma'lumotlari</b>
 admin_phone = Telefon
 admin_language = Til
 admin_is_admin = Admin
@@ -271,7 +271,7 @@ admin_no = Yo'q
 admin_yes = Ha
 
 # Admin Statistics
-admin_stats_header = 📊 *Statistika*
+admin_stats_header = 📊 <b>Statistika</b>
 admin_stats_users = Foydalanuvchilar
 admin_stats_tickets = Murojaatlar
 admin_stats_total = Jami
@@ -320,9 +320,9 @@ admin_send_invalid_message = ❌ Xabar bo'sh bo'lmasligi kerak.
 admin_send_success = ✅ Xabar yuborildi!
 admin_send_failed = ❌ Xabar yuborishda xatolik yuz berdi.
 admin_error = ❌ Xatolik yuz berdi.
-admin_branches_header = 🏬 *Filliallar boshqaruvi*
+admin_branches_header = 🏬 <b>Filliallar boshqaruvi</b>
 admin_branches_empty = Hozircha filliallar qo'shilmagan.
-admin_branch_detail_header = 🏬 *Fillial ma'lumotlari*
+admin_branch_detail_header = 🏬 <b>Fillial ma'lumotlari</b>
 admin_branch_status_label = Holati
 admin_branch_status_active = Faol
 admin_branch_status_inactive = Nofaol
@@ -351,3 +351,177 @@ admin_branch_create_error = ❌ Fillialni yaratishda xatolik yuz berdi.
 menu_logout = 🚪 Chiqish
 menu_login = 📝 Kirish / Ro'yxatdan o'tish
 logout_success = ✅ Siz muvaffaqiyatli chiqdingiz. Qayta kirish uchun "Kirish / Ro'yxatdan o'tish" tugmasini bosing.
+menu_promotions = 🎯 Aksiya
+menu_coupons = 🎟 Kuponlar
+
+# Campaigns
+campaign_no_promotions = Hozircha aktiv aksiyalar mavjud emas.
+campaign_promotions_header = 🎯 Aktiv aksiyalar ro'yxati
+campaign_promotion_not_found = Aksiya topilmadi.
+campaign_login_required = Kuponlarni ko'rish uchun avval akkauntga kiring.
+campaign_no_coupons = Sizda hozircha aktiv kuponlar mavjud emas.
+campaign_coupons_header = 🎟 Sizning aktiv kuponlaringiz: { $count } ta
+campaign_coupon_expires = Amal qilish muddati: { $date }
+campaign_coupon_promotion = Aksiya: { $title }
+
+# Campaign admin
+admin_back_to_menu = 🔙 Menyuga qaytish
+admin_campaign_promotions = 🎯 Aksiyalar
+admin_campaign_prizes = 🎁 Yutuqlar
+admin_campaign_templates = 📨 Xabar shablonlari
+admin_campaign_coupon_search = 🔎 Kupon qidirish
+admin_campaign_coupon_export = 📤 Aktiv kupon eksporti
+admin_campaign_promotions_empty = Hozircha aksiya qo'shilmagan.
+admin_campaign_promotions_page = Jami: { $total } ta | Sahifa: { $current }/{ $pages }
+admin_campaign_promotion_create = ➕ Aksiya qo'shish
+admin_campaign_promotion_detail_header = 🎯 Aksiya kartasi
+admin_campaign_preview_summary = 👀 Saqlashdan oldingi qisqacha ko'rinish
+admin_campaign_slug_label = Slug
+admin_campaign_status_label = Holati
+admin_campaign_starts_at_label = Boshlanish vaqti
+admin_campaign_ends_at_label = Tugash vaqti
+admin_campaign_image_label = Rasm
+admin_campaign_title_uz_label = Sarlavha (UZ)
+admin_campaign_title_ru_label = Sarlavha (RU)
+admin_campaign_status_active = Faol
+admin_campaign_status_inactive = Nofaol
+admin_campaign_edit_slug = ✏️ Slug
+admin_campaign_edit_title_uz = ✏️ UZ sarlavha
+admin_campaign_edit_title_ru = ✏️ RU sarlavha
+admin_campaign_edit_about_uz = 📝 UZ matn
+admin_campaign_edit_about_ru = 📝 RU matn
+admin_campaign_edit_image = 🖼 Rasm
+admin_campaign_edit_starts_at = 🕒 Boshlanish
+admin_campaign_edit_ends_at = 🕒 Tugash
+admin_campaign_make_inactive = ⛔ Nofaol qilish
+admin_campaign_make_active = ✅ Faol qilish
+admin_campaign_remove_image = 🗑 Rasmni olib tashlash
+admin_campaign_archive = 📦 Arxivlash
+admin_campaign_promotions_back = 🔙 Ro'yxatga qaytish
+admin_campaign_skip = O'tkazib yuborish
+admin_campaign_rich_text_required = Formatlangan matn yuboring.
+admin_campaign_photo_required = Iltimos, rasm yuboring yoki o'tkazib yuborish tugmasini bosing.
+admin_campaign_photo_download_error = Rasmni yuklab bo'lmadi. Qayta urinib ko'ring.
+admin_campaign_invalid_datetime = Noto'g'ri format. Masalan: 2026-03-28 09:00
+admin_campaign_choose_yes_no = Iltimos, faqat "Ha" yoki "Yo'q" ni tanlang.
+admin_campaign_ask_slug = Aksiya slugini kiriting. Faqat kichik harf, raqam, `_` yoki `-`.
+admin_campaign_invalid_slug = Noto'g'ri slug. Misol: barakali-oy
+admin_campaign_slug_exists = Bu slug allaqachon ishlatilgan. Boshqasini kiriting.
+admin_campaign_ask_title_uz = Aksiya sarlavhasini o'zbek tilida kiriting:
+admin_campaign_ask_title_ru = Aksiya sarlavhasini rus tilida kiriting:
+admin_campaign_ask_about_uz = O'zbekcha rich text matnni yuboring. Telegram formatlashidan foydalanishingiz mumkin.
+admin_campaign_ask_about_ru = Ruscha rich text matnni yuboring. Telegram formatlashidan foydalanishingiz mumkin.
+admin_campaign_ask_image = Cover rasmni yuboring yoki o'tkazib yuboring.
+admin_campaign_ask_starts_at = Boshlanish vaqtini `YYYY-MM-DD HH:mm` formatida yuboring yoki o'tkazib yuboring.
+admin_campaign_ask_ends_at = Tugash vaqtini `YYYY-MM-DD HH:mm` formatida yuboring yoki o'tkazib yuboring.
+admin_campaign_ask_is_active = Aksiya darhol faol holatda saqlansinmi?
+admin_campaign_promotion_created = ✅ Aksiya yaratildi.
+admin_campaign_promotion_updated = ✅ Aksiya yangilandi.
+admin_campaign_status_updated = ✅ Holat yangilandi.
+admin_campaign_promotion_archived = ✅ Aksiya arxivlandi.
+admin_campaign_image_removed = ✅ Rasm olib tashlandi.
+admin_campaign_edit_prompt_slug = Yangi slugni kiriting:
+admin_campaign_edit_prompt_title_uz = Yangi o'zbekcha sarlavhani kiriting:
+admin_campaign_edit_prompt_title_ru = Yangi ruscha sarlavhani kiriting:
+admin_campaign_edit_prompt_about_uz = Yangi o'zbekcha rich text matnni yuboring:
+admin_campaign_edit_prompt_about_ru = Yangi ruscha rich text matnni yuboring:
+admin_campaign_long_content_title = ⚠️ Matn uzunligi bo'yicha ogohlantirish
+admin_campaign_long_content_body = Ushbu aksiya rasmi bilan bitta xabar sifatida yuborilishi uchun caption uzunligi { $limit } belgidan oshmasligi kerak.
+admin_campaign_long_content_item = • { $locale } matni: { $count } belgi
+admin_campaign_long_content_question = Matnni shu holatda qoldirasizmi yoki tahrirlaysizmi?
+admin_campaign_long_content_keep = ✅ Shu holatda qoldirish
+admin_campaign_long_content_edit = ✏️ Matnni tahrirlash
+admin_campaign_long_content_edit_uz = 🇺🇿 UZ matn
+admin_campaign_long_content_edit_ru = 🇷🇺 RU matn
+admin_campaign_long_content_choose_locale = Qaysi matnni tahrirlashni tanlang:
+admin_campaign_long_content_choose_locale_invalid = Iltimos, faqat mavjud variantlardan birini tanlang.
+admin_campaign_edit_prompt_image = Yangi cover rasmni yuboring:
+admin_campaign_edit_prompt_starts_at = Yangi boshlanish vaqtini `YYYY-MM-DD HH:mm` formatida yuboring yoki tozalash uchun o'tkazib yuboring.
+admin_campaign_edit_prompt_ends_at = Yangi tugash vaqtini `YYYY-MM-DD HH:mm` formatida yuboring yoki tozalash uchun o'tkazib yuboring.
+admin_campaign_assign_coupons_label = Kuponlarni biriktirish
+admin_campaign_assign_coupons_enable = 📥 Kuponlarni biriktirishni yoqish
+admin_campaign_assign_coupons_disable = 🚫 Kuponlarni biriktirishni o'chirish
+admin_campaign_assign_coupons_status_updated = ✅ Kuponlarni biriktirish holati yangilandi.
+admin_campaign_ask_assign_coupons = Yangi ro'yxatdan o'tganlar uchun kuponlar ushbu aksiyaga biriktirilsinmi?
+admin_campaign_edit_prompt_assign_coupons = Kuponlarni biriktirish holatini tanlang:
+admin_campaign_prizes_empty = Hozircha yutuqlar yo'q.
+admin_campaign_prizes_page = Jami: { $total } ta | Sahifa: { $current }/{ $pages }
+admin_campaign_prize_create = ➕ Yutuq qo'shish
+admin_campaign_prizes_back = 🔙 Yutuqlar ro'yxatiga qaytish
+admin_campaign_prize_detail_header = 🎁 Yutuq kartasi
+admin_campaign_prize_promotion_label = Aksiya
+admin_campaign_prize_description_label = Izoh
+admin_campaign_prize_description_empty = Izoh kiritilmagan.
+admin_campaign_edit_prize_promotion = 🎯 Aksiyani almashtirish
+admin_campaign_edit_prize_title = ✏️ Nom
+admin_campaign_edit_prize_description = 📝 Izoh
+admin_campaign_ask_prize_promotion = Yutuq qaysi aksiyaga tegishli ekanini tanlang:
+admin_campaign_ask_prize_title = Yutuq nomini kiriting:
+admin_campaign_ask_prize_description = Yutuq izohini kiriting yoki o'tkazib yuboring:
+admin_campaign_edit_prompt_prize_promotion = Yangi aksiyani tanlang:
+admin_campaign_edit_prompt_prize_title = Yangi yutuq nomini kiriting:
+admin_campaign_edit_prompt_prize_description = Yangi izohni kiriting yoki tozalash uchun o'tkazib yuboring:
+admin_campaign_prize_created = ✅ Yutuq yaratildi.
+admin_campaign_prize_updated = ✅ Yutuq yangilandi.
+admin_campaign_prize_deleted = ✅ Yutuq o'chirildi.
+admin_campaign_prize_status_updated = ✅ Yutuq holati yangilandi.
+admin_campaign_prize_not_found = Yutuq topilmadi.
+admin_campaign_prize_no_promotions = Avval kamida bitta aksiya yarating.
+admin_campaign_no_active_prize = Ushbu aksiya uchun aktiv yutuq topilmadi.
+admin_campaign_choose_winner_prize = G'olib uchun yutuqni tanlang:
+admin_campaign_templates_empty = Hozircha xabar shablonlari yo'q.
+admin_campaign_templates_back = 🔙 Shablonlar ro'yxatiga qaytish
+admin_campaign_coupon_search_prompt = PRO bilan boshlanadigan 7 belgili kupon kodini yuboring:
+admin_campaign_coupon_not_found = Kupon topilmadi.
+admin_campaign_coupon_detail_header = 🎟 Kupon ma'lumotlari
+admin_campaign_mark_winner = 🏆 G'olib qilish
+admin_campaign_winner_marked = Kupon g'olib sifatida belgilandi va xabar yuborildi.
+admin_campaign_coupon_export_ready = Aktiv kuponlar Excel fayl ko'rinishida tayyor.
+admin_campaign_template_create = ➕ Shabloni qo'shish
+admin_campaign_template_detail_header = 📝 Xabar shabloni kartasi
+admin_campaign_edit_template_key = 🔑 Kalit
+admin_campaign_edit_template_type = 📂 Tur
+admin_campaign_edit_template_title = ✏️ Sarlavha
+admin_campaign_edit_template_content_uz = 🇺🇿 O'zbekcha matn
+admin_campaign_edit_template_content_ru = 🇷🇺 Ruscha matn
+admin_campaign_edit_template_is_active = 🟢 Faol
+admin_campaign_delete = 🗑 O'chirish
+admin_template_created = ✅ Shablon yaratildi.
+admin_template_updated = ✅ Shablon yangilandi.
+admin_template_deleted = ✅ Shablon o'chirildi.
+admin_template_status_updated = ✅ Shablon holati yangilandi.
+admin_campaign_template_create_guidance =
+    📝 Yangi xabar shabloni yaratish bo'yicha yo'riqnoma
+
+    1. <b>Sarlavha</b>: admin ichida ko'rinadigan nom. Masalan: Visited Store
+    2. <b>Kalit</b>: noyob bo'lishi kerak. Faqat lotincha yozing. Masalan: visited_store_v1
+    3. <b>Tur</b>: xabar qaysi hodisa uchun ishlashini belgilaydi. Do'konga tashrif uchun `store_visit` ni tanlang.
+    4. <b>Matn</b>: o'zgaruvchilarni <code>{"{{customer_name}}"}</code> kabi formatda yozing.
+
+    Hozir amalda ishlaydigan placeholder'lar:
+    - <code>{"{{customer_name}}"}</code> -- Mijozning ismi va familiyasi
+    - <code>{"{{coupon_code}}"}</code> -- PRO bilan boshlanadigan 7 belgili kupon kodi (avtomatik ravishda inline-code formatiga o'tkaziladi)
+    - <code>{"{{payment_due_date}}"}</code> -- Navbatdagi to'lov muddati (sana)
+    - <code>{"{{product_name}}"}</code> -- Mahsulot nomi
+    - <code>{"{{referrer_name}}"}</code> -- Taklif qilgan kishi ismi
+    - <code>{"{{prize_name}}"}</code> -- Yutuq nomi
+
+    Do'konga tashrif uchun tavsiya etilgan misol:
+    <blockquote>Assalomu alaykum, <code>{"{{customer_name}}"}</code>! Probox do'konimizga tashrif buyurganingiz uchun rahmat. Siz uchun {"{{coupon_code}}"} maxsus promo-kodi yaratildi.</blockquote>
+
+    Bekor qilish uchun istalgan bosqichda "Bekor qilish" tugmasini bosing.
+admin_campaign_ask_template_key = Shablon kalitini kiriting (masalan: order_success):
+admin_campaign_ask_template_title = Shablon sarlavhasini kiriting:
+admin_campaign_ask_template_content_uz = O'zbekcha matnni kiriting ( <code>{"{{var}}"}</code> formatidagi o'zgaruvchilardan foydalanishingiz mumkin):
+admin_campaign_ask_template_content_ru = Ruscha matnni kiriting ( <code>{"{{var}}"}</code> formatidagi o'zgaruvchilardan foydalanishingiz mumkin):
+admin_campaign_ask_template_type = Shablon turini tanlang:
+admin_campaign_delete_confirm = Ushbu shablonni o'chirib tashlamoqchimisiz?
+admin_campaign_edit_prompt_template_key = Yangi kalitni kiriting:
+admin_campaign_edit_prompt_template_title = Yangi sarlavhani kiriting:
+admin_campaign_edit_prompt_template_content_uz = Yangi o'zbekcha matnni kiriting:
+admin_campaign_edit_prompt_template_content_ru = Yangi ruscha matnni kiriting:
+admin_campaign_template_type_invalid = Noto'g'ri tur tanlandi.
+
+admin_campaign_winner_template_missing = ⚠️ G'oliblar uchun xabar shabloni (winner_notification) topilmadi. Uni yaratmasangiz foydalanuvchiga xabar yuborib bo'lmaydi.
+admin_campaign_no_prizes_in_db = ⚠️ Database'da hech qanday yutuq topilmadi. Avval yutuq qo'shing.
+

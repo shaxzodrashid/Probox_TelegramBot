@@ -75,4 +75,25 @@ export class SapService {
       throw new Error(`SAP query failed (getBusinessPartnersByPhones)`);
     }
   }
+
+  async getBatchPurchasesByCardCodes(cardCodes: string[]): Promise<IPurchaseInstallment[]> {
+    if (cardCodes.length === 0) return [];
+
+    const placeholders = cardCodes.map(() => '?').join(',');
+    const sql = loadSQL('sap/queries/get-bp-purchases-batch.sql')
+      .replace(/{{schema}}/g, this.schema)
+      .replace(/{{cardCodes}}/g, placeholders);
+
+    this.logger.info(`📦 [SAP] Fetching batch purchases (${cardCodes.length} card codes)`);
+
+    try {
+      return await this.hana.executeOnce<IPurchaseInstallment>(sql, cardCodes);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getBatchPurchasesByCardCodes failed', message);
+
+      throw new Error(`SAP query failed (getBatchPurchasesByCardCodes)`);
+    }
+  }
 }

@@ -9,6 +9,7 @@ import { i18n } from '../i18n';
 import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
 import { logger } from '../utils/logger';
 import { formatUzPhone } from '../utils/uz-phone.util';
+import { escapeHtml } from '../utils/telegram-rich-text.util';
 import { parseWorkTimeRange } from '../utils/branch.util';
 
 /**
@@ -19,7 +20,8 @@ export async function adminBroadcastConversation(
     conversation: BotConversation,
     ctx: BotContext
 ) {
-    const locale = ctx.session?.__language_code || 'uz';
+    const session = await conversation.external((c) => c.session);
+    const locale = session?.__language_code || 'uz';
     const adminId = ctx.from!.id;
 
     // Check if there's already a broadcast in progress
@@ -121,16 +123,16 @@ export async function adminBroadcastConversation(
         const registeredDate = new Date(targetUser.created_at).toLocaleDateString(locale === 'uz' ? 'uz-UZ' : 'ru-RU');
 
         let details = `${i18n.t(locale, 'admin_user_detail_header')}\n\n`;
-        details += `🆔 ID: \`${targetUser.telegram_id}\`\n`;
-        details += `👤 ${i18n.t(locale, 'admin_user_name')}: ${name}\n`;
-        details += `📱 ${i18n.t(locale, 'admin_phone')}: ${phone}\n`;
-        details += `🌐 ${i18n.t(locale, 'admin_language')}: ${lang}\n`;
+        details += `🆔 ID: <code>${escapeHtml(targetUser.telegram_id.toString())}</code>\n`;
+        details += `👤 ${i18n.t(locale, 'admin_user_name')}: ${escapeHtml(name)}\n`;
+        details += `📱 ${i18n.t(locale, 'admin_phone')}: ${escapeHtml(phone)}\n`;
+        details += `🌐 ${i18n.t(locale, 'admin_language')}: ${escapeHtml(lang)}\n`;
         if (targetUser.sap_card_code) {
-            details += `💳 SAP: \`${targetUser.sap_card_code}\`\n`;
+            details += `💳 SAP: <code>${escapeHtml(targetUser.sap_card_code)}</code>\n`;
         }
-        details += `📅 ${i18n.t(locale, 'admin_registered')}: ${registeredDate}`;
+        details += `📅 ${i18n.t(locale, 'admin_registered')}: ${escapeHtml(registeredDate)}`;
 
-        await ctx.reply(details, { parse_mode: 'Markdown' });
+        await ctx.reply(details, { parse_mode: 'HTML' });
 
         targetUserId = targetUser.telegram_id;
         userCount = 1;
@@ -271,7 +273,8 @@ export async function adminSearchConversation(
     conversation: BotConversation,
     ctx: BotContext
 ) {
-    const locale = ctx.session?.__language_code || 'uz';
+    const session = await conversation.external((c) => c.session);
+    const locale = session?.__language_code || 'uz';
 
     // Ask for search term
     await ctx.reply(
@@ -311,13 +314,13 @@ export async function adminSearchConversation(
         const phone = formatUzPhone(user.phone_number);
         const banned = user.is_support_banned ? ' 🚫' : '';
 
-        message += `${index + 1}. *${name}*${banned}\n`;
-        message += `   📱 ${phone}\n`;
-        message += `   🆔 \`${user.telegram_id}\`\n\n`;
+        message += `${index + 1}. <b>${escapeHtml(name)}</b>${banned}\n`;
+        message += `   📱 ${escapeHtml(phone)}\n`;
+        message += `   🆔 <code>${escapeHtml(user.telegram_id.toString())}</code>\n\n`;
     });
 
     await ctx.reply(message, {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML',
         reply_markup: getAdminMenuKeyboard(locale),
     });
 }
@@ -330,8 +333,9 @@ export async function adminSendMessageConversation(
     conversation: BotConversation,
     ctx: BotContext
 ) {
-    const locale = ctx.session?.__language_code || 'uz';
-    const targetUserId = ctx.session.adminSendTargetUser;
+    const session = await conversation.external((c) => c.session);
+    const locale = session?.__language_code || 'uz';
+    const targetUserId = session?.adminSendTargetUser;
 
     if (!targetUserId) {
         await ctx.reply(i18n.t(locale, 'admin_error'));
@@ -354,7 +358,9 @@ export async function adminSendMessageConversation(
             { reply_markup: getAdminMenuKeyboard(locale) }
         );
         // Clear session
-        ctx.session.adminSendTargetUser = undefined;
+        await conversation.external((c) => {
+            if (c.session) c.session.adminSendTargetUser = undefined;
+        });
         return;
     }
 
@@ -387,14 +393,17 @@ export async function adminSendMessageConversation(
     }
 
     // Clear session
-    ctx.session.adminSendTargetUser = undefined;
+    await conversation.external((c) => {
+        if (c.session) c.session.adminSendTargetUser = undefined;
+    });
 }
 
 export async function adminAddBranchConversation(
     conversation: BotConversation,
     ctx: BotContext
 ) {
-    const locale = ctx.session?.__language_code || 'uz';
+    const session = await conversation.external((c) => c.session);
+    const locale = session?.__language_code || 'uz';
     const cancelText = i18n.t(locale, 'admin_cancel');
     const cancelKeyboard = getAdminCancelKeyboard(locale);
 

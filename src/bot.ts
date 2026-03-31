@@ -35,6 +35,17 @@ import {
   adminSendMessageConversation,
   adminAddBranchConversation
 } from './conversations/admin.conversation';
+import {
+  adminCouponSearchConversation,
+  adminPrizeCreateConversation,
+  adminPrizeEditConversation,
+  adminPromotionCreateConversation,
+  adminPromotionEditConversation,
+} from './conversations/admin-campaign.conversation';
+import {
+  adminTemplateCreateConversation,
+  adminTemplateEditConversation
+} from './conversations/admin-template.conversation';
 import { branchesConversation } from './conversations/branches.conversation';
 import { supportHandler } from './handlers/support.handler';
 import {
@@ -60,14 +71,80 @@ import {
   adminBranchDetailHandler,
   adminBranchCreateHandler,
   adminBranchDeactivateConfirmHandler,
-  adminBranchDeactivateHandler
+  adminBranchDeactivateHandler,
+  adminCampaignPromotionsHandler,
+  adminPromotionPageHandler,
+  adminPromotionDetailHandler,
+  adminPromotionBackToListHandler,
+  adminPromotionCreateHandler,
+  adminPromotionEditHandler,
+  adminPromotionToggleHandler,
+  adminPromotionAssignCouponsToggleHandler,
+  adminPromotionArchiveHandler,
+  adminPromotionImageRemoveHandler,
+  adminCampaignPrizesHandler,
+  adminPrizeBackToListHandler,
+  adminPrizeCreateHandler,
+  adminPrizeDeleteHandler,
+  adminPrizeDetailHandler,
+  adminPrizeEditHandler,
+  adminPrizePageHandler,
+  adminPrizeToggleHandler,
+  adminCampaignTemplatesHandler,
+  adminTemplateDetailHandler,
+  adminTemplateToggleHandler,
+  adminTemplateDeleteHandler,
+  adminTemplateCreateHandler,
+  adminTemplateEditHandler,
+  adminTemplateBackToListHandler,
+  adminTemplatePageHandler,
+  adminCampaignCouponSearchHandler,
+  adminCampaignCouponExportHandler,
+  adminCouponMarkWinnerHandler,
+  adminWinnerPrizeSelectHandler
 } from './handlers/admin.handler';
+import {
+  campaignBackToPromotionsHandler,
+  campaignBackToMenuHandler,
+  couponsHandler,
+  promotionDetailHandler,
+  promotionSelectionHandler,
+  promotionsHandler
+} from './handlers/campaign.handler';
 import { branchesHandler } from './handlers/branches.handler';
+import {
+  ADMIN_PRIZE_BACK_TO_LIST_CALLBACK,
+  ADMIN_PRIZE_CREATE_CALLBACK,
+  ADMIN_PRIZE_DELETE_CALLBACK_PREFIX,
+  ADMIN_PRIZE_DETAIL_CALLBACK_PREFIX,
+  ADMIN_PRIZE_EDIT_CALLBACK_PREFIX,
+  ADMIN_PRIZE_PAGE_CALLBACK_PREFIX,
+  ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX,
+  ADMIN_PROMOTION_ARCHIVE_CALLBACK_PREFIX,
+  ADMIN_PROMOTION_BACK_TO_LIST_CALLBACK,
+  ADMIN_PROMOTION_CREATE_CALLBACK,
+  ADMIN_PROMOTION_DETAIL_CALLBACK_PREFIX,
+  ADMIN_PROMOTION_EDIT_CALLBACK_PREFIX,
+  ADMIN_PROMOTION_IMAGE_REMOVE_CALLBACK_PREFIX,
+  ADMIN_PROMOTION_PAGE_CALLBACK_PREFIX,
+  ADMIN_PROMOTION_TOGGLE_CALLBACK_PREFIX,
+  ADMIN_PROMOTION_ASSIGN_COUPONS_TOGGLE_CALLBACK_PREFIX,
+  ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX
+} from './keyboards/campaign.keyboards';
 import {
   ADMIN_BRANCH_DEACTIVATE_CALLBACK_PREFIX,
   ADMIN_BRANCH_DEACTIVATE_CONFIRM_CALLBACK_PREFIX,
   ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX
 } from './keyboards/branch.keyboards';
+import {
+  ADMIN_TEMPLATE_PAGE_CALLBACK_PREFIX,
+  ADMIN_TEMPLATE_DETAIL_CALLBACK_PREFIX,
+  ADMIN_TEMPLATE_EDIT_CALLBACK_PREFIX,
+  ADMIN_TEMPLATE_TOGGLE_CALLBACK_PREFIX,
+  ADMIN_TEMPLATE_DELETE_CALLBACK_PREFIX,
+  ADMIN_TEMPLATE_CREATE_CALLBACK,
+  ADMIN_TEMPLATE_BACK_TO_LIST_CALLBACK
+} from './keyboards/template.keyboards';
 import {
   settingsHandler,
   changeNameHandler,
@@ -119,6 +196,13 @@ bot.use(createConversation(adminBroadcastConversation));
 bot.use(createConversation(adminSearchConversation));
 bot.use(createConversation(adminSendMessageConversation));
 bot.use(createConversation(adminAddBranchConversation));
+bot.use(createConversation(adminCouponSearchConversation));
+bot.use(createConversation(adminPrizeCreateConversation));
+bot.use(createConversation(adminPrizeEditConversation));
+bot.use(createConversation(adminPromotionCreateConversation));
+bot.use(createConversation(adminPromotionEditConversation));
+bot.use(createConversation(adminTemplateCreateConversation));
+bot.use(createConversation(adminTemplateEditConversation));
 bot.use(createConversation(addPassportDataConversation));
 bot.use(createConversation(applicationConversation));
 bot.use(createConversation(branchesConversation));
@@ -143,10 +227,30 @@ bot.use(async (ctx, next) => {
       const isRegistrationCallback = ctx.callbackQuery?.data === 'start_registration';
       const isPassportCallback = ctx.callbackQuery?.data === 'start_passport_conv';
       const isPassportText = ctx.message?.text === ctx.t('application_start_passport_button');
-      const isBackText = ctx.message?.text === ctx.t('back');
+      const isBackText = ctx.message?.text === ctx.t('back') || ctx.message?.text === ctx.t('admin_reply_cancel') || ctx.message?.text === ctx.t('admin_cancel');
       const isStartCommand = ctx.message?.text === '/start';
 
-      if (!isRegistrationCallback && !isPassportCallback && !isPassportText && !isBackText && !isStartCommand) {
+      // Check for ANY menu or admin button text. If it is, clear pending and let it through.
+      const menuKeys = [
+        'menu_contracts', 'menu_payments', 'menu_branches', 'menu_settings',
+        'menu_support', 'menu_application', 'menu_promotions', 'menu_coupons',
+        'admin_menu', 'admin_users', 'admin_branches', 'admin_broadcast',
+        'admin_stats', 'admin_export', 'admin_campaign_promotions',
+        'admin_campaign_prizes', 'admin_campaign_templates',
+        'admin_campaign_coupon_search', 'admin_campaign_coupon_export',
+        'back_to_user_menu'
+      ];
+      
+      const isMenuButton = menuKeys.some(key => ctx.message?.text === ctx.t(key));
+
+      if (isMenuButton || isBackText || isStartCommand) {
+        // User explicitly chose to go somewhere else; clear the pending redirect.
+        await redisService.delete(`pendingAction:${telegramId}`);
+        await next();
+        return;
+      }
+
+      if (!isRegistrationCallback && !isPassportCallback && !isPassportText) {
         const active = ctx.conversation.active();
         const hasActive = Object.values(active).some((count) => count > 0);
 
@@ -217,6 +321,8 @@ bot.filter(hears('menu_payments'), paymentsHandler);
 bot.filter(hears('menu_branches'), branchesHandler);
 bot.filter(hears('menu_settings'), settingsHandler);
 bot.filter(hears('menu_support'), supportHandler);
+bot.filter(hears('menu_promotions'), promotionsHandler);
+bot.filter(hears('menu_coupons'), couponsHandler);
 bot.filter(hears('menu_application'), async (ctx) => {
   await applicationHandler(ctx);
 });
@@ -229,6 +335,11 @@ bot.filter(hears('admin_branches'), adminBranchesHandler);
 bot.filter(hears('admin_broadcast'), adminBroadcastHandler);
 bot.filter(hears('admin_stats'), adminStatsHandler);
 bot.filter(hears('admin_export'), adminExportHandler);
+bot.filter(hears('admin_campaign_promotions'), adminCampaignPromotionsHandler);
+bot.filter(hears('admin_campaign_prizes'), adminCampaignPrizesHandler);
+bot.filter(hears('admin_campaign_templates'), adminCampaignTemplatesHandler);
+bot.filter(hears('admin_campaign_coupon_search'), adminCampaignCouponSearchHandler);
+bot.filter(hears('admin_campaign_coupon_export'), adminCampaignCouponExportHandler);
 bot.filter(hears('back_to_user_menu'), adminBackToMainMenuHandler);
 
 // Settings keyboard handlers
@@ -284,6 +395,20 @@ bot.hears(/^\d+\./, async (ctx) => {
   return contractSelectionHandler(ctx);
 });
 
+bot.on('message:text', async (ctx, next) => {
+  if (ctx.session.promotions?.length) {
+    const text = ctx.message.text.trim();
+    const isPromotionTitle = ctx.session.promotions.some((promotion) => promotion.title === text);
+
+    if (isPromotionTitle) {
+      await promotionSelectionHandler(ctx);
+      return;
+    }
+  }
+
+  await next();
+});
+
 // Back to menu from contracts/payments keyboard
 bot.filter(hears('back'), async (ctx) => {
   // If payments are in session, clear payments and go back
@@ -319,6 +444,36 @@ bot.callbackQuery(/^admin_user_detail:\d+$/, adminUserDetailHandler);
 bot.callbackQuery(/^admin_block_support:\d+$/, adminBlockSupportHandler);
 bot.callbackQuery(/^admin_unblock_support:\d+$/, adminUnblockSupportHandler);
 bot.callbackQuery(/^admin_send_message:\d+$/, adminSendMessageHandler);
+bot.callbackQuery(/^admin_coupon_mark_winner:.+$/, adminCouponMarkWinnerHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX}.+`), adminWinnerPrizeSelectHandler);
+bot.callbackQuery(/^promotion_detail:\d+$/, promotionDetailHandler);
+bot.callbackQuery('campaign_open_coupons', couponsHandler);
+bot.callbackQuery('campaign_back_to_promotions', campaignBackToPromotionsHandler);
+bot.callbackQuery('campaign_back_to_menu', campaignBackToMenuHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_PAGE_CALLBACK_PREFIX}\\d+$`), adminPromotionPageHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_DETAIL_CALLBACK_PREFIX}\\d+$`), adminPromotionDetailHandler);
+bot.callbackQuery(ADMIN_PROMOTION_CREATE_CALLBACK, adminPromotionCreateHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminPromotionEditHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminPromotionToggleHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_ASSIGN_COUPONS_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminPromotionAssignCouponsToggleHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_ARCHIVE_CALLBACK_PREFIX}\\d+$`), adminPromotionArchiveHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_IMAGE_REMOVE_CALLBACK_PREFIX}\\d+$`), adminPromotionImageRemoveHandler);
+bot.callbackQuery(ADMIN_PROMOTION_BACK_TO_LIST_CALLBACK, adminPromotionBackToListHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_PAGE_CALLBACK_PREFIX}\\d+$`), adminPrizePageHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_DETAIL_CALLBACK_PREFIX}\\d+$`), adminPrizeDetailHandler);
+bot.callbackQuery(ADMIN_PRIZE_CREATE_CALLBACK, adminPrizeCreateHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminPrizeEditHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminPrizeToggleHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_DELETE_CALLBACK_PREFIX}\\d+$`), adminPrizeDeleteHandler);
+bot.callbackQuery(ADMIN_PRIZE_BACK_TO_LIST_CALLBACK, adminPrizeBackToListHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_PAGE_CALLBACK_PREFIX}\\d+$`), adminTemplatePageHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_DETAIL_CALLBACK_PREFIX}\\d+$`), adminTemplateDetailHandler);
+bot.callbackQuery(ADMIN_TEMPLATE_CREATE_CALLBACK, adminTemplateCreateHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminTemplateEditHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminTemplateToggleHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_DELETE_CALLBACK_PREFIX}\\d+$`), adminTemplateDeleteHandler);
+bot.callbackQuery(ADMIN_TEMPLATE_BACK_TO_LIST_CALLBACK, adminTemplateBackToListHandler);
+
 bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX}.+$`), adminBranchDetailHandler);
 bot.callbackQuery('admin_branch_add', adminBranchCreateHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DEACTIVATE_CONFIRM_CALLBACK_PREFIX}.+$`), adminBranchDeactivateConfirmHandler);
@@ -370,4 +525,3 @@ bot.callbackQuery('continue_to_application', async (ctx) => {
     if (!isMessageToDeleteNotFoundError(err)) throw err;
   });
 });
-

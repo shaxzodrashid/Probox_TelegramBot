@@ -28,8 +28,10 @@ A powerful and scalable Telegram bot built with the [grammY](https://grammy.dev/
 
 ```text
 src/
-├── bot.ts           # Bot initialization and route registration
-├── server.ts        # Entry point (Server/Health check)
+├── bot.ts           # Telegram bot initialization and route registration
+├── server.ts        # Unified bootstrap for bot + HTTP API
+├── api/             # HTTP API routes, controllers, mappers, middlewares
+├── app/             # Runtime/bootstrap modules
 ├── config/          # Project configuration and environment variables
 ├── conversations/   # Wizard-style user flows (Registration, etc.)
 ├── database/        # Database migrations, seeds, and connection
@@ -96,6 +98,23 @@ src/
 - `npm start` - Run the compiled production bundle.
 - `npm run lint` - Run ESLint for code quality checks.
 - `npm run format` - Format code using Prettier.
+
+## HTTP API
+
+The project now includes a versioned HTTP API running alongside the Telegram bot.
+
+- Base URL: `http://127.0.0.1:3000/api/v1`
+- Public health endpoints:
+  - `GET /health`
+  - `GET /api/v1/health`
+- Protected business endpoints when `API_KEY` is set:
+  - `GET /api/v1/branches`
+  - `GET /api/v1/branches/:id`
+  - `GET /api/v1/users/:telegramId`
+  - `GET /api/v1/contracts/:cardCode?page=1&limit=10`
+  - `GET /api/v1/payments/:cardCode`
+
+If `API_KEY` is configured, send it as `x-api-key: <your-key>` or `Authorization: Bearer <your-key>`.
 
 ## 🔗 Deep Links
 

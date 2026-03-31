@@ -6,6 +6,7 @@ import { config } from '../config';
 import { logger } from '../utils/logger';
 import { isUserBlockedError } from '../utils/telegram-errors';
 import { bot } from '../bot';
+import { escapeHtml } from '../utils/telegram-rich-text.util';
 
 /**
  * BroadcastService - Broadcasting logic for admin messages
@@ -99,12 +100,12 @@ export class BroadcastService {
         try {
             if (photoFileId) {
                 await bot.api.sendPhoto(telegramId, photoFileId, {
-                    caption: message,
-                    parse_mode: 'Markdown',
+                    caption: escapeHtml(message),
+                    parse_mode: 'HTML',
                 });
             } else {
-                await bot.api.sendMessage(telegramId, message, {
-                    parse_mode: 'Markdown',
+                await bot.api.sendMessage(telegramId, escapeHtml(message), {
+                    parse_mode: 'HTML',
                 });
             }
 

@@ -9,6 +9,7 @@ import { isUserBlockedError, isMessageToDeleteNotFoundError } from '../utils/tel
 import { bot } from '../bot';
 import { config } from '../config';
 import { i18n } from '../i18n';
+import { escapeHtml } from '../utils/telegram-rich-text.util';
 
 // Redis key prefix for admin reply session data (must match handler)
 const ADMIN_REPLY_KEY_PREFIX = 'admin:reply:';
@@ -55,7 +56,7 @@ function formatRepliedMessage(
         ticketRepliedTitle
     );
 
-    const repliedAtFull = i18n.t(locale, 'admin_replied_at_full', { admin: adminName, date: dateStr });
+    const repliedAtFull = i18n.t(locale, 'admin_replied_at_full', { admin: escapeHtml(adminName), date: escapeHtml(dateStr) });
 
     return `${header}
 
@@ -88,7 +89,8 @@ export async function adminReplyConversation(
     if (!replySession || !replySession.ticketNumber || !replySession.ticketId) {
         logger.error('Admin reply conversation: Missing ticket info in Redis');
         // Use default locale for error since we don't have admin info yet
-        const adminLocale = ctx.session?.__language_code || 'uz';
+        const session = await conversation.external((c) => c.session);
+        const adminLocale = session?.__language_code || 'uz';
         await ctx.reply(i18n.t(adminLocale, 'admin_error_generic'), {
             reply_markup: { remove_keyboard: true }
         });
@@ -110,7 +112,8 @@ export async function adminReplyConversation(
     );
 
     // Get admin's locale from session
-    const adminLocale = ctx.session?.__language_code || 'uz';
+    const sessionForLocale = await conversation.external((c) => c.session);
+    const adminLocale = sessionForLocale?.__language_code || 'uz';
 
     if (!ticket || ticket.status !== 'open') {
         await ctx.reply(i18n.t(adminLocale, 'admin_already_replied'));
@@ -139,6 +142,7 @@ export async function adminReplyConversation(
 
     await ctx.reply(i18n.t(adminLocale, 'admin_reply_ask_message'), {
         reply_markup: getAdminReplyCancelKeyboard(adminLocale),
+        parse_mode: 'HTML',
     });
 
     // Wait for admin's reply message
@@ -264,10 +268,10 @@ async function processReply(
         // 4. Send reply to user
         try {
             const replyOptions: {
-                parse_mode: 'Markdown';
+                parse_mode: 'HTML';
                 reply_parameters?: { message_id: number };
             } = {
-                parse_mode: 'Markdown'
+                parse_mode: 'HTML'
             };
 
             if (ticket.message_id) {
@@ -276,11 +280,11 @@ async function processReply(
 
             if (photoFileId) {
                 await bot.api.sendPhoto(ticket.user_telegram_id, photoFileId, {
-                    caption: replyText,
+                    caption: escapeHtml(replyText),
                     ...replyOptions
                 });
             } else {
-                await bot.api.sendMessage(ticket.user_telegram_id, replyText,  replyOptions);
+                await bot.api.sendMessage(ticket.user_telegram_id, escapeHtml(replyText),  replyOptions);
             }
             logger.info(`Reply sent to user ${ticket.user_telegram_id} for ticket ${ticket.ticket_number}`);
 
