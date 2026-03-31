@@ -10,11 +10,11 @@ WHERE T0."CardType" = 'C'
   AND (
     RIGHT(
     REPLACE_REGEXPR('[^0-9]' IN T0."Phone1" WITH ''),
-    9
+    12
     ) = ?
    OR
     RIGHT(
     REPLACE_REGEXPR('[^0-9]' IN T0."Phone2" WITH ''),
-    9
+    12
     ) = ?
     );

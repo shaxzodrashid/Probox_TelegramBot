@@ -43,9 +43,9 @@ export class SapSyncCron {
     for (const user of users) {
       if (!user.phone_number) continue;
       try {
-        const { last9 } = normalizeUzPhone(user.phone_number);
-        validPhones.push(last9);
-        userMap.set(last9, user);
+        const { full } = normalizeUzPhone(user.phone_number);
+        validPhones.push(full);
+        userMap.set(full, user);
       } catch {
         this.logger.warn(`⚠️ [SAP-SYNC] Skipping invalid phone number for user ${user.telegram_id}: ${user.phone_number}`);
       }
@@ -71,13 +71,13 @@ export class SapSyncCron {
 
     for (const partner of sapPartners) {
       // Find user(s) matching this partner by phone
-      const partnerPhone1 = partner.Phone1 ? normalizeUzPhone(partner.Phone1).last9 : null;
-      const partnerPhone2 = partner.Phone2 ? normalizeUzPhone(partner.Phone2).last9 : null;
+      const partnerPhone1 = partner.Phone1 ? normalizeUzPhone(partner.Phone1).full : null;
+      const partnerPhone2 = partner.Phone2 ? normalizeUzPhone(partner.Phone2).full : null;
 
       const matchingUsers = users.filter((u) => {
         if (!u.phone_number) return false;
-        const userPhoneLast9 = normalizeUzPhone(u.phone_number).last9;
-        return userPhoneLast9 === partnerPhone1 || userPhoneLast9 === partnerPhone2;
+        const userPhoneFull = normalizeUzPhone(u.phone_number).full;
+        return userPhoneFull === partnerPhone1 || userPhoneFull === partnerPhone2;
       });
 
       for (const user of matchingUsers) {

@@ -6,6 +6,7 @@ export function normalizeUzPhone(phone: string): {
   raw: string;
   digits: string;
   last9: string;
+  full: string;
 } {
   const digits: string = extractDigits(phone);
 
@@ -19,6 +20,7 @@ export function normalizeUzPhone(phone: string): {
     raw: phone,
     digits,
     last9,
+    full: `998${last9}`,
   };
 }
 

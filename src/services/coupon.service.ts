@@ -37,7 +37,7 @@ export class CouponService {
   private static couponPromotionSchemaStatePromise: Promise<CouponPromotionSchemaState> | null = null;
   private static readonly COUPON_PREFIX = 'PRO';
   private static readonly COUPON_TOTAL_LENGTH = 7;
-  private static readonly COUPON_SUFFIX_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  private static readonly COUPON_SUFFIX_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
   static getCouponCountForEvent(date: Date = new Date()): number {
     return isHappyHourInTashkent(date) ? 2 : 1;

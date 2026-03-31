@@ -8,7 +8,7 @@ SELECT
 FROM {{schema}}."OCRD" T0
 WHERE T0."CardType" = 'C'
   AND (
-    RIGHT(REPLACE_REGEXPR('[^0-9]' IN T0."Phone1" WITH ''), 9) IN ({{phones}})
+    RIGHT(REPLACE_REGEXPR('[^0-9]' IN T0."Phone1" WITH ''), 12) IN ({{phones}})
    OR
-    RIGHT(REPLACE_REGEXPR('[^0-9]' IN T0."Phone2" WITH ''), 9) IN ({{phones}})
+    RIGHT(REPLACE_REGEXPR('[^0-9]' IN T0."Phone2" WITH ''), 12) IN ({{phones}})
   );

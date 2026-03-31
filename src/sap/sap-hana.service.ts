@@ -17,12 +17,12 @@ export class SapService {
       this.schema,
     );
 
-    const { last9 } = normalizeUzPhone(phone);
+    const { full } = normalizeUzPhone(phone);
 
-    this.logger.info(`📦 [SAP] Fetching business partner by phone (last9=${last9})`);
+    this.logger.info(`📦 [SAP] Fetching business partner by phone (full=${full})`);
 
     try {
-      return await this.hana.executeOnce<IBusinessPartner>(sql, [last9, last9]);
+      return await this.hana.executeOnce<IBusinessPartner>(sql, [full, full]);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
 
@@ -54,7 +54,7 @@ export class SapService {
   async getBusinessPartnersByPhones(phones: string[]): Promise<IBusinessPartner[]> {
     if (phones.length === 0) return [];
 
-    const normalizedPhones = phones.map((p) => normalizeUzPhone(p).last9);
+    const normalizedPhones = phones.map((p) => normalizeUzPhone(p).full);
     const placeholders = normalizedPhones.map(() => '?').join(',');
 
     const sql = loadSQL('sap/queries/get-business-partners-batch.sql')
