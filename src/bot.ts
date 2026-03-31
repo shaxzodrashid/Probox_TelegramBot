@@ -159,6 +159,8 @@ import { applicationConversation } from './conversations/application.conversatio
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
 import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from './utils/telegram-errors';
+import { processSupportRequest } from './utils/support.util';
+import { getMainKeyboardByLocale } from './keyboards';
 
 import { RedisAdapter } from '@grammyjs/storage-redis';
 import { redisService } from './redis/redis.service';
@@ -524,4 +526,63 @@ bot.callbackQuery('continue_to_application', async (ctx) => {
   await ctx.deleteMessage().catch((err) => {
     if (!isMessageToDeleteNotFoundError(err)) throw err;
   });
+});
+
+// ─── Always-On Support Catch-All ───────────────────────────────────────────
+// Captures any unhandled text or photo messages in private chats and 
+// processes them as support tickets.
+bot.on(['message:text', 'message:photo'], async (ctx) => {
+  if (ctx.chat.type !== 'private') return; // Ignore groups
+
+  const active = ctx.conversation.active();
+  if (Object.values(active).some((count) => count > 0)) {
+    return; // Ignore if in a conversation (they handle their own input)
+  }
+
+  // Also ignore if it's a command (already handled by bot.command)
+  if (ctx.message.text?.startsWith('/')) return;
+
+  const telegramId = ctx.from?.id;
+  if (!telegramId) return;
+
+  // 1. Get or create user
+  let user = await UserService.getUserByTelegramId(telegramId);
+  if (!user) {
+    const locale = (await ctx.i18n.getLocale()) || 'uz';
+    user = await UserService.createUser({
+        telegram_id: telegramId,
+        first_name: ctx.from?.first_name,
+        last_name: ctx.from?.last_name,
+        language_code: locale,
+    });
+  }
+
+  // 2. Check if user is banned from support
+  if (user.is_support_banned) {
+      const locale = (await ctx.i18n.getLocale()) || 'uz';
+      const isLoggedIn = user ? !user.is_logged_out : false;
+      await ctx.reply(ctx.t('support_banned'), {
+          reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
+      });
+      return;
+  }
+
+  // 3. Process the support request
+  const locale = (await ctx.i18n.getLocale()) || 'uz';
+  const text = ctx.message.text?.trim() || ctx.message.caption?.trim() || `[${ctx.t('admin_broadcast_enter_message')}]`;
+  const photoFileId = ctx.message.photo?.[ctx.message.photo.length - 1].file_id;
+
+  try {
+    await processSupportRequest(
+        bot.api,
+        ctx,
+        user,
+        text,
+        ctx.message.message_id,
+        photoFileId,
+        locale
+    );
+  } catch (error) {
+    // Already logged in processSupportRequest
+  }
 });

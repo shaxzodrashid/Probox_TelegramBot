@@ -6,9 +6,12 @@ const REQUIRED_COLUMNS = {
     'id',
     'code',
     'promotion_id',
+    'registration_event_id',
     'source_type',
     'status',
     'issued_phone_snapshot',
+    'lead_id',
+    'customer_full_name',
     'expires_at',
     'won_at',
     'is_active',
@@ -38,6 +41,38 @@ const REQUIRED_COLUMNS = {
     'created_at',
     'updated_at',
   ],
+  coupon_registration_events: [
+    'id',
+    'user_id',
+    'promotion_id',
+    'phone_number',
+    'lead_id',
+    'customer_full_name',
+    'status',
+    'product_name',
+    'referred_phone_number',
+    'processed_at',
+    'created_at',
+    'updated_at',
+  ],
+  referrals: [
+    'id',
+    'referrer_user_id',
+    'created_from_event_id',
+    'referrer_phone_snapshot',
+    'referrer_full_name_snapshot',
+    'referred_phone_number',
+    'created_at',
+    'updated_at',
+  ],
+  referral_reward_logs: [
+    'id',
+    'referral_id',
+    'registration_event_id',
+    'rewarded_coupon_count',
+    'created_at',
+    'updated_at',
+  ],
 } as const;
 
 const getMissingColumns = async (
@@ -45,6 +80,12 @@ const getMissingColumns = async (
 ): Promise<string[]> => {
   const missing: string[] = [];
   logger.info(`Validating columns for table: ${tableName}...`);
+
+  const tableExists = await db.schema.hasTable(tableName);
+  if (!tableExists) {
+    logger.warn(`Missing table: ${tableName}`);
+    return [...REQUIRED_COLUMNS[tableName]];
+  }
   
   for (const columnName of REQUIRED_COLUMNS[tableName]) {
     try {
@@ -69,6 +110,9 @@ export const validateDatabaseSchema = async (): Promise<void> => {
   const missingCouponColumns = await getMissingColumns('coupons');
   const missingTemplateColumns = await getMissingColumns('message_templates');
   const missingPromotionColumns = await getMissingColumns('promotions');
+  const missingCouponEventColumns = await getMissingColumns('coupon_registration_events');
+  const missingReferralColumns = await getMissingColumns('referrals');
+  const missingReferralRewardLogColumns = await getMissingColumns('referral_reward_logs');
 
   const issues: string[] = [];
   const pendingMigrationNames = pendingMigrations.map((migration: { file?: string; name?: string } | string) =>
@@ -95,6 +139,18 @@ export const validateDatabaseSchema = async (): Promise<void> => {
 
   if (missingPromotionColumns.length > 0) {
     issues.push(`Missing columns in promotions: ${missingPromotionColumns.join(', ')}`);
+  }
+
+  if (missingCouponEventColumns.length > 0) {
+    issues.push(`Missing columns in coupon_registration_events: ${missingCouponEventColumns.join(', ')}`);
+  }
+
+  if (missingReferralColumns.length > 0) {
+    issues.push(`Missing columns in referrals: ${missingReferralColumns.join(', ')}`);
+  }
+
+  if (missingReferralRewardLogColumns.length > 0) {
+    issues.push(`Missing columns in referral_reward_logs: ${missingReferralRewardLogColumns.join(', ')}`);
   }
 
   if (issues.length > 0) {

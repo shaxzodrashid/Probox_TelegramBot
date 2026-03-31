@@ -4,7 +4,7 @@ import { ApiError } from '../errors/api-error';
 
 const STRICT_UZ_PHONE_REGEX = /^\+998\d{9}$/;
 
-const validatePayload = (payload: CouponRegistrationPayload): void => {
+export const validatePayload = (payload: CouponRegistrationPayload): void => {
   if (!STRICT_UZ_PHONE_REGEX.test(payload.phone_number)) {
     throw new ApiError(
       400,
@@ -18,6 +18,22 @@ const validatePayload = (payload: CouponRegistrationPayload): void => {
       400,
       'referred_by must match +998XXXXXXXXX format.',
       'INVALID_REFERRED_BY',
+    );
+  }
+
+  if (!payload.full_name?.trim()) {
+    throw new ApiError(
+      400,
+      'full_name is required.',
+      'MISSING_FULL_NAME',
+    );
+  }
+
+  if (!payload.lead_id?.trim()) {
+    throw new ApiError(
+      400,
+      'lead_id is required.',
+      'MISSING_LEAD_ID',
     );
   }
 

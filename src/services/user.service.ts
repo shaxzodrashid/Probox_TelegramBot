@@ -19,6 +19,11 @@ export interface User {
 }
 
 export class UserService {
+  static async getUserById(id: number): Promise<User | null> {
+    const user = await db('users').where('id', id).first();
+    return user || null;
+  }
+
   static async getUserByPhoneNumber(phoneNumber: string): Promise<User | null> {
     const user = await db('users').where('phone_number', phoneNumber).first();
     return user || null;
@@ -110,6 +115,16 @@ export class UserService {
   static async getUsersWithSapCardCode(): Promise<User[]> {
     return db('users')
       .whereNotNull('sap_card_code')
+      .select('*');
+  }
+
+  static async getUsersByIds(ids: number[]): Promise<User[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return db('users')
+      .whereIn('id', ids)
       .select('*');
   }
 

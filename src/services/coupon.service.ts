@@ -9,9 +9,12 @@ export interface Coupon {
   id: number;
   code: string;
   promotion_id?: number | null;
+  registration_event_id?: number | null;
   source_type: CouponSourceType;
   status: CouponStatus;
   issued_phone_snapshot: string;
+  lead_id?: string | null;
+  customer_full_name?: string | null;
   expires_at: Date;
   won_at?: Date | null;
   is_active: boolean;
@@ -72,10 +75,13 @@ export class CouponService {
   static async createCouponsForUser(params: {
     userId: number;
     promotionId?: number | null;
+    registrationEventId?: number | null;
     sourceType: CouponSourceType;
     phoneSnapshot: string;
+    leadId?: string | null;
+    customerFullName?: string | null;
     issuedAt?: Date;
-  }): Promise<Coupon[]> {
+  }, executor: Knex | Knex.Transaction = db): Promise<Coupon[]> {
     const issuedAt = params.issuedAt || new Date();
     const count = this.getCouponCountForEvent(issuedAt);
     const expiresAt = this.calculateExpiry(issuedAt);
@@ -84,19 +90,22 @@ export class CouponService {
     for (let i = 0; i < count; i += 1) {
       const code = await this.generateUniqueCode();
 
-      const [coupon] = await db<Coupon>('coupons')
+      const [coupon] = await executor<Coupon>('coupons')
         .insert({
           code,
           promotion_id: params.promotionId || null,
+          registration_event_id: params.registrationEventId || null,
           source_type: params.sourceType,
           status: 'active',
           issued_phone_snapshot: params.phoneSnapshot,
+          lead_id: params.leadId || null,
+          customer_full_name: params.customerFullName || null,
           expires_at: expiresAt,
           is_active: true,
         })
         .returning('*');
 
-      await db('coupon_user_mappings').insert({
+      await executor('coupon_user_mappings').insert({
         user_id: params.userId,
         coupon_id: coupon.id,
       });

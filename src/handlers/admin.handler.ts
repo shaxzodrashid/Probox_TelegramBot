@@ -1006,8 +1006,8 @@ export const adminTemplateEditHandler = async (ctx: BotContext) => {
 
         const locale = getLocale(ctx);
         const parts = ctx.callbackQuery?.data?.split(':') || [];
-        const templateId = Number(parts[0]?.slice(ADMIN_TEMPLATE_EDIT_CALLBACK_PREFIX.length) || 0);
-        const field = parts[1];
+        const templateId = Number(parts[1] || 0);
+        const field = parts[2];
 
         if (!templateId || !field) {
             await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true }).catch(() => undefined);
