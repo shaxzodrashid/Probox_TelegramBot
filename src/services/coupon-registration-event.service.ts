@@ -27,9 +27,12 @@ export class CouponRegistrationEventService {
     status: CouponRegistrationStatus,
     executor: DbExecutor = db,
   ): Promise<CouponRegistrationEvent | null> {
+    const last9 = phoneNumber.replace(/\D/g, '').slice(-9);
+    const normalized = `+998${last9}`;
+
     const event = await executor<CouponRegistrationEvent>('coupon_registration_events')
       .where({
-        phone_number: phoneNumber,
+        phone_number: normalized,
         lead_id: leadId,
         status,
       })
@@ -42,9 +45,20 @@ export class CouponRegistrationEventService {
     data: Omit<CouponRegistrationEvent, 'id' | 'processed_at' | 'created_at' | 'updated_at'>,
     executor: DbExecutor = db,
   ): Promise<CouponRegistrationEvent> {
+    const last9 = data.phone_number.replace(/\D/g, '').slice(-9);
+    const normalizedPhone = `+998${last9}`;
+    
+    let normalizedReferredPhone = data.referred_phone_number;
+    if (normalizedReferredPhone) {
+      const referredLast9 = normalizedReferredPhone.replace(/\D/g, '').slice(-9);
+      normalizedReferredPhone = `+998${referredLast9}`;
+    }
+
     const [event] = await executor<CouponRegistrationEvent>('coupon_registration_events')
       .insert({
         ...data,
+        phone_number: normalizedPhone,
+        referred_phone_number: normalizedReferredPhone,
         processed_at: new Date(),
       })
       .returning('*');

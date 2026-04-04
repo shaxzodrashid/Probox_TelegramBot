@@ -73,6 +73,22 @@ const REQUIRED_COLUMNS = {
     'created_at',
     'updated_at',
   ],
+  faqs: [
+    'id',
+    'question_uz',
+    'question_ru',
+    'question_en',
+    'answer_uz',
+    'answer_ru',
+    'answer_en',
+    'status',
+    'created_by_admin_telegram_id',
+    'locked_by_admin_telegram_id',
+    'workflow_stage',
+    'vector_embedding',
+    'created_at',
+    'updated_at',
+  ],
 } as const;
 
 const getMissingColumns = async (
@@ -113,6 +129,7 @@ export const validateDatabaseSchema = async (): Promise<void> => {
   const missingCouponEventColumns = await getMissingColumns('coupon_registration_events');
   const missingReferralColumns = await getMissingColumns('referrals');
   const missingReferralRewardLogColumns = await getMissingColumns('referral_reward_logs');
+  const missingFaqColumns = await getMissingColumns('faqs');
 
   const issues: string[] = [];
   const pendingMigrationNames = pendingMigrations.map((migration: { file?: string; name?: string } | string) =>
@@ -151,6 +168,10 @@ export const validateDatabaseSchema = async (): Promise<void> => {
 
   if (missingReferralRewardLogColumns.length > 0) {
     issues.push(`Missing columns in referral_reward_logs: ${missingReferralRewardLogColumns.join(', ')}`);
+  }
+
+  if (missingFaqColumns.length > 0) {
+    issues.push(`Missing columns in faqs: ${missingFaqColumns.join(', ')}`);
   }
 
   if (issues.length > 0) {

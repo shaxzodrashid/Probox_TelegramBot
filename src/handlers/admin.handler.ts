@@ -66,6 +66,18 @@ import {
 } from '../keyboards/template.keyboards';
 import { MessageTemplateEditableField } from '../types/context';
 import { escapeHtml } from '../utils/telegram-rich-text.util';
+import {
+    ADMIN_FAQ_BACK_CALLBACK,
+    ADMIN_FAQ_BACK_TO_LIST_CALLBACK,
+    ADMIN_FAQ_CREATE_CALLBACK,
+    ADMIN_FAQ_DETAIL_CALLBACK_PREFIX,
+    ADMIN_FAQ_PAGE_CALLBACK_PREFIX,
+    ADMIN_FAQ_RESUME_CALLBACK,
+    getAdminFaqDetailKeyboard,
+    getAdminFaqListKeyboard,
+} from '../keyboards/faq.keyboards';
+import { FaqService } from '../services/faq.service';
+import { FaqRecord } from '../types/faq.types';
 
 /**
  * Check if user is an admin
@@ -102,6 +114,119 @@ const cleanupCallbackMessage = async (ctx: BotContext) => {
     });
     await ctx.deleteMessage().catch((err) => {
         if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
+};
+
+const ADMIN_FAQ_PAGE_SIZE = 10;
+
+const getFaqQuestionByLocale = (faq: FaqRecord, locale: string) => {
+    if (locale === 'ru') {
+        return faq.question_ru || faq.question_uz || faq.question_en;
+    }
+
+    return faq.question_uz || faq.question_ru || faq.question_en;
+};
+
+const buildAdminFaqListText = (
+    locale: string,
+    faqs: FaqRecord[],
+    page: number,
+    total: number,
+) => {
+    const lines = [`<b>${escapeHtml(i18n.t(locale, 'admin_faq_section_header'))}</b>`];
+
+    if (total === 0) {
+        lines.push('');
+        lines.push(escapeHtml(i18n.t(locale, 'admin_faq_empty_list')));
+        return lines.join('\n');
+    }
+
+    const start = (page - 1) * ADMIN_FAQ_PAGE_SIZE + 1;
+    const end = start + faqs.length - 1;
+
+    lines.push('');
+    lines.push(`<b>${escapeHtml(i18n.t(locale, 'admin_faq_list_hint', { start, end, total }))}</b>`);
+    lines.push('');
+
+    faqs.forEach((faq, index) => {
+        const itemNumber = start + index;
+        lines.push(`<b>${itemNumber}.</b> ${escapeHtml(getFaqQuestionByLocale(faq, locale))}`);
+
+        if (index !== faqs.length - 1) {
+            lines.push('');
+        }
+    });
+
+    return lines.join('\n');
+};
+
+const buildAdminFaqDetailText = (locale: string, faq: FaqRecord) => {
+    return [
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_title'))}</b>`,
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_question_uz'))}</b>`,
+        escapeHtml(faq.question_uz),
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_question_ru'))}</b>`,
+        escapeHtml(faq.question_ru),
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_question_en'))}</b>`,
+        escapeHtml(faq.question_en),
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_answer_uz'))}</b>`,
+        escapeHtml(faq.answer_uz),
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_answer_ru'))}</b>`,
+        escapeHtml(faq.answer_ru),
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_answer_en'))}</b>`,
+        escapeHtml(faq.answer_en),
+    ].join('\n');
+};
+
+const showAdminFaqList = async (
+    ctx: BotContext,
+    locale: string,
+    page: number,
+) => {
+    const hasDraft = Boolean(await FaqService.getLockedDraftForAdmin(ctx.from!.id));
+    const result = await FaqService.listPublishedFaqs(page, ADMIN_FAQ_PAGE_SIZE);
+
+    ctx.session.adminFaqListPage = result.page;
+
+    await ctx.reply(buildAdminFaqListText(locale, result.items, result.page, result.total), {
+        parse_mode: 'HTML',
+        reply_markup: getAdminFaqListKeyboard(
+            result.items,
+            result.page,
+            result.totalPages,
+            locale,
+            {
+                hasDraft,
+                total: result.total,
+                pageSize: result.pageSize,
+            },
+        ),
+    });
+};
+
+const showAdminFaqDetailCard = async (
+    ctx: BotContext,
+    locale: string,
+    faqId: number,
+) => {
+    const hasDraft = Boolean(await FaqService.getLockedDraftForAdmin(ctx.from!.id));
+    const faq = await FaqService.getPublishedFaqById(faqId);
+
+    if (!faq) {
+        await ctx.reply(i18n.t(locale, 'admin_faq_not_found'));
+        await showAdminFaqList(ctx, locale, ctx.session.adminFaqListPage || 1);
+        return;
+    }
+
+    await ctx.reply(buildAdminFaqDetailText(locale, faq), {
+        parse_mode: 'HTML',
+        reply_markup: getAdminFaqDetailKeyboard(faqId, locale, { hasDraft }),
     });
 };
 
@@ -1110,6 +1235,114 @@ export const adminCampaignCouponExportHandler = async (ctx: BotContext) => {
         logger.error('Error in adminCampaignCouponExportHandler:', error);
         const locale = getLocale(ctx);
         await ctx.reply(i18n.t(locale, 'admin_export_error'));
+    }
+};
+
+export const adminFaqSectionHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+
+        if (ctx.callbackQuery) {
+            await cleanupCallbackMessage(ctx);
+        }
+
+        await showAdminFaqList(ctx, locale, 1);
+    } catch (error) {
+        logger.error('Error in adminFaqSectionHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqPageHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const page = Number(ctx.callbackQuery?.data?.slice(ADMIN_FAQ_PAGE_CALLBACK_PREFIX.length) || 1) || 1;
+
+        await cleanupCallbackMessage(ctx);
+        await showAdminFaqList(ctx, locale, page);
+    } catch (error) {
+        logger.error('Error in adminFaqPageHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqDetailHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const faqId = Number(ctx.callbackQuery?.data?.slice(ADMIN_FAQ_DETAIL_CALLBACK_PREFIX.length) || 0);
+
+        await cleanupCallbackMessage(ctx);
+        await showAdminFaqDetailCard(ctx, locale, faqId);
+    } catch (error) {
+        logger.error('Error in adminFaqDetailHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqBackToListHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+
+        await cleanupCallbackMessage(ctx);
+        await showAdminFaqList(ctx, locale, ctx.session.adminFaqListPage || 1);
+    } catch (error) {
+        logger.error('Error in adminFaqBackToListHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqCreateHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        if (ctx.callbackQuery) {
+            await cleanupCallbackMessage(ctx);
+        }
+
+        await ctx.conversation.exitAll();
+        await ctx.conversation.enter('adminFaqCreateConversation');
+    } catch (error) {
+        logger.error('Error in adminFaqCreateHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqResumeHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const draft = await FaqService.getLockedDraftForAdmin(ctx.from!.id);
+        if (!draft) {
+            await ctx.reply(i18n.t(locale, 'admin_faq_no_draft_to_resume'), {
+                reply_markup: getAdminMenuKeyboard(locale),
+            });
+            return;
+        }
+
+        if (ctx.callbackQuery) {
+            await cleanupCallbackMessage(ctx);
+        }
+
+        await ctx.conversation.exitAll();
+        await ctx.conversation.enter('adminFaqCreateConversation');
+    } catch (error) {
+        logger.error('Error in adminFaqResumeHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
     }
 };
 

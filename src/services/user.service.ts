@@ -25,7 +25,9 @@ export class UserService {
   }
 
   static async getUserByPhoneNumber(phoneNumber: string): Promise<User | null> {
-    const user = await db('users').where('phone_number', phoneNumber).first();
+    const last9 = phoneNumber.replace(/\D/g, '').slice(-9);
+    const normalized = `+998${last9}`;
+    const user = await db('users').where('phone_number', normalized).first();
     return user || null;
   }
 

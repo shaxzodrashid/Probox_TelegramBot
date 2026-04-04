@@ -34,17 +34,23 @@ export class ReferralService {
     },
     executor: DbExecutor = db,
   ): Promise<Referral | null> {
-    if (params.referrerPhoneSnapshot && params.referrerPhoneSnapshot === params.referredPhoneNumber) {
-      return null;
+    const last9 = params.referredPhoneNumber.replace(/\D/g, '').slice(-9);
+    const normalizedReferredPhone = `+998${last9}`;
+    
+    if (params.referrerPhoneSnapshot) {
+      const referrerLast9 = params.referrerPhoneSnapshot.replace(/\D/g, '').slice(-9);
+      if (referrerLast9 === last9) {
+        return null;
+      }
     }
-
+    
     const [referral] = await executor<Referral>('referrals')
       .insert({
         referrer_user_id: params.referrerUserId,
         created_from_event_id: params.createdFromEventId || null,
         referrer_phone_snapshot: params.referrerPhoneSnapshot || null,
         referrer_full_name_snapshot: params.referrerFullNameSnapshot || null,
-        referred_phone_number: params.referredPhoneNumber,
+        referred_phone_number: normalizedReferredPhone,
       })
       .onConflict(['referrer_user_id', 'referred_phone_number'])
       .ignore()
@@ -57,7 +63,7 @@ export class ReferralService {
     const existing = await executor<Referral>('referrals')
       .where({
         referrer_user_id: params.referrerUserId,
-        referred_phone_number: params.referredPhoneNumber,
+        referred_phone_number: normalizedReferredPhone,
       })
       .first();
 
@@ -68,8 +74,11 @@ export class ReferralService {
     referredPhoneNumber: string,
     executor: DbExecutor = db,
   ): Promise<Referral[]> {
+    const last9 = referredPhoneNumber.replace(/\D/g, '').slice(-9);
+    const normalized = `+998${last9}`;
+    
     return executor<Referral>('referrals')
-      .where('referred_phone_number', referredPhoneNumber)
+      .where('referred_phone_number', normalized)
       .orderBy('created_at', 'asc');
   }
 

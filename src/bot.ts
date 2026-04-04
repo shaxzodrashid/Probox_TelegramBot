@@ -46,6 +46,7 @@ import {
   adminTemplateCreateConversation,
   adminTemplateEditConversation
 } from './conversations/admin-template.conversation';
+import { adminFaqCreateConversation } from './conversations/admin-faq.conversation';
 import { branchesConversation } from './conversations/branches.conversation';
 import { supportHandler } from './handlers/support.handler';
 import {
@@ -101,7 +102,13 @@ import {
   adminCampaignCouponSearchHandler,
   adminCampaignCouponExportHandler,
   adminCouponMarkWinnerHandler,
-  adminWinnerPrizeSelectHandler
+  adminWinnerPrizeSelectHandler,
+  adminFaqSectionHandler,
+  adminFaqCreateHandler,
+  adminFaqResumeHandler,
+  adminFaqPageHandler,
+  adminFaqDetailHandler,
+  adminFaqBackToListHandler
 } from './handlers/admin.handler';
 import {
   campaignBackToPromotionsHandler,
@@ -146,6 +153,14 @@ import {
   ADMIN_TEMPLATE_BACK_TO_LIST_CALLBACK
 } from './keyboards/template.keyboards';
 import {
+  ADMIN_FAQ_BACK_CALLBACK,
+  ADMIN_FAQ_BACK_TO_LIST_CALLBACK,
+  ADMIN_FAQ_CREATE_CALLBACK,
+  ADMIN_FAQ_DETAIL_CALLBACK_PREFIX,
+  ADMIN_FAQ_PAGE_CALLBACK_PREFIX,
+  ADMIN_FAQ_RESUME_CALLBACK,
+} from './keyboards/faq.keyboards';
+import {
   settingsHandler,
   changeNameHandler,
   changePhoneHandler,
@@ -161,6 +176,11 @@ import { UserService } from './services/user.service';
 import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from './utils/telegram-errors';
 import { processSupportRequest } from './utils/support.util';
 import { getMainKeyboardByLocale } from './keyboards';
+import { FaqService } from './services/faq.service';
+import {
+  resolveUiTextAction,
+  routeUiTextAction,
+} from './utils/ui-text-resolver';
 
 import { RedisAdapter } from '@grammyjs/storage-redis';
 import { redisService } from './redis/redis.service';
@@ -205,6 +225,7 @@ bot.use(createConversation(adminPromotionCreateConversation));
 bot.use(createConversation(adminPromotionEditConversation));
 bot.use(createConversation(adminTemplateCreateConversation));
 bot.use(createConversation(adminTemplateEditConversation));
+bot.use(createConversation(adminFaqCreateConversation));
 bot.use(createConversation(addPassportDataConversation));
 bot.use(createConversation(applicationConversation));
 bot.use(createConversation(branchesConversation));
@@ -232,20 +253,9 @@ bot.use(async (ctx, next) => {
       const isBackText = ctx.message?.text === ctx.t('back') || ctx.message?.text === ctx.t('admin_reply_cancel') || ctx.message?.text === ctx.t('admin_cancel');
       const isStartCommand = ctx.message?.text === '/start';
 
-      // Check for ANY menu or admin button text. If it is, clear pending and let it through.
-      const menuKeys = [
-        'menu_contracts', 'menu_payments', 'menu_branches', 'menu_settings',
-        'menu_support', 'menu_application', 'menu_promotions', 'menu_coupons',
-        'admin_menu', 'admin_users', 'admin_branches', 'admin_broadcast',
-        'admin_stats', 'admin_export', 'admin_campaign_promotions',
-        'admin_campaign_prizes', 'admin_campaign_templates',
-        'admin_campaign_coupon_search', 'admin_campaign_coupon_export',
-        'back_to_user_menu'
-      ];
-      
-      const isMenuButton = menuKeys.some(key => ctx.message?.text === ctx.t(key));
+      const isRecognizedUiText = Boolean(resolveUiTextAction(ctx.message?.text));
 
-      if (isMenuButton || isBackText || isStartCommand) {
+      if (isRecognizedUiText || isBackText || isStartCommand) {
         // User explicitly chose to go somewhere else; clear the pending redirect.
         await redisService.delete(`pendingAction:${telegramId}`);
         await next();
@@ -279,6 +289,36 @@ bot.use(async (ctx, next) => {
   }
 
   await next();
+});
+
+bot.use(async (ctx, next) => {
+  if (ctx.chat?.type !== 'private' || !ctx.from?.id) {
+    await next();
+    return;
+  }
+
+  const active = ctx.conversation.active();
+  if (Object.values(active).some((count) => count > 0)) {
+    await next();
+    return;
+  }
+
+  const draft = await FaqService.getLockedDraftForAdmin(ctx.from.id);
+  if (!draft) {
+    await next();
+    return;
+  }
+
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery({
+      text: ctx.t('admin_faq_resume_notice'),
+      show_alert: false,
+    }).catch((err) => {
+      if (!isCallbackQueryExpiredError(err)) throw err;
+    });
+  }
+
+  await ctx.conversation.enter('adminFaqCreateConversation');
 });
 
 
@@ -342,6 +382,7 @@ bot.filter(hears('admin_campaign_prizes'), adminCampaignPrizesHandler);
 bot.filter(hears('admin_campaign_templates'), adminCampaignTemplatesHandler);
 bot.filter(hears('admin_campaign_coupon_search'), adminCampaignCouponSearchHandler);
 bot.filter(hears('admin_campaign_coupon_export'), adminCampaignCouponExportHandler);
+bot.filter(hears('admin_faqs'), adminFaqSectionHandler);
 bot.filter(hears('back_to_user_menu'), adminBackToMainMenuHandler);
 
 // Settings keyboard handlers
@@ -421,6 +462,33 @@ bot.filter(hears('back'), async (ctx) => {
   return backFromContractsToMenuHandler(ctx);
 });
 
+// Route stale or cross-locale reply-keyboard texts before support fallback.
+bot.on('message:text', async (ctx, next) => {
+  if (ctx.chat?.type !== 'private') {
+    await next();
+    return;
+  }
+
+  if (ctx.message.text.startsWith('/')) {
+    await next();
+    return;
+  }
+
+  const active = ctx.conversation.active();
+  if (Object.values(active).some((count) => count > 0)) {
+    await next();
+    return;
+  }
+
+  const resolution = resolveUiTextAction(ctx.message.text);
+  if (!resolution) {
+    await next();
+    return;
+  }
+
+  await routeUiTextAction(ctx, resolution);
+});
+
 // Settings callback handlers
 bot.callbackQuery('change_name', changeNameHandler);
 bot.callbackQuery('change_phone', changePhoneHandler);
@@ -475,6 +543,12 @@ bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]
 bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminTemplateToggleHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_DELETE_CALLBACK_PREFIX}\\d+$`), adminTemplateDeleteHandler);
 bot.callbackQuery(ADMIN_TEMPLATE_BACK_TO_LIST_CALLBACK, adminTemplateBackToListHandler);
+bot.callbackQuery(ADMIN_FAQ_CREATE_CALLBACK, adminFaqCreateHandler);
+bot.callbackQuery(ADMIN_FAQ_RESUME_CALLBACK, adminFaqResumeHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_PAGE_CALLBACK_PREFIX}\\d+$`), adminFaqPageHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DETAIL_CALLBACK_PREFIX}\\d+$`), adminFaqDetailHandler);
+bot.callbackQuery(ADMIN_FAQ_BACK_TO_LIST_CALLBACK, adminFaqBackToListHandler);
+bot.callbackQuery(ADMIN_FAQ_BACK_CALLBACK, adminBackToMenuHandler);
 
 bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX}.+$`), adminBranchDetailHandler);
 bot.callbackQuery('admin_branch_add', adminBranchCreateHandler);

@@ -17,12 +17,12 @@ const couponRegistrationBodySchema = {
     },
   ],
   properties: {
-    phone_number: { type: 'string', pattern: '^\\+998\\d{9}$' },
+    phone_number: { type: 'string', pattern: '^(\\+?998)?\\d{9}$' },
     full_name: { type: 'string', minLength: 1 },
     lead_id: { type: 'string', minLength: 1 },
     status: { type: 'string', enum: ['Purchased', 'VisitedStore'] },
     product_name: { type: 'string', minLength: 1 },
-    referred_by: { type: 'string', pattern: '^\\+998\\d{9}$' },
+    referred_by: { type: 'string', pattern: '^(\\+?998)?\\d{9}$' },
   },
 };
 

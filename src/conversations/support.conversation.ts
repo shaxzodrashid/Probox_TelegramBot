@@ -8,6 +8,11 @@ import { logger } from '../utils/logger';
 import { getLocaleFromConversation } from '../utils/locale';
 import { bot } from '../bot';
 import { processSupportRequest } from '../utils/support.util';
+import {
+    resolveUiTextAction,
+    routeUiTextAction,
+    showSafeMenuFallback,
+} from '../utils/ui-text-resolver';
 
 
 
@@ -72,24 +77,20 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
             const messageContext = await conversation.wait();
             const message = messageContext.message;
 
-            // Check for cancel
-            if (message?.text === i18n.t(locale, 'support_cancel') ||
-                message?.text === '/start' ||
-                message?.text === i18n.t(locale, 'menu_contracts') ||
-                message?.text === i18n.t(locale, 'menu_payments') ||
-                message?.text === i18n.t(locale, 'menu_settings') ||
-                message?.text === i18n.t(locale, 'menu_support')) {
+            if (message?.text === '/start') {
+                await conversation.external(async (outsideCtx) => {
+                    await outsideCtx.conversation.exitAll();
+                    await showSafeMenuFallback(outsideCtx as BotContext);
+                });
+                return;
+            }
 
-                if (user?.is_admin) {
-                    await messageContext.reply(i18n.t(locale, 'admin_menu_header'), {
-                        reply_markup: getAdminMenuKeyboard(locale),
-                    });
-                } else {
-                    const isLoggedIn = user ? !user.is_logged_out : false;
-                    await messageContext.reply(i18n.t(locale, 'welcome_message'), {
-                        reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
-                    });
-                }
+            const resolution = resolveUiTextAction(message?.text);
+            if (resolution) {
+                await conversation.external(async (outsideCtx) => {
+                    await outsideCtx.conversation.exitAll();
+                    await routeUiTextAction(outsideCtx as BotContext, resolution);
+                });
                 return;
             }
 

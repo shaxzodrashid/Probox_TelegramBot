@@ -62,6 +62,11 @@ export const config = {
   CRM_URL: process.env.CRM_URL || '',
   CRM_LOGIN: process.env.CRM_LOGIN || '',
   CRM_PASS: process.env.CRM_PASS || '',
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+  GEMINI_TEXT_MODEL: process.env.GEMINI_TEXT_MODEL || 'gemini-3.1-flash-lite-preview',
+  GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2-preview',
+  FAQ_EMBEDDING_DIM: parseInt(process.env.FAQ_EMBEDDING_DIM || '1536', 10),
+  FAQ_SIMILAR_LIMIT: parseInt(process.env.FAQ_SIMILAR_LIMIT || '5', 10),
 };
 
 if (!config.BOT_ENABLED && !config.API_ENABLED) {

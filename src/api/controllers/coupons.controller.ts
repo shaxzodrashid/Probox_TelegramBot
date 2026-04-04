@@ -1,22 +1,23 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CouponRegistrationPayload, CouponRegistrationService } from '../../services/coupon-registration.service';
 import { ApiError } from '../errors/api-error';
+import { normalizeUzPhone } from '../../utils/uz-phone.util';
 
-const STRICT_UZ_PHONE_REGEX = /^\+998\d{9}$/;
+const UZ_PHONE_REGEX = /^(\+?998)?\d{9}$/;
 
 export const validatePayload = (payload: CouponRegistrationPayload): void => {
-  if (!STRICT_UZ_PHONE_REGEX.test(payload.phone_number)) {
+  if (!UZ_PHONE_REGEX.test(payload.phone_number)) {
     throw new ApiError(
       400,
-      'phone_number must match +998XXXXXXXXX format.',
+      'phone_number must be a valid Uzbekistan phone number.',
       'INVALID_PHONE_NUMBER',
     );
   }
 
-  if (payload.referred_by && !STRICT_UZ_PHONE_REGEX.test(payload.referred_by)) {
+  if (payload.referred_by && !UZ_PHONE_REGEX.test(payload.referred_by)) {
     throw new ApiError(
       400,
-      'referred_by must match +998XXXXXXXXX format.',
+      'referred_by must be a valid Uzbekistan phone number.',
       'INVALID_REFERRED_BY',
     );
   }
@@ -59,6 +60,13 @@ export const registerCoupon = async (
   reply: FastifyReply,
 ): Promise<void> => {
   validatePayload(request.body);
+
+  // Normalize phone numbers to 9 digits
+  request.body.phone_number = normalizeUzPhone(request.body.phone_number).last9;
+  if (request.body.referred_by) {
+    request.body.referred_by = normalizeUzPhone(request.body.referred_by).last9;
+  }
+
   const result = await CouponRegistrationService.process(request.body);
   reply.send(result);
 };
