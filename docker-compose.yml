@@ -50,6 +50,35 @@ services:
       timeout: 5s
       retries: 3
 
+  # Automatic Backup Service
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-s3:16 # Matching Postgres version
+    container_name: probox_postgres_backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      # S3 / MinIO Configuration
+      S3_ENDPOINT: "http://minio:9000"
+      S3_ACCESS_KEY_ID: "${MINIO_ACCESS_KEY:-minioadmin}"
+      S3_SECRET_ACCESS_KEY: "${MINIO_SECRET_KEY:-minioadmin}"
+      S3_BUCKET: "${MINIO_BUCKET:-probox-bot-db}"
+      S3_REGION: "us-east-1"
+      S3_PATH: "backups"
+      S3_S3V4: "yes" # MinIO requires S3v4
+      # Database Configuration
+      POSTGRES_DATABASE: "${DB_NAME:-probox_bot_db}"
+      POSTGRES_HOST: "postgres"
+      POSTGRES_USER: "${DB_USER:-postgres}"
+      POSTGRES_PASSWORD: "${DB_PASS:-azm2shA08}"
+      # Automatic Scheduling (every 6 hours for frequent "updates")
+      SCHEDULE: "@every 6h"
+      # Keeps last 7 days of backups
+      BACKUP_KEEP_DAYS: 7
+
   # Utility container to create the MinIO bucket automatically
   minio-init:
     image: minio/mc
@@ -66,6 +95,7 @@ services:
       echo 'MinIO bucket initialized.';
       exit 0;
       "
+
 
 volumes:
   postgres_data:
