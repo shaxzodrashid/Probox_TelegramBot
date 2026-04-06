@@ -52,7 +52,7 @@ services:
 
   # Automatic Backup Service
   postgres-backup:
-    image: prodrigestivill/postgres-backup-s3:16 # Matching Postgres version
+    image: prodrigestivill/postgres-backup-local:16 # Corrected image name
     container_name: probox_postgres_backup
     restart: unless-stopped
     depends_on:
@@ -95,6 +95,28 @@ services:
       echo 'MinIO bucket initialized.';
       exit 0;
       "
+
+  # Application Service
+  bot:
+    build: .
+    container_name: probox_bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - MINIO_ENDPOINT=minio
+    ports:
+      - "3000:3000"
 
 
 volumes:
