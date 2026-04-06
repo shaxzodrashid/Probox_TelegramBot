@@ -22,7 +22,7 @@ services:
     container_name: probox_redis
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "6378:6379"
     volumes:
       - redis_data:/data
     healthcheck:
