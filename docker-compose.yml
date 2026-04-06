@@ -4,7 +4,7 @@ services:
     container_name: probox_postgres
     restart: unless-stopped
     ports:
-      - "${DB_PORT:-5432}:5433"
+      - "5433:5432"
     environment:
       POSTGRES_USER: "${DB_USER:-postgres}"
       POSTGRES_PASSWORD: "${DB_PASS:-azm2shA08}"
