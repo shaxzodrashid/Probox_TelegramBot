@@ -89,13 +89,24 @@ SELECT
 
   S."PaidToDate"  AS "InstPaidToDate",
   S."Status"      AS "InstStatus",
-
+  PAY."ActualPaymentDate" AS "InstActualPaymentDate",
 
   I."itemsPairs"
 
 FROM inv_base B
 JOIN {{schema}}."INV6" S
   ON S."DocEntry" = B."DocEntry"
+LEFT JOIN (
+  SELECT 
+    T1."baseAbs", 
+    T1."InstId",
+    MAX(T0."DocDate") AS "ActualPaymentDate"
+  FROM {{schema}}."ORCT" T0
+  JOIN {{schema}}."RCT2" T1 ON T0."DocEntry" = T1."DocEntry"
+  WHERE T1."InvType" = 13
+    AND T0."Canceled" = 'N'
+  GROUP BY T1."baseAbs", T1."InstId"
+) PAY ON PAY."baseAbs" = B."DocEntry" AND PAY."InstId" = (S."InstlmntID" - 1)
 LEFT JOIN items_by_invoice I
   ON I."DocEntry" = B."DocEntry"
 

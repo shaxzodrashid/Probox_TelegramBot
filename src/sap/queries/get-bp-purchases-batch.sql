@@ -13,9 +13,21 @@ SELECT
   INV6."InsTotal" AS "InstTotal",
   INV6."PaidToDate" AS "InstPaidToDate",
   INV6."Status" AS "InstStatus",
+  PAY."ActualPaymentDate" AS "InstActualPaymentDate",
   COALESCE(items."itemsPairs", '') AS "itemsPairs"
 FROM "{{schema}}"."OINV" OINV
 INNER JOIN "{{schema}}"."INV6" INV6 ON INV6."DocEntry" = OINV."DocEntry"
+LEFT JOIN (
+  SELECT
+    T1."baseAbs",
+    T1."InstId",
+    MAX(T0."DocDate") AS "ActualPaymentDate"
+  FROM "{{schema}}"."ORCT" T0
+  JOIN "{{schema}}"."RCT2" T1 ON T0."DocEntry" = T1."DocEntry"
+  WHERE T1."InvType" = 13
+    AND T0."Canceled" = 'N'
+  GROUP BY T1."baseAbs", T1."InstId"
+) PAY ON PAY."baseAbs" = OINV."DocEntry" AND PAY."InstId" = (INV6."InstlmntID" - 1)
 LEFT JOIN (
   SELECT
     INV1."DocEntry",

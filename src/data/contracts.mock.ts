@@ -16,6 +16,8 @@ export interface Contract {
   totalPaid: number;
   cardName: string;
   currency: string;
+  sourceCurrency: string;
+  displayCurrency: string;
   installments: Installment[];
 }
 

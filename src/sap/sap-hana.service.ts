@@ -98,6 +98,34 @@ export class SapService {
     }
   }
 
+  async getLatestExchangeRate(currency: string = 'UZS'): Promise<number | null> {
+    const sql = loadSQL('sap/queries/get-currency-rate.sql').replace(
+      /{{schema}}/g,
+      this.schema,
+    );
+
+    const normalizedCurrency = currency.trim().toUpperCase();
+    this.logger.info(`📦 [SAP] Fetching latest exchange rate for currency: ${normalizedCurrency}`);
+
+    try {
+      const rows = await this.hana.executeOnce<{ Rate: number | string }>(sql, [normalizedCurrency]);
+      const rate = rows[0]?.Rate;
+
+      if (rate === undefined || rate === null) {
+        return null;
+      }
+
+      const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
+      return Number.isFinite(numericRate) ? numericRate : null;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getLatestExchangeRate failed', message);
+
+      throw new Error(`SAP query failed (getLatestExchangeRate)`);
+    }
+  }
+
   async getItems({ search, filters = {}, limit = 50, offset = 0, whsCode, includeZeroOnHand = false }: {
     search?: string;
     filters?: any;

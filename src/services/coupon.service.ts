@@ -15,6 +15,8 @@ export interface Coupon {
   issued_phone_snapshot: string;
   lead_id?: string | null;
   customer_full_name?: string | null;
+  sap_doc_entry?: number | null;
+  sap_installment_id?: number | null;
   expires_at: Date;
   won_at?: Date | null;
   is_active: boolean;
@@ -80,6 +82,8 @@ export class CouponService {
     phoneSnapshot: string;
     leadId?: string | null;
     customerFullName?: string | null;
+    sapDocEntry?: number | null;
+    sapInstallmentId?: number | null;
     issuedAt?: Date;
   }, executor: Knex | Knex.Transaction = db): Promise<Coupon[]> {
     const issuedAt = params.issuedAt || new Date();
@@ -100,6 +104,8 @@ export class CouponService {
           issued_phone_snapshot: params.phoneSnapshot,
           lead_id: params.leadId || null,
           customer_full_name: params.customerFullName || null,
+          sap_doc_entry: params.sapDocEntry || null,
+          sap_installment_id: params.sapInstallmentId || null,
           expires_at: expiresAt,
           is_active: true,
         })

@@ -84,32 +84,6 @@ export class PaymentReminderService {
     });
   }
 
-  private static async upsertInstallmentState(installment: IPurchaseInstallment): Promise<void> {
-    await db('payment_installment_state')
-      .insert({
-        sap_card_code: installment.CardCode,
-        doc_entry: installment.DocEntry,
-        installment_id: installment.InstlmntID,
-        due_date: installment.InstDueDate,
-        last_status: installment.InstStatus,
-        last_paid_amount:
-          typeof installment.InstPaidToDate === 'string'
-            ? Number(installment.InstPaidToDate)
-            : installment.InstPaidToDate,
-        last_checked_at: new Date(),
-      })
-      .onConflict(['sap_card_code', 'doc_entry', 'installment_id'])
-      .merge({
-        due_date: installment.InstDueDate,
-        last_status: installment.InstStatus,
-        last_paid_amount:
-          typeof installment.InstPaidToDate === 'string'
-            ? Number(installment.InstPaidToDate)
-            : installment.InstPaidToDate,
-        last_checked_at: new Date(),
-      });
-  }
-
   private static async maybeIssueOnTimeReward(installment: IPurchaseInstallment): Promise<string | null> {
     const total = typeof installment.InstTotal === 'string' ? Number(installment.InstTotal) : installment.InstTotal;
     const paid =
@@ -117,20 +91,38 @@ export class PaymentReminderService {
         ? Number(installment.InstPaidToDate)
         : installment.InstPaidToDate;
 
+    // Check if fully paid
     if (paid < total) {
       return null;
     }
 
-    const state = await db('payment_installment_state')
-      .where({
-        sap_card_code: installment.CardCode,
-        doc_entry: installment.DocEntry,
-        installment_id: installment.InstlmntID,
-      })
+    // Check if payment was made in SAP
+    if (!installment.InstActualPaymentDate) {
+      return null;
+    }
+
+    const actualPaymentDate = new Date(installment.InstActualPaymentDate);
+    const dueDate = new Date(installment.InstDueDate);
+
+    // Check if payment was on time
+    // Actual payment date derived from DocDate which has no time component in some cases. Handle time boundaries.
+    actualPaymentDate.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+    
+    if (actualPaymentDate > dueDate) {
+      return null; // Paid late
+    }
+
+    // Since we are not tracking locally, ensure we only issue a coupon 
+    // if we haven't already generated one for this specific payment.
+    const existingCoupon = await db('coupons')
+      .where('source_type', 'payment_on_time')
+      .andWhere('sap_doc_entry', installment.DocEntry)
+      .andWhere('sap_installment_id', installment.InstlmntID)
       .first();
 
-    if (state?.reward_issued_at) {
-      return null;
+    if (existingCoupon) {
+      return null; // Already rewarded
     }
 
     const user = await UserService.getUserBySapCardCode(installment.CardCode);
@@ -144,6 +136,8 @@ export class PaymentReminderService {
       promotionId: promotion.id,
       sourceType: 'payment_on_time',
       phoneSnapshot: user.phone_number || '',
+      sapDocEntry: installment.DocEntry,
+      sapInstallmentId: installment.InstlmntID,
     });
 
     const firstCoupon = coupons[0];
@@ -169,17 +163,6 @@ export class PaymentReminderService {
       }
     }
 
-    await db('payment_installment_state')
-      .where({
-        sap_card_code: installment.CardCode,
-        doc_entry: installment.DocEntry,
-        installment_id: installment.InstlmntID,
-      })
-      .update({
-        reward_issued_at: new Date(),
-        last_checked_at: new Date(),
-      });
-
     return missingTemplate;
   }
 
@@ -203,7 +186,6 @@ export class PaymentReminderService {
     const missingTemplates = new Set<string>();
 
     for (const installment of installments) {
-      await this.upsertInstallmentState(installment);
       const missing = await this.maybeIssueOnTimeReward(installment);
       if (missing) missingTemplates.add(missing);
 

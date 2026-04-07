@@ -13,5 +13,6 @@ export interface IPurchaseInstallment {
   InstTotal: number;
   InstPaidToDate: number;
   InstStatus: string;
+  InstActualPaymentDate?: string;
   itemsPairs: string;
 }

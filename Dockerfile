@@ -3,6 +3,13 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
+# Install system dependencies for build (if any needed by node-gyp)
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy package files
 COPY package*.json ./
 
@@ -12,13 +19,19 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build the project
+# Build the project (Increased memory for tsc)
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
 # Run stage
 FROM node:20-slim
 
 WORKDIR /app
+
+# Install system dependencies for runtime (required by onnxruntime/tfjs)
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
@@ -40,3 +53,4 @@ EXPOSE 3000
 
 # Entrypoint script will run migrations then start app
 ENTRYPOINT ["./entrypoint.sh"]
+

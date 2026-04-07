@@ -32,5 +32,7 @@ export interface PaymentContract {
     total: number;
     totalPaid: number;
     currency: string;
+    sourceCurrency: string;
+    displayCurrency: string;
     installments: PaymentInstallment[];
 }

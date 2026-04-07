@@ -2,10 +2,13 @@ import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
 import { formatItemsList } from '../utils/items-formatter.util';
 import { Contract } from '../data/contracts.mock';
+import { convertAmountForDisplay } from '../utils/currency-conversion.util';
+import { logger } from '../utils/logger';
 
 export class ContractService {
   private static hanaService = new HanaService();
   private static sapService = new SapService(this.hanaService);
+  private static logger = logger;
 
   /**
    * Fetches contracts for a specific CardCode from SAP.
@@ -13,11 +16,16 @@ export class ContractService {
    */
   static async getContractsByCardCode(cardCode: string): Promise<Contract[]> {
     const installments = await this.sapService.getBPpurchasesByCardCode(cardCode);
+    const usdToUzsRate = await this.getUsdToUzsRate();
 
     // Group by DocEntry to get unique contracts
     const contractsMap = new Map<number, Contract>();
 
     for (const inst of installments) {
+      const sourceCurrency = (inst.DocCur || 'UZS').trim().toUpperCase();
+      const totalAmount = convertAmountForDisplay(inst.Total, sourceCurrency, usdToUzsRate);
+      const totalPaid = convertAmountForDisplay(inst.TotalPaid, sourceCurrency, usdToUzsRate);
+
       if (!contractsMap.has(inst.DocEntry)) {
         contractsMap.set(inst.DocEntry, {
           id: inst.DocEntry.toString(),
@@ -25,25 +33,39 @@ export class ContractService {
           contractNumber: inst.DocNum.toString(),
           purchaseDate: inst.DocDate,
           dueDate: inst.DocDueDate,
-          totalAmount: inst.Total,
-          totalPaid: inst.TotalPaid,
+          totalAmount: totalAmount.amount,
+          totalPaid: totalPaid.amount,
           cardName: inst.CardName,
-          currency: inst.DocCur,
+          currency: totalAmount.currency,
+          sourceCurrency,
+          displayCurrency: totalAmount.currency,
           installments: []
         });
       }
 
+      const installmentTotal = convertAmountForDisplay(inst.InstTotal, sourceCurrency, usdToUzsRate).amount;
+      const installmentPaid = convertAmountForDisplay(inst.InstPaidToDate, sourceCurrency, usdToUzsRate).amount;
+
       contractsMap.get(inst.DocEntry)!.installments.push({
         id: inst.InstlmntID,
         dueDate: inst.InstDueDate,
-        total: inst.InstTotal,
-        paid: inst.InstPaidToDate || 0,
+        total: installmentTotal,
+        paid: installmentPaid || 0,
         status: inst.InstStatus
       });
     }
 
     // Convert map to array, sort by DocEntry (id) descending to show newest first, and return
     return Array.from(contractsMap.values()).sort((a, b) => parseInt(b.id) - parseInt(a.id));
+  }
+
+  private static async getUsdToUzsRate(): Promise<number | null> {
+    try {
+      return await this.sapService.getLatestExchangeRate('UZS');
+    } catch (error) {
+      this.logger.warn('⚠️ [CONTRACTS] Falling back to source currency because USD/UZS rate is unavailable', error);
+      return null;
+    }
   }
 
   /**

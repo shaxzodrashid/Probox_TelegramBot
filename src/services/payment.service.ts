@@ -1,6 +1,8 @@
 import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
 import { PaymentContract, PaymentItem } from '../interfaces/payment.interface';
+import { convertAmountForDisplay, parseNumericAmount } from '../utils/currency-conversion.util';
+import { logger } from '../utils/logger';
 
 /**
  * Service for handling payment-related operations
@@ -8,6 +10,7 @@ import { PaymentContract, PaymentItem } from '../interfaces/payment.interface';
 export class PaymentService {
     private static hanaService = new HanaService();
     private static sapService = new SapService(this.hanaService);
+    private static logger = logger;
 
     /**
      * Parses the itemsPairs string from SAP into an array of PaymentItem
@@ -89,14 +92,21 @@ export class PaymentService {
      */
     static async getPaymentsByCardCode(cardCode: string): Promise<PaymentContract[]> {
         const installments = await this.sapService.getBPpurchasesByCardCode(cardCode);
+        const usdToUzsRate = await this.getUsdToUzsRate();
 
         // Group by DocEntry to get unique contracts
         const contractsMap = new Map<number, PaymentContract>();
 
         for (const inst of installments) {
-            if (!contractsMap.has(inst.DocEntry)) {
-                const items = this.parseItemsPairs(inst.itemsPairs);
+            const sourceCurrency = (inst.DocCur || 'UZS').trim().toUpperCase();
+            const totalDisplay = convertAmountForDisplay(inst.Total, sourceCurrency, usdToUzsRate);
+            const totalPaidDisplay = convertAmountForDisplay(inst.TotalPaid, sourceCurrency, usdToUzsRate);
+            const items = this.parseItemsPairs(inst.itemsPairs).map((item) => ({
+                ...item,
+                price: convertAmountForDisplay(item.price, sourceCurrency, usdToUzsRate).amount,
+            }));
 
+            if (!contractsMap.has(inst.DocEntry)) {
                 contractsMap.set(inst.DocEntry, {
                     id: inst.DocEntry.toString(),
                     mainItemName: this.getMostExpensiveItem(items),
@@ -105,22 +115,26 @@ export class PaymentService {
                     cardName: inst.CardName,
                     docDate: inst.DocDate,
                     dueDate: inst.DocDueDate,
-                    total: typeof inst.Total === 'string' ? parseFloat(inst.Total) : inst.Total,
-                    totalPaid: typeof inst.TotalPaid === 'string' ? parseFloat(inst.TotalPaid) : inst.TotalPaid,
-                    currency: inst.DocCur,
+                    total: totalDisplay.amount,
+                    totalPaid: totalPaidDisplay.amount,
+                    currency: totalDisplay.currency,
+                    sourceCurrency,
+                    displayCurrency: totalDisplay.currency,
                     installments: []
                 });
             }
 
-            const instTotal = typeof inst.InstTotal === 'string' ? parseFloat(inst.InstTotal) : inst.InstTotal;
-            const instPaid = typeof inst.InstPaidToDate === 'string' ? parseFloat(inst.InstPaidToDate) : inst.InstPaidToDate;
+            const instTotalRaw = parseNumericAmount(inst.InstTotal);
+            const instPaidRaw = parseNumericAmount(inst.InstPaidToDate);
+            const instTotal = convertAmountForDisplay(instTotalRaw, sourceCurrency, usdToUzsRate).amount;
+            const instPaid = convertAmountForDisplay(instPaidRaw, sourceCurrency, usdToUzsRate).amount;
 
             contractsMap.get(inst.DocEntry)!.installments.push({
                 id: inst.InstlmntID,
                 dueDate: inst.InstDueDate,
                 total: instTotal,
                 paid: instPaid || 0,
-                status: this.getPaymentStatus(instTotal, instPaid, inst.InstDueDate)
+                status: this.getPaymentStatus(instTotalRaw, instPaidRaw, inst.InstDueDate)
             });
         }
 
@@ -134,5 +148,14 @@ export class PaymentService {
         });
 
         return contracts.sort((a, b) => parseInt(b.id) - parseInt(a.id));
+    }
+
+    private static async getUsdToUzsRate(): Promise<number | null> {
+        try {
+            return await this.sapService.getLatestExchangeRate('UZS');
+        } catch (error) {
+            this.logger.warn('⚠️ [PAYMENTS] Falling back to source currency because USD/UZS rate is unavailable', error);
+            return null;
+        }
     }
 }
