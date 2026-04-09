@@ -17,9 +17,9 @@ test('validatePayload rejects invalid referred_by phone format', () => {
         full_name: 'Ali Valiyev',
         lead_id: 'lead-1',
         status: 'VisitedStore',
-        referred_by: '909012345',
+        referred_by: '123',
       }),
-    /referred_by must match \+998XXXXXXXXX format/,
+    /referred_by must be a valid Uzbekistan phone number/,
   );
 });
 

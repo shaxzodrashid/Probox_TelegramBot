@@ -5,6 +5,7 @@ import {
   FaqQuestionVariants,
   FaqRecord,
 } from '../types/faq.types';
+import { logger } from '../utils/logger';
 
 interface CreateDraftFaqInput extends FaqQuestionVariants {
   embedding: number[];
@@ -20,6 +21,39 @@ export interface PaginatedFaqResult {
 }
 
 export class FaqService {
+  private static isMissingFaqTableError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const maybePgError = error as { code?: string; message?: string };
+    return (
+      maybePgError.code === '42P01' &&
+      maybePgError.message?.includes('relation "faqs" does not exist') === true
+    );
+  }
+
+  static async getLockedDraftForAdmin(adminTelegramId: number): Promise<FaqRecord | null> {
+    try {
+      const record = await db<FaqRecord>('faqs')
+        .where({
+          status: 'draft',
+          locked_by_admin_telegram_id: adminTelegramId,
+        })
+        .orderBy('updated_at', 'desc')
+        .first();
+
+      return record || null;
+    } catch (error) {
+      if (this.isMissingFaqTableError(error)) {
+        logger.warn('FAQ table is missing while checking locked draft; returning no draft.');
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
   private static toVectorLiteral(values: number[]): string {
     return `[${values.join(',')}]`;
   }
@@ -73,18 +107,6 @@ export class FaqService {
       .returning('*');
 
     return record;
-  }
-
-  static async getLockedDraftForAdmin(adminTelegramId: number): Promise<FaqRecord | null> {
-    const record = await db<FaqRecord>('faqs')
-      .where({
-        status: 'draft',
-        locked_by_admin_telegram_id: adminTelegramId,
-      })
-      .orderBy('updated_at', 'desc')
-      .first();
-
-    return record || null;
   }
 
   static async listPublishedFaqs(

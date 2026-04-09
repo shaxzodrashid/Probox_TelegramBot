@@ -2,13 +2,13 @@ import ExcelJS from 'exceljs';
 import { CouponService } from './coupon.service';
 
 export class CouponExportService {
-  static async exportActiveCouponsToExcel(): Promise<Buffer> {
-    const coupons = await CouponService.getActiveCouponsForExport();
+  static async exportCouponsToExcel(): Promise<Buffer> {
+    const coupons = await CouponService.getCouponsForExport();
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Probox Bot';
     workbook.created = new Date();
 
-    const sheet = workbook.addWorksheet('Active Coupons');
+    const sheet = workbook.addWorksheet('Coupons');
     sheet.columns = [
       { header: 'Coupon Code', key: 'code', width: 16 },
       { header: 'User Name', key: 'user_name', width: 24 },

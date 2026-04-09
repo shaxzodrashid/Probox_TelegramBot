@@ -13,6 +13,7 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
+    "test:purchase-pdf": "ts-node src/scripts/test-purchase-pdf.ts",
     "compare:current": "ts-node -P passport_comparison/tsconfig.json passport_comparison/runner/run-current.ts",
     "compare:python": "ts-node -P passport_comparison/tsconfig.json passport_comparison/runner/run-python.ts",
     "compare:report": "ts-node -P passport_comparison/tsconfig.json passport_comparison/runner/run-comparison.ts",

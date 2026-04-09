@@ -67,6 +67,9 @@ export const config = {
   GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2-preview',
   FAQ_EMBEDDING_DIM: parseInt(process.env.FAQ_EMBEDDING_DIM || '1536', 10),
   FAQ_SIMILAR_LIMIT: parseInt(process.env.FAQ_SIMILAR_LIMIT || '5', 10),
+  PURCHASE_PDF_API_BASE_URL: process.env.PURCHASE_PDF_API_BASE_URL || 'https://work-api.probox.uz/api/basic/purchases/pdfs',
+  PURCHASE_PDF_API_USER: process.env.PURCHASE_PDF_API_USER || '',
+  PURCHASE_PDF_API_PASS: process.env.PURCHASE_PDF_API_PASS || '',
 };
 
 if (!config.BOT_ENABLED && !config.API_ENABLED) {

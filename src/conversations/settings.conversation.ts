@@ -5,6 +5,7 @@ import { performOtpVerification, verifySapUser } from './registration.conversati
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getLocaleFromConversation } from '../utils/locale';
 import { sanitizeName } from '../utils/formatter.util';
+import { CouponRegistrationService } from '../services/coupon-registration.service';
 
 /**
  * Conversation to change user's name
@@ -17,7 +18,7 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
 
   // Ask for First Name
   await ctx.reply(i18n.t(locale, 'settings_enter_first_name'), {
-    reply_markup: { remove_keyboard: true }
+    reply_markup: { remove_keyboard: true },
   });
 
   const firstNameCtx = await conversation.wait();
@@ -35,13 +36,15 @@ export async function changeNameConversation(conversation: BotConversation, ctx:
   const sanitizedFirstName = sanitizeName(firstName);
   const sanitizedLastName = sanitizeName(lastName);
 
-  await conversation.external(() => UserService.updateUserName(telegramId, sanitizedFirstName, sanitizedLastName));
+  await conversation.external(() =>
+    UserService.updateUserName(telegramId, sanitizedFirstName, sanitizedLastName),
+  );
 
   const user = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
   const isAdmin = user?.is_admin || false;
 
   await ctx.reply(i18n.t(locale, 'settings_name_updated'), {
-    reply_markup: getMainKeyboardByLocale(locale, isAdmin, true)
+    reply_markup: getMainKeyboardByLocale(locale, isAdmin, true),
   });
 }
 
@@ -54,11 +57,13 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
 
   if (!telegramId) return;
 
-  const existingUser = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
+  const existingUser = await conversation.external(() =>
+    UserService.getUserByTelegramId(telegramId),
+  );
   const isFirstTimePhone = existingUser && !existingUser.phone_number;
 
   await ctx.reply(i18n.t(locale, 'settings_enter_phone'), {
-    reply_markup: { remove_keyboard: true }
+    reply_markup: { remove_keyboard: true },
   });
 
   while (true) {
@@ -71,23 +76,32 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
       const phoneNumber = text;
 
       // Perform OTP Verification
-      const { verified, lastCtx } = await performOtpVerification(conversation, phoneCtx, phoneNumber, locale);
+      const { verified, lastCtx } = await performOtpVerification(
+        conversation,
+        phoneCtx,
+        phoneNumber,
+        locale,
+      );
 
       if (!verified) return;
 
       if (isFirstTimePhone && existingUser) {
         const sapUser = await conversation.external(() => verifySapUser(phoneNumber));
-        
+
         const dataToUpdate: any = {
-           phone_number: phoneNumber,
-           updated_at: new Date()
+          phone_number: phoneNumber,
+          updated_at: new Date(),
         };
-        
+
         if (sapUser) {
-            dataToUpdate.first_name = sanitizeName(sapUser.CardName?.split(' ')[0] || existingUser.first_name || '');
-            dataToUpdate.last_name = sanitizeName(sapUser.CardName?.split(' ')[1] || existingUser.last_name || '');
-            dataToUpdate.sap_card_code = sapUser.CardCode || '';
-            dataToUpdate.is_admin = sapUser.U_admin === 'yes';
+          dataToUpdate.first_name = sanitizeName(
+            sapUser.CardName?.split(' ')[0] || existingUser.first_name || '',
+          );
+          dataToUpdate.last_name = sanitizeName(
+            sapUser.CardName?.split(' ')[1] || existingUser.last_name || '',
+          );
+          dataToUpdate.sap_card_code = sapUser.CardCode || '';
+          dataToUpdate.is_admin = sapUser.U_admin === 'yes';
         }
 
         await conversation.external(() => UserService.updateUser(existingUser.id, dataToUpdate));
@@ -100,8 +114,14 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
       const isAdmin = user?.is_admin || false;
 
       await lastCtx.reply(i18n.t(locale, 'settings_phone_updated'), {
-        reply_markup: getMainKeyboardByLocale(locale, isAdmin, true)
+        reply_markup: getMainKeyboardByLocale(locale, isAdmin, true),
       });
+
+      if (user?.phone_number) {
+        await conversation.external(() =>
+          CouponRegistrationService.claimPendingCouponsForUser(user),
+        );
+      }
       break;
     } else {
       await phoneCtx.reply(i18n.t(locale, 'settings_enter_phone'));

@@ -4,7 +4,7 @@ import { config } from '../config';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { i18n } from '../i18n';
-import { UserService } from '../services/user.service';
+import { User, UserService } from '../services/user.service';
 import { OtpService } from '../services/otp.service';
 import { logger } from '../utils/logger';
 import { SapService } from '../sap/sap-hana.service';
@@ -15,6 +15,7 @@ import { isCallbackQueryExpiredError } from '../utils/telegram-errors';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { sanitizeName } from '../utils/formatter.util';
 import { redisService } from '../redis/redis.service';
+import { CouponRegistrationService } from '../services/coupon-registration.service';
 
 /**
  * Checks if the user exists in SAP HANA by phone number.
@@ -155,7 +156,9 @@ export async function performOtpVerification(
 
       const text = otpContext.message?.text;
       if (text && /^\d{6}$/.test(text)) {
-        const isCorrect = await conversation.external(() => OtpService.verifyOtp(phoneNumber, text));
+        const isCorrect = await conversation.external(() =>
+          OtpService.verifyOtp(phoneNumber, text),
+        );
 
         if (isCorrect) {
           return { verified: true, lastCtx: otpContext };
@@ -187,11 +190,11 @@ async function registerOrUpdateUser(
   ctx: BotContext,
   phoneNumber: string,
   locale: string,
-) {
+): Promise<User | null> {
   const sapUser = await conversation.external(() => verifySapUser(phoneNumber));
 
   const telegramId = ctx.from?.id;
-  if (!telegramId) return false;
+  if (!telegramId) return null;
 
   const data_to_store: any = {
     first_name: sanitizeName(sapUser?.CardName?.split(' ')[0] || ctx.from?.first_name),
@@ -204,17 +207,17 @@ async function registerOrUpdateUser(
     updated_at: new Date(),
   };
 
-  const existingUser = await conversation.external(() => UserService.getUserByTelegramId(telegramId));
+  const existingUser = await conversation.external(() =>
+    UserService.getUserByTelegramId(telegramId),
+  );
 
   if (existingUser) {
-    await conversation.external(() => UserService.updateUser(existingUser.id, data_to_store));
-    return data_to_store.is_admin;
+    return conversation.external(() => UserService.updateUser(existingUser.id, data_to_store));
   }
 
   data_to_store.telegram_id = telegramId;
   data_to_store.created_at = new Date();
-  await conversation.external(() => UserService.createUser(data_to_store));
-  return data_to_store.is_admin;
+  return conversation.external(() => UserService.createUser(data_to_store));
 }
 
 export async function registrationConversation(conversation: BotConversation, ctx: BotContext) {
@@ -222,7 +225,9 @@ export async function registrationConversation(conversation: BotConversation, ct
   if (!telegramId) return;
 
   // Read pendingAction from Redis
-  const pendingAction = await conversation.external(() => redisService.get<string>(`pendingAction:${telegramId}`));
+  const pendingAction = await conversation.external(() =>
+    redisService.get<string>(`pendingAction:${telegramId}`),
+  );
   const locale = await getLocaleFromConversation(conversation);
 
   const phoneResult = await requestPhoneNumber(conversation, ctx, locale);
@@ -235,14 +240,24 @@ export async function registrationConversation(conversation: BotConversation, ct
     ctx.session.user_phone = phoneNumber;
   }
 
-  const { verified, lastCtx } = await performOtpVerification(conversation, phoneCtx, phoneNumber, locale);
+  const { verified, lastCtx } = await performOtpVerification(
+    conversation,
+    phoneCtx,
+    phoneNumber,
+    locale,
+  );
   if (!verified) return;
 
-  const isAdmin = await registerOrUpdateUser(conversation, lastCtx, phoneNumber, locale);
+  const user = await registerOrUpdateUser(conversation, lastCtx, phoneNumber, locale);
+  if (!user) return;
 
   await lastCtx.reply(i18n.t(locale, 'phone_saved'), {
     reply_markup: { remove_keyboard: true },
   });
+
+  if (user.phone_number) {
+    await conversation.external(() => CouponRegistrationService.claimPendingCouponsForUser(user));
+  }
 
   if (pendingAction === 'application') {
     // Inside a conversation, ctx.conversation is unavailable (plain hydrated Context).
@@ -259,7 +274,7 @@ export async function registrationConversation(conversation: BotConversation, ct
     return;
   }
 
-  if (isAdmin) {
+  if (user.is_admin) {
     await lastCtx.reply(i18n.t(locale, 'admin_menu_header'), {
       reply_markup: getAdminMenuKeyboard(locale),
     });

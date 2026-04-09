@@ -113,8 +113,11 @@ The project now includes a versioned HTTP API running alongside the Telegram bot
   - `GET /api/v1/users/:telegramId`
   - `GET /api/v1/contracts/:cardCode?page=1&limit=10`
   - `GET /api/v1/payments/:cardCode`
+  - `POST /api/v1/purchase-pdfs/deliver`
 
 If `API_KEY` is configured, send it as `x-api-key: <your-key>` or `Authorization: Bearer <your-key>`.
+
+`POST /api/v1/purchase-pdfs/deliver` accepts `jshshir` or `JSHSHR`, `cardCode` or `CardCode`, and `pdfUrl` or `pdf-url`. The bot tries `jshshir` first, falls back to `cardCode`, sends the PDF file to the matched user when found, and always forwards the PDF file with metadata to the admin group.
 
 ## 🔗 Deep Links
 

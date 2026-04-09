@@ -3,7 +3,7 @@ import type { Knex } from 'knex';
 import db from '../database/database';
 import { redisService } from '../redis/redis.service';
 import { formatDateForLocale } from '../utils/tashkent-time.util';
-import { CouponService } from './coupon.service';
+import { Coupon, CouponService } from './coupon.service';
 import { BotNotificationService } from './bot-notification.service';
 import {
   CouponRegistrationEvent,
@@ -78,11 +78,106 @@ export class CouponRegistrationService {
     });
   }
 
+  static async claimPendingCouponsForUser(user: User): Promise<{
+    coupons: Coupon[];
+    delivery: CouponRegistrationResponse['delivery'];
+  }> {
+    if (!user.phone_number) {
+      return { coupons: [], delivery: [] };
+    }
+
+    const { assignedCoupons, assignedEvents } = await this.runInTransaction(async (trx) => {
+      const assignedEvents = await CouponRegistrationEventService.assignPendingEventsToUser(
+        user.phone_number!,
+        user.id,
+        trx,
+      );
+
+      for (const event of assignedEvents) {
+        if (!event.referred_phone_number) {
+          continue;
+        }
+
+        await ReferralService.createOrIgnore(
+          {
+            referrerUserId: user.id,
+            createdFromEventId: event.id,
+            referrerPhoneSnapshot: user.phone_number,
+            referrerFullNameSnapshot: event.customer_full_name || this.buildName(user),
+            referredPhoneNumber: event.referred_phone_number,
+          },
+          trx,
+        );
+      }
+
+      const assignedCoupons = await CouponService.assignPendingCouponsToUser(
+        {
+          userId: user.id,
+          phoneNumber: user.phone_number!,
+        },
+        trx,
+      );
+
+      return {
+        assignedCoupons,
+        assignedEvents,
+      };
+    });
+
+    const eventsById = new Map(assignedEvents.map((event) => [event.id, event]));
+    const delivery: CouponRegistrationResponse['delivery'] = [];
+
+    for (const coupon of assignedCoupons) {
+      const templateType =
+        coupon.source_type === 'purchase'
+          ? 'purchase'
+          : coupon.source_type === 'store_visit'
+            ? 'store_visit'
+            : null;
+      if (!templateType) {
+        continue;
+      }
+
+      const event = coupon.registration_event_id
+        ? eventsById.get(coupon.registration_event_id)
+        : undefined;
+      const result = await BotNotificationService.sendTemplateMessage({
+        user,
+        templateType,
+        placeholders: {
+          customer_name: event?.customer_full_name || this.buildName(user),
+          coupon_code: coupon.code,
+          payment_due_date: formatDateForLocale(coupon.expires_at, user.language_code || 'uz'),
+          product_name: event?.product_name || '',
+          referrer_name: '',
+          prize_name: '',
+        },
+        couponId: coupon.id,
+        dispatchType: coupon.source_type,
+      });
+
+      delivery.push({
+        user_telegram_id: user.telegram_id,
+        delivered: result.delivered,
+        dispatch_type: coupon.source_type,
+        error: result.error,
+      });
+    }
+
+    return {
+      coupons: assignedCoupons,
+      delivery,
+    };
+  }
+
   private static buildName(user: User): string {
     return [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Mijoz';
   }
 
-  private static buildCustomerName(payload: CouponRegistrationPayload, fallbackUser?: User): string {
+  private static buildCustomerName(
+    payload: CouponRegistrationPayload,
+    fallbackUser?: User,
+  ): string {
     const normalized = payload.full_name.trim();
     return normalized || (fallbackUser ? this.buildName(fallbackUser) : 'Mijoz');
   }
@@ -139,6 +234,28 @@ export class CouponRegistrationService {
     return null;
   }
 
+  private static buildDuplicateResponse(params: {
+    promotion: NonNullable<Awaited<ReturnType<typeof PromotionService.getCurrentPromotion>>>;
+    user: User | null;
+  }): CouponRegistrationResponse {
+    return {
+      processed: true,
+      reason: 'duplicate_event_skipped',
+      user: params.user
+        ? {
+            telegram_id: params.user.telegram_id,
+            phone_number: params.user.phone_number,
+          }
+        : undefined,
+      promotion: {
+        id: params.promotion.id,
+        slug: params.promotion.slug,
+      },
+      coupons: [],
+      delivery: [],
+    };
+  }
+
   private static async processBySource(params: {
     payload: CouponRegistrationPayload;
     sourceType: 'store_visit' | 'purchase';
@@ -156,16 +273,7 @@ export class CouponRegistrationService {
     }
 
     const user = await UserService.getUserByPhoneNumber(params.payload.phone_number);
-    if (!user) {
-      return {
-        processed: false,
-        reason: 'User not found for phone number.',
-        coupons: [],
-        delivery: [],
-      };
-    }
-
-    const customerName = this.buildCustomerName(params.payload, user);
+    const customerName = this.buildCustomerName(params.payload, user || undefined);
     const eventLockKey = this.getEventLockKey(params.payload);
     const eventLockToken = randomUUID();
     const lockAcquired = await this.acquireEventLock(eventLockKey, eventLockToken);
@@ -173,20 +281,7 @@ export class CouponRegistrationService {
     if (!lockAcquired) {
       const existingEvent = await this.waitForExistingEvent(params.payload);
       if (existingEvent) {
-        return {
-          processed: true,
-          reason: 'duplicate_event_skipped',
-          user: {
-            telegram_id: user.telegram_id,
-            phone_number: user.phone_number,
-          },
-          promotion: {
-            id: promotion.id,
-            slug: promotion.slug,
-          },
-          coupons: [],
-          delivery: [],
-        };
+        return this.buildDuplicateResponse({ promotion, user });
       }
     }
 
@@ -207,26 +302,13 @@ export class CouponRegistrationService {
       );
 
       if (existingEvent) {
-        return {
-          processed: true,
-          reason: 'duplicate_event_skipped',
-          user: {
-            telegram_id: user.telegram_id,
-            phone_number: user.phone_number,
-          },
-          promotion: {
-            id: promotion.id,
-            slug: promotion.slug,
-          },
-          coupons: [],
-          delivery: [],
-        };
+        return this.buildDuplicateResponse({ promotion, user });
       }
 
       const processingResult = await this.runInTransaction(async (trx) => {
         const event = await CouponRegistrationEventService.create(
           {
-            user_id: user.id,
+            user_id: user?.id || null,
             promotion_id: promotion.id,
             phone_number: params.payload.phone_number,
             lead_id: params.payload.lead_id,
@@ -238,17 +320,20 @@ export class CouponRegistrationService {
           trx,
         );
 
-        const customerCoupons = await CouponService.createCouponsForUser({
-          userId: user.id,
-          promotionId: promotion.id,
-          registrationEventId: event.id,
-          sourceType: params.sourceType,
-          phoneSnapshot: params.payload.phone_number,
-          leadId: params.payload.lead_id,
-          customerFullName: customerName,
-        }, trx);
+        const customerCoupons = await CouponService.createCouponsForUser(
+          {
+            userId: user?.id || null,
+            promotionId: promotion.id,
+            registrationEventId: event.id,
+            sourceType: params.sourceType,
+            phoneSnapshot: params.payload.phone_number,
+            leadId: params.payload.lead_id,
+            customerFullName: customerName,
+          },
+          trx,
+        );
 
-        if (params.payload.referred_by) {
+        if (params.payload.referred_by && user) {
           await ReferralService.createOrIgnore(
             {
               referrerUserId: user.id,
@@ -267,23 +352,33 @@ export class CouponRegistrationService {
         }> = [];
 
         if (params.shouldRewardReferrals) {
-          const referrals = await ReferralService.listByReferredPhoneNumber(params.payload.phone_number, trx);
+          const referrals = await ReferralService.listByReferredPhoneNumber(
+            params.payload.phone_number,
+            trx,
+          );
 
           for (const referral of referrals) {
-            const alreadyRewarded = await ReferralService.hasRewardForEvent(referral.id, event.id, trx);
+            const alreadyRewarded = await ReferralService.hasRewardForEvent(
+              referral.id,
+              event.id,
+              trx,
+            );
             if (alreadyRewarded) {
               continue;
             }
 
-            const referralCoupons = await CouponService.createCouponsForUser({
-              userId: referral.referrer_user_id,
-              promotionId: promotion.id,
-              registrationEventId: event.id,
-              sourceType: 'referral',
-              phoneSnapshot: params.payload.phone_number,
-              leadId: params.payload.lead_id,
-              customerFullName: customerName,
-            }, trx);
+            const referralCoupons = await CouponService.createCouponsForUser(
+              {
+                userId: referral.referrer_user_id,
+                promotionId: promotion.id,
+                registrationEventId: event.id,
+                sourceType: 'referral',
+                phoneSnapshot: params.payload.phone_number,
+                leadId: params.payload.lead_id,
+                customerFullName: customerName,
+              },
+              trx,
+            );
 
             await ReferralService.recordReward(
               {
@@ -311,32 +406,36 @@ export class CouponRegistrationService {
       const coupons = [...processingResult.customerCoupons];
       const delivery: CouponRegistrationResponse['delivery'] = [];
 
-      for (const coupon of processingResult.customerCoupons) {
-        const result = await BotNotificationService.sendTemplateMessage({
-          user,
-          templateType: params.templateType,
-          placeholders: {
-            customer_name: customerName,
-            coupon_code: coupon.code,
-            payment_due_date: formatDateForLocale(coupon.expires_at, user.language_code || 'uz'),
-            product_name: params.payload.product_name || '',
-            referrer_name: '',
-            prize_name: '',
-          },
-          couponId: coupon.id,
-          dispatchType: params.sourceType,
-        });
+      if (user) {
+        for (const coupon of processingResult.customerCoupons) {
+          const result = await BotNotificationService.sendTemplateMessage({
+            user,
+            templateType: params.templateType,
+            placeholders: {
+              customer_name: customerName,
+              coupon_code: coupon.code,
+              payment_due_date: formatDateForLocale(coupon.expires_at, user.language_code || 'uz'),
+              product_name: params.payload.product_name || '',
+              referrer_name: '',
+              prize_name: '',
+            },
+            couponId: coupon.id,
+            dispatchType: params.sourceType,
+          });
 
-        delivery.push({
-          user_telegram_id: user.telegram_id,
-          delivered: result.delivered,
-          dispatch_type: params.sourceType,
-          error: result.error,
-        });
+          delivery.push({
+            user_telegram_id: user.telegram_id,
+            delivered: result.delivered,
+            dispatch_type: params.sourceType,
+            error: result.error,
+          });
+        }
       }
 
       const referrerIds = Array.from(
-        new Set(processingResult.rewardedReferrals.map(({ referral }) => referral.referrer_user_id)),
+        new Set(
+          processingResult.rewardedReferrals.map(({ referral }) => referral.referrer_user_id),
+        ),
       );
       const referrers = await UserService.getUsersByIds(referrerIds);
       const referrersById = new Map(referrers.map((referrer) => [referrer.id, referrer]));
@@ -376,10 +475,13 @@ export class CouponRegistrationService {
 
       return {
         processed: true,
-        user: {
-          telegram_id: user.telegram_id,
-          phone_number: user.phone_number,
-        },
+        reason: user ? undefined : 'pending_user_assignment',
+        user: user
+          ? {
+              telegram_id: user.telegram_id,
+              phone_number: user.phone_number,
+            }
+          : undefined,
         promotion: {
           id: promotion.id,
           slug: promotion.slug,
@@ -394,20 +496,7 @@ export class CouponRegistrationService {
       };
     } catch (error) {
       if (this.isUniqueViolation(error)) {
-        return {
-          processed: true,
-          reason: 'duplicate_event_skipped',
-          user: {
-            telegram_id: user.telegram_id,
-            phone_number: user.phone_number,
-          },
-          promotion: {
-            id: promotion.id,
-            slug: promotion.slug,
-          },
-          coupons: [],
-          delivery: [],
-        };
+        return this.buildDuplicateResponse({ promotion, user });
       }
 
       throw error;

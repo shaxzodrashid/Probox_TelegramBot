@@ -303,6 +303,12 @@ bot.use(async (ctx, next) => {
     return;
   }
 
+  const user = await UserService.getUserByTelegramId(ctx.from.id);
+  if (!user?.is_admin) {
+    await next();
+    return;
+  }
+
   const draft = await FaqService.getLockedDraftForAdmin(ctx.from.id);
   if (!draft) {
     await next();

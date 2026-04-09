@@ -1,7 +1,7 @@
 import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../types/context';
 import { Contract } from '../data/contracts.mock';
-import { getMainKeyboardByLocale, getContractsKeyboard } from '../keyboards';
+import { getMainKeyboardByLocale } from '../keyboards';
 import { ContractService } from '../services/contract.service';
 import { UserService } from '../services/user.service';
 import { i18n } from '../i18n';
@@ -11,6 +11,7 @@ import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../
 import { formatDate, formatCurrency } from '../utils/formatter.util';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
 import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { PurchasePdfService } from '../services/purchase-pdf.service';
 
 const PAGE_SIZE = 10;
 
@@ -84,8 +85,7 @@ const buildContractsMessage = (paginatedData: PaginatedContracts, locale: string
 /**
  * Build the contract detail message
  */
-const buildContractDetailMessage = (contract: Contract, locale: string) => {
-
+const buildContractDetailMessage = async (contract: Contract, locale: string) => {
   // Find next payment (first Open installment)
   const sortedInst = [...contract.installments].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   const nextPayment = sortedInst.find(inst => inst.status === 'O');
@@ -120,8 +120,18 @@ const buildContractDetailMessage = (contract: Contract, locale: string) => {
     text += i18n.t(locale, 'contracts_all_paid');
   }
 
-  const keyboard = new InlineKeyboard()
-    .text(i18n.t(locale, 'contracts_download_pdf'), 'download_pdf');
+  const keyboard = new InlineKeyboard();
+  const pdfUrl = await PurchasePdfService.getPurchasePdfUrl(contract.id);
+
+  if (pdfUrl) {
+    keyboard.url(i18n.t(locale, 'contracts_download_pdf'), pdfUrl);
+  }
+
+  if (pdfUrl) {
+    keyboard.row();
+  }
+
+  keyboard.text(i18n.t(locale, 'contracts_back_to_list'), 'back_to_contracts');
 
   return { text, keyboard };
 };
@@ -246,7 +256,7 @@ export const contractDetailHandler = async (ctx: BotContext) => {
     return;
   }
 
-  const { text, keyboard } = buildContractDetailMessage(contract, locale);
+  const { text, keyboard } = await buildContractDetailMessage(contract, locale);
 
   await ctx.editMessageText(text, {
     parse_mode: 'HTML',
@@ -335,7 +345,9 @@ export const backToMenuHandler = async (ctx: BotContext) => {
 export const downloadPdfHandler = async (ctx: BotContext) => {
   const locale = (await ctx.i18n.getLocale()) || 'uz';
 
-  const message = i18n.t(locale, 'contracts_coming_soon');
+  const message = PurchasePdfService.isConfigured()
+    ? i18n.t(locale, 'contracts_not_found_alert')
+    : i18n.t(locale, 'contracts_coming_soon');
 
   await ctx.answerCallbackQuery({
     text: message,
@@ -371,7 +383,7 @@ export const contractSelectionHandler = async (ctx: BotContext) => {
     return ctx.reply(i18n.t(locale, 'contracts_not_found_alert'));
   }
 
-  const { text: detailText, keyboard } = buildContractDetailMessage(contract, locale);
+  const { text: detailText, keyboard } = await buildContractDetailMessage(contract, locale);
   await ctx.reply(detailText, {
     parse_mode: 'HTML',
     reply_markup: keyboard,

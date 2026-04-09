@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 
 # Wait for database if needed (optional since we have healthchecks)
 # But healthchecks only wait for the service to be healthy, sometimes there's a small lag

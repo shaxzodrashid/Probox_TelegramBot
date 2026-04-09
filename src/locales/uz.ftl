@@ -126,6 +126,7 @@ contracts_payment_note_paid = ⚠️ <b>Eslatma:</b> Ushbu to'lovdan { $paid } t
 contracts_payment_note_unpaid = ⚠️ <b>Eslatma:</b> Ushbu to'lov hali amalga oshirilmagan.
 contracts_all_paid = 🎉 <b>Tabriklaymiz!</b> Barcha to'lovlar amalga oshirilgan.
 contracts_download_pdf = 📄 PDF yuklab olish
+contracts_back_to_list = 🔙 Shartnomalar ro'yxati
 
 # Payments
 payments_header = 💳 <b>Sizning to'lovlaringiz</b>
@@ -370,7 +371,7 @@ admin_campaign_promotions = 🎯 Aksiyalar
 admin_campaign_prizes = 🎁 Yutuqlar
 admin_campaign_templates = 📨 Xabar shablonlari
 admin_campaign_coupon_search = 🔎 Kupon qidirish
-admin_campaign_coupon_export = 📤 Aktiv kupon eksporti
+admin_campaign_coupon_export = 📤 Kuponlar eksporti
 admin_campaign_promotions_empty = Hozircha aksiya qo'shilmagan.
 admin_campaign_promotions_page = Jami: { $total } ta | Sahifa: { $current }/{ $pages }
 admin_campaign_promotion_create = ➕ Aksiya qo'shish
@@ -476,7 +477,7 @@ admin_campaign_coupon_not_found = Kupon topilmadi.
 admin_campaign_coupon_detail_header = 🎟 Kupon ma'lumotlari
 admin_campaign_mark_winner = 🏆 G'olib qilish
 admin_campaign_winner_marked = Kupon g'olib sifatida belgilandi va xabar yuborildi.
-admin_campaign_coupon_export_ready = Aktiv kuponlar Excel fayl ko'rinishida tayyor.
+admin_campaign_coupon_export_ready = Barcha kuponlar Excel fayl ko'rinishida tayyor.
 admin_campaign_template_create = ➕ Shabloni qo'shish
 admin_campaign_template_detail_header = 📝 Xabar shabloni kartasi
 admin_campaign_edit_template_key = 🔑 Kalit

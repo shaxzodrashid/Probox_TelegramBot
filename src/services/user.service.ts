@@ -36,6 +36,11 @@ export class UserService {
     return user || null;
   }
 
+  static async getUserByJshshir(jshshir: string): Promise<User | null> {
+    const user = await db('users').where('jshshir', jshshir).first();
+    return user || null;
+  }
+
   static async getUserByTelegramId(telegramId: number): Promise<User | null> {
     const user = await db('users').where('telegram_id', telegramId).first();
     return user || null;

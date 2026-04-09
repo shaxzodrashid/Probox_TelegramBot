@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 import { bot } from '../bot';
 import { getAdminMissingTemplateKeyboard } from '../keyboards/template.keyboards';
 
-type ReminderType = 'd2' | 'd1' | 'd0';
+type ReminderType = 'd2' | 'd1' | 'd0' | 'overdue' | 'paid_late';
 
 type ReminderCandidate = {
   reminderType: ReminderType;
@@ -29,12 +29,15 @@ export class PaymentReminderService {
     d2: 2,
     d1: 1,
     d0: 0,
+    overdue: -1,
+    paid_late: -99,
   };
 
   private static getReminderTypeByDaysLeft(daysLeft: number): ReminderType | null {
     if (daysLeft === 2) return 'd2';
     if (daysLeft === 1) return 'd1';
     if (daysLeft === 0) return 'd0';
+    if (daysLeft === -1) return 'overdue';
     return null;
   }
 
@@ -186,14 +189,75 @@ export class PaymentReminderService {
     const missingTemplates = new Set<string>();
 
     for (const installment of installments) {
-      const missing = await this.maybeIssueOnTimeReward(installment);
-      if (missing) missingTemplates.add(missing);
-
       const user = users.find((candidate) => candidate.sap_card_code === installment.CardCode);
       if (!user) {
         continue;
       }
 
+      const total = typeof installment.InstTotal === 'string' ? Number(installment.InstTotal) : installment.InstTotal;
+      const paid = typeof installment.InstPaidToDate === 'string' ? Number(installment.InstPaidToDate) : installment.InstPaidToDate;
+      const isFullyPaid = paid >= total;
+
+      if (isFullyPaid) {
+        // Handle "payment_paid_on_time" reward logic
+        const missing = await this.maybeIssueOnTimeReward(installment);
+        if (missing) missingTemplates.add(missing);
+
+        // Handle "payment_paid_late" logic
+        if (installment.InstActualPaymentDate) {
+          const actualPaymentDate = new Date(installment.InstActualPaymentDate);
+          const dueDate = new Date(installment.InstDueDate);
+          actualPaymentDate.setHours(0, 0, 0, 0);
+          dueDate.setHours(0, 0, 0, 0);
+
+          if (actualPaymentDate > dueDate) {
+            const alreadySentLate = await this.hasReminderBeenSent(
+              user.id,
+              installment.DocEntry,
+              installment.InstlmntID,
+              'paid_late',
+            );
+
+            if (!alreadySentLate) {
+              const result = await BotNotificationService.sendTemplateMessage({
+                user,
+                templateType: 'payment_paid_late',
+                placeholders: {
+                  customer_name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Mijoz',
+                  coupon_code: '',
+                  payment_due_date: formatDateForLocale(installment.InstDueDate, user.language_code || 'uz'),
+                  product_name: installment.itemsPairs || '',
+                  referrer_name: '',
+                  prize_name: '',
+                },
+                dispatchType: 'payment_paid_late',
+              });
+
+              if (!result.delivered && result.error?.includes('Template not found')) {
+                missingTemplates.add('payment_paid_late');
+              }
+
+              await this.logReminder({
+                userId: user.id,
+                sapCardCode: installment.CardCode,
+                docEntry: installment.DocEntry,
+                installmentId: installment.InstlmntID,
+                reminderType: 'paid_late',
+                dueDate: installment.InstDueDate,
+                status: result.delivered ? 'sent' : 'failed',
+                errorMessage: result.error,
+              });
+
+              if (result.delivered) {
+                remindersSent += 1;
+              }
+            }
+          }
+        }
+        continue; // Skip the standard unpaid reminders for fully paid installments
+      }
+
+      // Handle unpaid reminders (d2, d1, d0, overdue)
       const daysLeft = this.toDayIndex(installment.InstDueDate) - todayIndex;
       const reminderType = this.getReminderTypeByDaysLeft(daysLeft);
       if (!reminderType) {
@@ -210,10 +274,10 @@ export class PaymentReminderService {
         continue;
       }
 
-      const templateType = `payment_reminder_${reminderType}` as const;
+      const templateType = reminderType === 'overdue' ? 'payment_overdue' : `payment_reminder_${reminderType}`;
       const result = await BotNotificationService.sendTemplateMessage({
         user,
-        templateType,
+        templateType: templateType as any,
         placeholders: {
           customer_name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Mijoz',
           coupon_code: '',

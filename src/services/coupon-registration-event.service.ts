@@ -5,7 +5,7 @@ export type CouponRegistrationStatus = 'Purchased' | 'VisitedStore';
 
 export interface CouponRegistrationEvent {
   id: number;
-  user_id: number;
+  user_id?: number | null;
   promotion_id?: number | null;
   phone_number: string;
   lead_id: string;
@@ -47,7 +47,7 @@ export class CouponRegistrationEventService {
   ): Promise<CouponRegistrationEvent> {
     const last9 = data.phone_number.replace(/\D/g, '').slice(-9);
     const normalizedPhone = `+998${last9}`;
-    
+
     let normalizedReferredPhone = data.referred_phone_number;
     if (normalizedReferredPhone) {
       const referredLast9 = normalizedReferredPhone.replace(/\D/g, '').slice(-9);
@@ -64,5 +64,25 @@ export class CouponRegistrationEventService {
       .returning('*');
 
     return event;
+  }
+
+  static async assignPendingEventsToUser(
+    phoneNumber: string,
+    userId: number,
+    executor: DbExecutor = db,
+  ): Promise<CouponRegistrationEvent[]> {
+    const last9 = phoneNumber.replace(/\D/g, '').slice(-9);
+    const normalized = `+998${last9}`;
+
+    return executor<CouponRegistrationEvent>('coupon_registration_events')
+      .where({
+        phone_number: normalized,
+      })
+      .whereNull('user_id')
+      .update({
+        user_id: userId,
+        updated_at: new Date(),
+      })
+      .returning('*');
   }
 }

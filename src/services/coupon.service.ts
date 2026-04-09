@@ -38,8 +38,11 @@ interface CouponPromotionSchemaState {
   hasPromotionsTable: boolean;
 }
 
+type DbExecutor = Knex | Knex.Transaction;
+
 export class CouponService {
-  private static couponPromotionSchemaStatePromise: Promise<CouponPromotionSchemaState> | null = null;
+  private static couponPromotionSchemaStatePromise: Promise<CouponPromotionSchemaState> | null =
+    null;
   private static readonly COUPON_PREFIX = 'PRO';
   private static readonly COUPON_TOTAL_LENGTH = 7;
   private static readonly COUPON_SUFFIX_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -74,18 +77,21 @@ export class CouponService {
     throw new Error('Failed to generate a unique 7-character coupon code.');
   }
 
-  static async createCouponsForUser(params: {
-    userId: number;
-    promotionId?: number | null;
-    registrationEventId?: number | null;
-    sourceType: CouponSourceType;
-    phoneSnapshot: string;
-    leadId?: string | null;
-    customerFullName?: string | null;
-    sapDocEntry?: number | null;
-    sapInstallmentId?: number | null;
-    issuedAt?: Date;
-  }, executor: Knex | Knex.Transaction = db): Promise<Coupon[]> {
+  static async createCouponsForUser(
+    params: {
+      userId?: number | null;
+      promotionId?: number | null;
+      registrationEventId?: number | null;
+      sourceType: CouponSourceType;
+      phoneSnapshot: string;
+      leadId?: string | null;
+      customerFullName?: string | null;
+      sapDocEntry?: number | null;
+      sapInstallmentId?: number | null;
+      issuedAt?: Date;
+    },
+    executor: DbExecutor = db,
+  ): Promise<Coupon[]> {
     const issuedAt = params.issuedAt || new Date();
     const count = this.getCouponCountForEvent(issuedAt);
     const expiresAt = this.calculateExpiry(issuedAt);
@@ -111,10 +117,12 @@ export class CouponService {
         })
         .returning('*');
 
-      await executor('coupon_user_mappings').insert({
-        user_id: params.userId,
-        coupon_id: coupon.id,
-      });
+      if (params.userId) {
+        await executor('coupon_user_mappings').insert({
+          user_id: params.userId,
+          coupon_id: coupon.id,
+        });
+      }
 
       createdCoupons.push(coupon);
     }
@@ -123,14 +131,11 @@ export class CouponService {
   }
 
   static async expireStaleCoupons(now: Date = new Date()): Promise<number> {
-    return db<Coupon>('coupons')
-      .where('status', 'active')
-      .andWhere('expires_at', '<', now)
-      .update({
-        status: 'expired',
-        is_active: false,
-        updated_at: now,
-      });
+    return db<Coupon>('coupons').where('status', 'active').andWhere('expires_at', '<', now).update({
+      status: 'expired',
+      is_active: false,
+      updated_at: now,
+    });
   }
 
   static async markCouponAsWinner(code: string): Promise<Coupon | null> {
@@ -146,6 +151,40 @@ export class CouponService {
       .returning('*');
 
     return updated[0] || null;
+  }
+
+  static async assignPendingCouponsToUser(
+    params: {
+      userId: number;
+      phoneNumber: string;
+    },
+    executor: DbExecutor = db,
+  ): Promise<Coupon[]> {
+    const last9 = params.phoneNumber.replace(/\D/g, '').slice(-9);
+    const normalizedVariants = [last9, `998${last9}`, `+998${last9}`];
+
+    const coupons = await executor<Coupon>('coupons as coupons')
+      .leftJoin('coupon_user_mappings as mapping', 'mapping.coupon_id', 'coupons.id')
+      .whereIn('coupons.issued_phone_snapshot', normalizedVariants)
+      .whereNull('mapping.id')
+      .select('coupons.*')
+      .orderBy('coupons.created_at', 'asc');
+
+    if (coupons.length === 0) {
+      return [];
+    }
+
+    await executor('coupon_user_mappings')
+      .insert(
+        coupons.map((coupon) => ({
+          user_id: params.userId,
+          coupon_id: coupon.id,
+        })),
+      )
+      .onConflict(['coupon_id'])
+      .ignore();
+
+    return coupons;
   }
 
   private static async getCouponPromotionSchemaState(): Promise<CouponPromotionSchemaState> {
@@ -217,19 +256,15 @@ export class CouponService {
     const schemaState = await this.getCouponPromotionSchemaState();
     const query = this.buildActiveCouponBaseQuery(schemaState);
 
-    const coupon = await query
-      .where('coupons.code', code)
-      .first();
+    const coupon = await query.where('coupons.code', code).first();
 
     return coupon || null;
   }
 
-  static async getActiveCouponsForExport(): Promise<ActiveCouponRow[]> {
+  static async getCouponsForExport(): Promise<ActiveCouponRow[]> {
     const schemaState = await this.getCouponPromotionSchemaState();
     const query = this.buildActiveCouponBaseQuery(schemaState);
 
-    return query
-      .where('coupons.status', 'active')
-      .orderBy('coupons.created_at', 'desc');
+    return query.orderBy('coupons.created_at', 'desc');
   }
 }

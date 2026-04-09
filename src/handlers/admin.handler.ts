@@ -1224,11 +1224,11 @@ export const adminCampaignCouponExportHandler = async (ctx: BotContext) => {
 
         const locale = getLocale(ctx);
         const statusMsg = await ctx.reply(i18n.t(locale, 'admin_export_generating'));
-        const buffer = await CouponExportService.exportActiveCouponsToExcel();
+        const buffer = await CouponExportService.exportCouponsToExcel();
 
         await ctx.api.deleteMessage(ctx.chat!.id, statusMsg.message_id).catch(() => undefined);
 
-        await ctx.replyWithDocument(new InputFile(buffer, `active_coupons_${new Date().toISOString().slice(0, 10)}.xlsx`), {
+        await ctx.replyWithDocument(new InputFile(buffer, `coupons_${new Date().toISOString().slice(0, 10)}.xlsx`), {
             caption: i18n.t(locale, 'admin_campaign_coupon_export_ready'),
         });
     } catch (error) {
