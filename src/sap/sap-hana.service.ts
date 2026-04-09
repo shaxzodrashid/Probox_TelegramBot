@@ -3,20 +3,17 @@ import { logger } from '../utils/logger';
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
 import { IPurchaseInstallment } from '../interfaces/purchase.interface';
 import { loadSQL } from '../utils/sql-loader.utils';
-import { normalizeUzPhone } from '../utils/uz-phone.util'
+import { normalizeUzPhone } from '../utils/uz-phone.util';
 import { ISapItem } from '../interfaces/item.interface';
 
 export class SapService {
   private readonly logger = logger;
   private readonly schema: string = process.env.SAP_SCHEMA || 'ALTITUDE_DB';
 
-  constructor(private readonly hana: HanaService) { }
+  constructor(private readonly hana: HanaService) {}
 
   async getBusinessPartnerByPhone(phone: string): Promise<IBusinessPartner[]> {
-    const sql = loadSQL('sap/queries/get-business-partner.sql').replace(
-      /{{schema}}/g,
-      this.schema,
-    );
+    const sql = loadSQL('sap/queries/get-business-partner.sql').replace(/{{schema}}/g, this.schema);
 
     const { full } = normalizeUzPhone(phone);
 
@@ -33,11 +30,29 @@ export class SapService {
     }
   }
 
-  async getBPpurchasesByCardCode(cardCode: string): Promise<IPurchaseInstallment[]> {
-    const sql = loadSQL('sap/queries/get-bp-purchases.sql').replace(
+  async getBusinessPartnerByJshshir(jshshir: string): Promise<IBusinessPartner[]> {
+    const sql = loadSQL('sap/queries/get-business-partner-by-jshshir.sql').replace(
       /{{schema}}/g,
       this.schema,
     );
+
+    const normalizedJshshir = jshshir.trim();
+
+    this.logger.info(`📦 [SAP] Fetching business partner by jshshir: ${normalizedJshshir}`);
+
+    try {
+      return await this.hana.executeOnce<IBusinessPartner>(sql, [normalizedJshshir]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getBusinessPartnerByJshshir failed', message);
+
+      throw new Error(`SAP query failed (getBusinessPartnerByJshshir)`);
+    }
+  }
+
+  async getBPpurchasesByCardCode(cardCode: string): Promise<IPurchaseInstallment[]> {
+    const sql = loadSQL('sap/queries/get-bp-purchases.sql').replace(/{{schema}}/g, this.schema);
 
     this.logger.info(`📦 [SAP] Fetching purchases for CardCode: ${cardCode}`);
 
@@ -62,7 +77,9 @@ export class SapService {
       .replace(/{{schema}}/g, this.schema)
       .replace(/{{phones}}/g, placeholders);
 
-    this.logger.info(`📦 [SAP] Fetching batch business partners (${normalizedPhones.length} phones)`);
+    this.logger.info(
+      `📦 [SAP] Fetching batch business partners (${normalizedPhones.length} phones)`,
+    );
 
     try {
       // The query uses IN ({{phones}}) twice: once for Phone1 and once for Phone2
@@ -99,16 +116,15 @@ export class SapService {
   }
 
   async getLatestExchangeRate(currency: string = 'UZS'): Promise<number | null> {
-    const sql = loadSQL('sap/queries/get-currency-rate.sql').replace(
-      /{{schema}}/g,
-      this.schema,
-    );
+    const sql = loadSQL('sap/queries/get-currency-rate.sql').replace(/{{schema}}/g, this.schema);
 
     const normalizedCurrency = currency.trim().toUpperCase();
     this.logger.info(`📦 [SAP] Fetching latest exchange rate for currency: ${normalizedCurrency}`);
 
     try {
-      const rows = await this.hana.executeOnce<{ Rate: number | string }>(sql, [normalizedCurrency]);
+      const rows = await this.hana.executeOnce<{ Rate: number | string }>(sql, [
+        normalizedCurrency,
+      ]);
       const rate = rows[0]?.Rate;
 
       if (rate === undefined || rate === null) {
@@ -126,14 +142,21 @@ export class SapService {
     }
   }
 
-  async getItems({ search, filters = {}, limit = 50, offset = 0, whsCode, includeZeroOnHand = false }: {
+  async getItems({
+    search,
+    filters = {},
+    limit = 50,
+    offset = 0,
+    whsCode,
+    includeZeroOnHand = false,
+  }: {
     search?: string;
     filters?: any;
     limit?: number;
     offset?: number;
     whsCode?: string;
     includeZeroOnHand?: boolean;
-  }): Promise<{ data: ISapItem[], total: number }> {
+  }): Promise<{ data: ISapItem[]; total: number }> {
     const db = this.schema;
     let whereClauses = ['1=1'];
     if (!includeZeroOnHand) {

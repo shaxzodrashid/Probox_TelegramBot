@@ -2,99 +2,107 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ContractService } from './contract.service';
 
-test('ContractService converts USD contracts to UZS display amounts', { concurrency: false }, async () => {
-  const contractServiceClass = ContractService as unknown as {
-    sapService: {
-      getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
-      getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+test(
+  'ContractService converts USD contracts to UZS display amounts',
+  { concurrency: false },
+  async () => {
+    const contractServiceClass = ContractService as unknown as {
+      sapService: {
+        getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
+        getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+      };
     };
-  };
-  const originalGetPurchases = contractServiceClass.sapService.getBPpurchasesByCardCode;
-  const originalGetLatestExchangeRate = contractServiceClass.sapService.getLatestExchangeRate;
+    const originalGetPurchases = contractServiceClass.sapService.getBPpurchasesByCardCode;
+    const originalGetLatestExchangeRate = contractServiceClass.sapService.getLatestExchangeRate;
 
-  try {
-    contractServiceClass.sapService.getBPpurchasesByCardCode = async () => [
-      {
-        DocEntry: 20,
-        DocNum: 6020,
-        CardCode: 'C010',
-        CardName: 'Contract Buyer',
-        DocDate: '2026-04-01',
-        DocDueDate: '2026-05-01',
-        DocCur: 'USD',
-        Total: 200,
-        TotalPaid: 50,
-        InstlmntID: 1,
-        InstDueDate: '2026-05-01',
-        InstTotal: 200,
-        InstPaidToDate: 50,
-        InstStatus: 'O',
-        itemsPairs: 'IP15::iPhone 15::200',
-      },
-    ];
-    contractServiceClass.sapService.getLatestExchangeRate = async () => 12_500;
+    try {
+      contractServiceClass.sapService.getBPpurchasesByCardCode = async () => [
+        {
+          DocEntry: 20,
+          DocNum: 6020,
+          CardCode: 'C010',
+          CardName: 'Contract Buyer',
+          DocDate: '2026-04-01',
+          DocDueDate: '2026-05-01',
+          DocCur: 'USD',
+          Total: 200,
+          TotalPaid: 50,
+          InstlmntID: 1,
+          InstDueDate: '2026-05-01',
+          InstTotal: 200,
+          InstPaidToDate: 50,
+          InstStatus: 'O',
+          itemsPairs: 'IP15::iPhone 15::200',
+        },
+      ];
+      contractServiceClass.sapService.getLatestExchangeRate = async () => 12_500;
 
-    const contracts = await ContractService.getContractsByCardCode('C010');
+      const contracts = await ContractService.getContractsByCardCode('C010');
 
-    assert.equal(contracts.length, 1);
-    assert.equal(contracts[0].currency, 'UZS');
-    assert.equal(contracts[0].displayCurrency, 'UZS');
-    assert.equal(contracts[0].sourceCurrency, 'USD');
-    assert.equal(contracts[0].totalAmount, 2_500_000);
-    assert.equal(contracts[0].totalPaid, 625_000);
-    assert.equal(contracts[0].installments[0].total, 2_500_000);
-    assert.equal(contracts[0].installments[0].paid, 625_000);
-  } finally {
-    contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
-    contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
-  }
-});
+      assert.equal(contracts.length, 1);
+      assert.equal(contracts[0].currency, 'UZS');
+      assert.equal(contracts[0].displayCurrency, 'UZS');
+      assert.equal(contracts[0].sourceCurrency, 'USD');
+      assert.equal(contracts[0].totalAmount, 2_500_000);
+      assert.equal(contracts[0].totalPaid, 625_000);
+      assert.equal(contracts[0].installments[0].total, 2_500_000);
+      assert.equal(contracts[0].installments[0].paid, 625_000);
+    } finally {
+      contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
+      contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
+    }
+  },
+);
 
-test('ContractService keeps original currency when exchange rate is unavailable', { concurrency: false }, async () => {
-  const contractServiceClass = ContractService as unknown as {
-    sapService: {
-      getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
-      getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+test(
+  'ContractService keeps original currency when exchange rate is unavailable',
+  { concurrency: false },
+  async () => {
+    const contractServiceClass = ContractService as unknown as {
+      sapService: {
+        getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
+        getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+      };
     };
-  };
-  const originalGetPurchases = contractServiceClass.sapService.getBPpurchasesByCardCode;
-  const originalGetLatestExchangeRate = contractServiceClass.sapService.getLatestExchangeRate;
+    const originalGetPurchases = contractServiceClass.sapService.getBPpurchasesByCardCode;
+    const originalGetLatestExchangeRate = contractServiceClass.sapService.getLatestExchangeRate;
 
-  try {
-    contractServiceClass.sapService.getBPpurchasesByCardCode = async () => [
-      {
-        DocEntry: 21,
-        DocNum: 6021,
-        CardCode: 'C011',
-        CardName: 'Fallback Contract Buyer',
-        DocDate: '2026-04-01',
-        DocDueDate: '2026-05-01',
-        DocCur: 'USD',
-        Total: 200,
-        TotalPaid: 0,
-        InstlmntID: 1,
-        InstDueDate: '2026-05-01',
-        InstTotal: 200,
-        InstPaidToDate: 0,
-        InstStatus: 'O',
-        itemsPairs: 'IP16::iPhone 16::200',
-      },
-    ];
-    contractServiceClass.sapService.getLatestExchangeRate = async () => {
-      throw new Error('ORTT unavailable');
-    };
+    try {
+      contractServiceClass.sapService.getBPpurchasesByCardCode = async () => [
+        {
+          DocEntry: 21,
+          DocNum: 6021,
+          CardCode: 'C011',
+          CardName: 'Fallback Contract Buyer',
+          DocDate: '2026-04-01',
+          DocDueDate: '2026-05-01',
+          DocCur: 'USD',
+          Total: 200,
+          TotalPaid: 0,
+          InstlmntID: 1,
+          InstDueDate: '2026-05-01',
+          InstTotal: 200,
+          InstPaidToDate: 0,
+          InstStatus: 'O',
+          itemsPairs: 'IP16::iPhone 16::200',
+        },
+      ];
+      contractServiceClass.sapService.getLatestExchangeRate = async () => {
+        throw new Error('ORTT unavailable');
+      };
 
-    const contracts = await ContractService.getContractsByCardCode('C011');
+      const contracts = await ContractService.getContractsByCardCode('C011');
 
-    assert.equal(contracts[0].currency, 'USD');
-    assert.equal(contracts[0].displayCurrency, 'USD');
-    assert.equal(contracts[0].totalAmount, 200);
-    assert.equal(contracts[0].installments[0].total, 200);
-  } finally {
-    contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
-    contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
-  }
-});
+      assert.equal(contracts[0].currency, 'USD');
+      assert.equal(contracts[0].displayCurrency, 'USD');
+      assert.equal(contracts[0].totalAmount, 200);
+      assert.equal(contracts[0].installments[0].total, 200);
+    } finally {
+      contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
+      contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
+    }
+  },
+);
 
 test('ContractService leaves non-USD contracts unchanged', { concurrency: false }, async () => {
   const contractServiceClass = ContractService as unknown as {
@@ -140,3 +148,125 @@ test('ContractService leaves non-USD contracts unchanged', { concurrency: false 
     contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
   }
 });
+
+test(
+  'ContractService prefers jshshir lookup when it is available',
+  { concurrency: false },
+  async () => {
+    const contractServiceClass = ContractService as unknown as {
+      sapService: {
+        getBusinessPartnerByJshshir: (jshshir: string) => Promise<Array<{ CardCode: string }>>;
+        getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
+        getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+      };
+    };
+    const originalGetPartnerByJshshir = contractServiceClass.sapService.getBusinessPartnerByJshshir;
+    const originalGetPurchases = contractServiceClass.sapService.getBPpurchasesByCardCode;
+    const originalGetLatestExchangeRate = contractServiceClass.sapService.getLatestExchangeRate;
+
+    try {
+      let requestedCardCode: string | null = null;
+
+      contractServiceClass.sapService.getBusinessPartnerByJshshir = async () => [
+        { CardCode: 'C777' },
+      ];
+      contractServiceClass.sapService.getBPpurchasesByCardCode = async (cardCode: string) => {
+        requestedCardCode = cardCode;
+
+        return [
+          {
+            DocEntry: 23,
+            DocNum: 6023,
+            CardCode: cardCode,
+            CardName: 'JSHSHIR Buyer',
+            DocDate: '2026-04-01',
+            DocDueDate: '2026-05-01',
+            DocCur: 'UZS',
+            Total: 900000,
+            TotalPaid: 100000,
+            InstlmntID: 1,
+            InstDueDate: '2026-05-01',
+            InstTotal: 900000,
+            InstPaidToDate: 100000,
+            InstStatus: 'O',
+            itemsPairs: 'TV02::TV::900000',
+          },
+        ];
+      };
+      contractServiceClass.sapService.getLatestExchangeRate = async () => 12_500;
+
+      const contracts = await ContractService.getContractsByIdentifiers({
+        jshshir: '12345678901234',
+        cardCode: 'C012',
+      });
+
+      assert.equal(requestedCardCode, 'C777');
+      assert.equal(contracts.length, 1);
+      assert.equal(contracts[0].id, '23');
+    } finally {
+      contractServiceClass.sapService.getBusinessPartnerByJshshir = originalGetPartnerByJshshir;
+      contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
+      contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
+    }
+  },
+);
+
+test(
+  'ContractService falls back to CardCode when jshshir lookup does not match',
+  { concurrency: false },
+  async () => {
+    const contractServiceClass = ContractService as unknown as {
+      sapService: {
+        getBusinessPartnerByJshshir: (jshshir: string) => Promise<Array<{ CardCode: string }>>;
+        getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
+        getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+      };
+    };
+    const originalGetPartnerByJshshir = contractServiceClass.sapService.getBusinessPartnerByJshshir;
+    const originalGetPurchases = contractServiceClass.sapService.getBPpurchasesByCardCode;
+    const originalGetLatestExchangeRate = contractServiceClass.sapService.getLatestExchangeRate;
+
+    try {
+      let requestedCardCode: string | null = null;
+
+      contractServiceClass.sapService.getBusinessPartnerByJshshir = async () => [];
+      contractServiceClass.sapService.getBPpurchasesByCardCode = async (cardCode: string) => {
+        requestedCardCode = cardCode;
+
+        return [
+          {
+            DocEntry: 24,
+            DocNum: 6024,
+            CardCode: cardCode,
+            CardName: 'Fallback Buyer',
+            DocDate: '2026-04-01',
+            DocDueDate: '2026-05-01',
+            DocCur: 'UZS',
+            Total: 750000,
+            TotalPaid: 250000,
+            InstlmntID: 1,
+            InstDueDate: '2026-05-01',
+            InstTotal: 750000,
+            InstPaidToDate: 250000,
+            InstStatus: 'O',
+            itemsPairs: 'TV03::TV::750000',
+          },
+        ];
+      };
+      contractServiceClass.sapService.getLatestExchangeRate = async () => 12_500;
+
+      const contracts = await ContractService.getContractsByIdentifiers({
+        jshshir: '12345678901234',
+        cardCode: 'C099',
+      });
+
+      assert.equal(requestedCardCode, 'C099');
+      assert.equal(contracts.length, 1);
+      assert.equal(contracts[0].id, '24');
+    } finally {
+      contractServiceClass.sapService.getBusinessPartnerByJshshir = originalGetPartnerByJshshir;
+      contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
+      contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
+    }
+  },
+);

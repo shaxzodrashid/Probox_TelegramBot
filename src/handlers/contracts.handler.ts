@@ -3,11 +3,14 @@ import { BotContext } from '../types/context';
 import { Contract } from '../data/contracts.mock';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { ContractService } from '../services/contract.service';
-import { UserService } from '../services/user.service';
+import { User, UserService } from '../services/user.service';
 import { i18n } from '../i18n';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { logger } from '../utils/logger';
-import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
+import {
+  isCallbackQueryExpiredError,
+  isMessageToDeleteNotFoundError,
+} from '../utils/telegram-errors';
 import { formatDate, formatCurrency } from '../utils/formatter.util';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
 import { escapeHtml } from '../utils/telegram-rich-text.util';
@@ -24,6 +27,11 @@ interface PaginatedContracts {
   hasPrevPage: boolean;
 }
 
+const getSapLookupIdentifiers = (user?: Pick<User, 'jshshir' | 'sap_card_code'> | null) => ({
+  jshshir: user?.jshshir?.trim() || undefined,
+  cardCode: user?.sap_card_code?.trim() || undefined,
+});
+
 /**
  * Build the contracts list message with inline keyboard
  */
@@ -33,11 +41,12 @@ const buildContractsMessage = (paginatedData: PaginatedContracts, locale: string
   // Build message text
   const header = i18n.t(locale, 'contracts_header') + '\n\n';
 
-  const pageInfo = i18n.t(locale, 'contracts_page_info', {
-    total: escapeHtml(totalItems.toString()),
-    current: escapeHtml(currentPage.toString()),
-    pages: escapeHtml(totalPages.toString())
-  }) + '\n\n';
+  const pageInfo =
+    i18n.t(locale, 'contracts_page_info', {
+      total: escapeHtml(totalItems.toString()),
+      current: escapeHtml(currentPage.toString()),
+      pages: escapeHtml(totalPages.toString()),
+    }) + '\n\n';
 
   // Simple list with only item names
   let contractsList = '';
@@ -87,32 +96,54 @@ const buildContractsMessage = (paginatedData: PaginatedContracts, locale: string
  */
 const buildContractDetailMessage = async (contract: Contract, locale: string) => {
   // Find next payment (first Open installment)
-  const sortedInst = [...contract.installments].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-  const nextPayment = sortedInst.find(inst => inst.status === 'O');
+  const sortedInst = [...contract.installments].sort(
+    (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+  );
+  const nextPayment = sortedInst.find((inst) => inst.status === 'O');
 
   let text = i18n.t(locale, 'contracts_detail_header') + '\n\n';
 
   text += i18n.t(locale, 'contracts_partner_label', { name: escapeHtml(contract.cardName) }) + '\n';
   text += i18n.t(locale, 'contracts_product_label', { name: escapeHtml(contract.itemName) }) + '\n';
-  text += i18n.t(locale, 'contracts_number_label', { number: escapeHtml(contract.contractNumber) }) + '\n\n';
+  text +=
+    i18n.t(locale, 'contracts_number_label', { number: escapeHtml(contract.contractNumber) }) +
+    '\n\n';
 
-  text += i18n.t(locale, 'contracts_purchase_date_label', { date: escapeHtml(formatDate(contract.purchaseDate)) }) + '\n';
-  text += i18n.t(locale, 'contracts_due_date_label', { date: escapeHtml(formatDate(contract.dueDate)) }) + '\n\n';
+  text +=
+    i18n.t(locale, 'contracts_purchase_date_label', {
+      date: escapeHtml(formatDate(contract.purchaseDate)),
+    }) + '\n';
+  text +=
+    i18n.t(locale, 'contracts_due_date_label', { date: escapeHtml(formatDate(contract.dueDate)) }) +
+    '\n\n';
 
-  text += i18n.t(locale, 'contracts_total_amount_label', { amount: escapeHtml(formatCurrency(contract.totalAmount, contract.currency)) }) + '\n';
-  text += i18n.t(locale, 'contracts_paid_label', { amount: escapeHtml(formatCurrency(contract.totalPaid, contract.currency)) }) + '\n\n';
+  text +=
+    i18n.t(locale, 'contracts_total_amount_label', {
+      amount: escapeHtml(formatCurrency(contract.totalAmount, contract.currency)),
+    }) + '\n';
+  text +=
+    i18n.t(locale, 'contracts_paid_label', {
+      amount: escapeHtml(formatCurrency(contract.totalPaid, contract.currency)),
+    }) + '\n\n';
 
   if (nextPayment) {
     text += i18n.t(locale, 'contracts_next_payment_label') + '\n';
-    text += i18n.t(locale, 'contracts_date_label', { date: escapeHtml(formatDate(nextPayment.dueDate)) }) + '\n';
-    text += i18n.t(locale, 'contracts_amount_label', { amount: escapeHtml(formatCurrency(nextPayment.total, contract.currency)) }) + '\n';
+    text +=
+      i18n.t(locale, 'contracts_date_label', {
+        date: escapeHtml(formatDate(nextPayment.dueDate)),
+      }) + '\n';
+    text +=
+      i18n.t(locale, 'contracts_amount_label', {
+        amount: escapeHtml(formatCurrency(nextPayment.total, contract.currency)),
+      }) + '\n';
 
     const remainingForInst = nextPayment.total - nextPayment.paid;
     if (nextPayment.paid > 0) {
-      text += i18n.t(locale, 'contracts_payment_note_paid', {
-        paid: escapeHtml(formatCurrency(nextPayment.paid, contract.currency)),
-        remaining: escapeHtml(formatCurrency(remainingForInst, contract.currency))
-      }) + '\n';
+      text +=
+        i18n.t(locale, 'contracts_payment_note_paid', {
+          paid: escapeHtml(formatCurrency(nextPayment.paid, contract.currency)),
+          remaining: escapeHtml(formatCurrency(remainingForInst, contract.currency)),
+        }) + '\n';
     } else {
       text += i18n.t(locale, 'contracts_payment_note_unpaid') + '\n';
     }
@@ -146,15 +177,15 @@ export const contractsHandler = async (ctx: BotContext) => {
   const user = await checkRegistrationOrPrompt(ctx);
   if (!user) return;
 
-  const cardCode = user.sap_card_code;
+  const identifiers = getSapLookupIdentifiers(user);
 
-  if (!cardCode) {
+  if (!identifiers.jshshir && !identifiers.cardCode) {
     await ctx.reply(ctx.t('contracts_no_access'));
     return;
   }
 
   try {
-    const contracts = await ContractService.getContractsByCardCode(cardCode);
+    const contracts = await ContractService.getContractsByIdentifiers(identifiers);
 
     if (!contracts || contracts.length === 0) {
       await ctx.reply(ctx.t('contracts_not_found'));
@@ -173,7 +204,7 @@ export const contractsHandler = async (ctx: BotContext) => {
       reply_markup: keyboard,
     });
   } catch (err) {
-    logger.error(`[CONTRACTS] Error fetching contracts for ${cardCode}: ${err}`);
+    logger.error(`[CONTRACTS] Error fetching contracts for user ${ctx.from?.id}: ${err}`);
     await ctx.reply(ctx.t('contracts_error'));
   }
 };
@@ -195,16 +226,16 @@ export const contractsPaginationHandler = async (ctx: BotContext) => {
   let contracts = ctx.session.contracts;
   if (!contracts || contracts.length === 0) {
     const user = await UserService.getUserByTelegramId(ctx.from!.id);
-    const cardCode = user?.sap_card_code;
+    const identifiers = getSapLookupIdentifiers(user);
 
-    if (!cardCode) {
+    if (!identifiers.jshshir && !identifiers.cardCode) {
       return ctx.answerCallbackQuery({
         text: i18n.t(locale, 'contracts_not_found_alert'),
-        show_alert: true
+        show_alert: true,
       });
     }
 
-    contracts = await ContractService.getContractsByCardCode(cardCode);
+    contracts = await ContractService.getContractsByIdentifiers(identifiers);
     ctx.session.contracts = contracts;
   }
 
@@ -212,12 +243,14 @@ export const contractsPaginationHandler = async (ctx: BotContext) => {
   const paginatedData = ContractService.paginateContracts(contracts || [], page, PAGE_SIZE);
   const { text, keyboard } = buildContractsMessage(paginatedData, locale);
 
-  await ctx.editMessageText(text, {
-    parse_mode: 'HTML',
-    reply_markup: keyboard,
-  }).catch((err) => {
-    if (!isMessageToDeleteNotFoundError(err)) throw err;
-  });
+  await ctx
+    .editMessageText(text, {
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    })
+    .catch((err) => {
+      if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
   await ctx.answerCallbackQuery().catch((err) => {
     if (!isCallbackQueryExpiredError(err)) throw err;
   });
@@ -239,31 +272,33 @@ export const contractDetailHandler = async (ctx: BotContext) => {
   if (!contracts || contracts.length === 0) {
     logger.info(`[CONTRACTS] Session empty, refetching contracts for user ${ctx.from?.id}`);
     const user = await UserService.getUserByTelegramId(ctx.from!.id);
-    const cardCode = user?.sap_card_code;
+    const identifiers = getSapLookupIdentifiers(user);
 
-    if (cardCode) {
-      contracts = await ContractService.getContractsByCardCode(cardCode);
+    if (identifiers.jshshir || identifiers.cardCode) {
+      contracts = await ContractService.getContractsByIdentifiers(identifiers);
       ctx.session.contracts = contracts;
     }
   }
 
-  const contract = contracts?.find(c => c.id === contractId);
+  const contract = contracts?.find((c) => c.id === contractId);
   if (!contract) {
     await ctx.answerCallbackQuery({
       text: i18n.t(locale, 'contracts_not_found_alert'),
-      show_alert: true
+      show_alert: true,
     });
     return;
   }
 
   const { text, keyboard } = await buildContractDetailMessage(contract, locale);
 
-  await ctx.editMessageText(text, {
-    parse_mode: 'HTML',
-    reply_markup: keyboard,
-  }).catch((err) => {
-    if (!isMessageToDeleteNotFoundError(err)) throw err;
-  });
+  await ctx
+    .editMessageText(text, {
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    })
+    .catch((err) => {
+      if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
   await ctx.answerCallbackQuery().catch((err) => {
     if (!isCallbackQueryExpiredError(err)) throw err;
   });
@@ -281,10 +316,10 @@ export const backToContractsHandler = async (ctx: BotContext) => {
   let contracts = ctx.session.contracts;
   if (!contracts || contracts.length === 0) {
     const user = await UserService.getUserByTelegramId(ctx.from!.id);
-    const cardCode = user?.sap_card_code;
+    const identifiers = getSapLookupIdentifiers(user);
 
-    if (cardCode) {
-      contracts = await ContractService.getContractsByCardCode(cardCode);
+    if (identifiers.jshshir || identifiers.cardCode) {
+      contracts = await ContractService.getContractsByIdentifiers(identifiers);
       ctx.session.contracts = contracts;
     }
   }
@@ -292,12 +327,14 @@ export const backToContractsHandler = async (ctx: BotContext) => {
   const paginatedData = ContractService.paginateContracts(contracts || [], page, PAGE_SIZE);
   const { text, keyboard } = buildContractsMessage(paginatedData, locale);
 
-  await ctx.editMessageText(text, {
-    parse_mode: 'HTML',
-    reply_markup: keyboard,
-  }).catch((err) => {
-    if (!isMessageToDeleteNotFoundError(err)) throw err;
-  });
+  await ctx
+    .editMessageText(text, {
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    })
+    .catch((err) => {
+      if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
   await ctx.answerCallbackQuery().catch((err) => {
     if (!isCallbackQueryExpiredError(err)) throw err;
   });
@@ -351,7 +388,7 @@ export const downloadPdfHandler = async (ctx: BotContext) => {
 
   await ctx.answerCallbackQuery({
     text: message,
-    show_alert: true
+    show_alert: true,
   });
 };
 
@@ -371,9 +408,9 @@ export const contractSelectionHandler = async (ctx: BotContext) => {
   let contracts = ctx.session.contracts;
   if (!contracts || contracts.length === 0) {
     const user = await UserService.getUserByTelegramId(ctx.from!.id);
-    const cardCode = user?.sap_card_code;
-    if (cardCode) {
-      contracts = await ContractService.getContractsByCardCode(cardCode);
+    const identifiers = getSapLookupIdentifiers(user);
+    if (identifiers.jshshir || identifiers.cardCode) {
+      contracts = await ContractService.getContractsByIdentifiers(identifiers);
       ctx.session.contracts = contracts;
     }
   }
