@@ -11,6 +11,7 @@ export class CouponExportService {
     const sheet = workbook.addWorksheet('Coupons');
     sheet.columns = [
       { header: 'Coupon Code', key: 'code', width: 16 },
+      { header: 'User Exists', key: 'user_exists', width: 14 },
       { header: 'User Name', key: 'user_name', width: 24 },
       { header: 'Phone', key: 'phone_number', width: 18 },
       { header: 'Source Type', key: 'source_type', width: 16 },
@@ -21,11 +22,12 @@ export class CouponExportService {
     ];
 
     sheet.getRow(1).font = { bold: true };
-    sheet.autoFilter = { from: 'A1', to: 'H1' };
+    sheet.autoFilter = { from: 'A1', to: 'I1' };
 
     coupons.forEach((coupon) => {
       sheet.addRow({
         code: coupon.code,
+        user_exists: coupon.user_exists ? 'Yes' : 'No',
         user_name: [coupon.first_name, coupon.last_name].filter(Boolean).join(' ') || '-',
         phone_number: coupon.phone_number || '-',
         source_type: coupon.source_type,

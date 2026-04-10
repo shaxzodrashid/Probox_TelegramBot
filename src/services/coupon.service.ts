@@ -33,6 +33,16 @@ export interface ActiveCouponRow extends Coupon {
   promotion_title_ru?: string | null;
 }
 
+export interface CouponExportRow extends Coupon {
+  user_id?: number | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone_number?: string | null;
+  promotion_title_uz?: string | null;
+  promotion_title_ru?: string | null;
+  user_exists: boolean;
+}
+
 interface CouponPromotionSchemaState {
   hasCouponsPromotionId: boolean;
   hasPromotionsTable: boolean;
@@ -261,10 +271,37 @@ export class CouponService {
     return coupon || null;
   }
 
-  static async getCouponsForExport(): Promise<ActiveCouponRow[]> {
+  static async getCouponsForExport(): Promise<CouponExportRow[]> {
     const schemaState = await this.getCouponPromotionSchemaState();
-    const query = this.buildActiveCouponBaseQuery(schemaState);
+    const query = db('coupons')
+      .leftJoin('coupon_user_mappings as mapping', 'mapping.coupon_id', 'coupons.id')
+      .leftJoin('users', 'users.id', 'mapping.user_id');
 
-    return query.orderBy('coupons.created_at', 'desc');
+    if (schemaState.hasCouponsPromotionId && schemaState.hasPromotionsTable) {
+      query.leftJoin('promotions', 'promotions.id', 'coupons.promotion_id');
+    }
+
+    query.select(
+      'coupons.*',
+      'mapping.user_id',
+      'users.first_name',
+      'users.last_name',
+      'users.phone_number',
+      db.raw('CASE WHEN users.id IS NOT NULL THEN TRUE ELSE FALSE END as user_exists'),
+    );
+
+    if (schemaState.hasCouponsPromotionId && schemaState.hasPromotionsTable) {
+      query.select(
+        'promotions.title_uz as promotion_title_uz',
+        'promotions.title_ru as promotion_title_ru',
+      );
+    } else {
+      query.select(
+        db.raw('NULL::text as promotion_title_uz'),
+        db.raw('NULL::text as promotion_title_ru'),
+      );
+    }
+
+    return query.whereNot('coupons.status', 'expired').orderBy('coupons.created_at', 'desc');
   }
 }
