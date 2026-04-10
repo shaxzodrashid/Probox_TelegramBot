@@ -1,37 +1,88 @@
 import db from '../database/database';
+import { IPurchaseInstallment } from '../interfaces/purchase.interface';
+import { redisService } from '../redis/redis.service';
 import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
-import { formatDateForLocale, getTashkentDateKey } from '../utils/tashkent-time.util';
-import { BotNotificationService } from './bot-notification.service';
-import { CouponService } from './coupon.service';
-import { IPurchaseInstallment } from '../interfaces/purchase.interface';
-import { PromotionService } from './promotion.service';
-import { UserService } from './user.service';
-import { logger } from '../utils/logger';
-import { bot } from '../bot';
 import { getAdminMissingTemplateKeyboard } from '../keyboards/template.keyboards';
+import { formatDateForLocale, getTashkentDateKey } from '../utils/tashkent-time.util';
+import { formatUzPhone } from '../utils/uz-phone.util';
+import { logger } from '../utils/logger';
+import { BotNotificationService } from './bot-notification.service';
+import { Coupon, CouponService } from './coupon.service';
+import { Promotion, PromotionService } from './promotion.service';
+import { User, UserService } from './user.service';
 
 type ReminderType = 'd2' | 'd1' | 'd0' | 'overdue' | 'paid_late';
 
-type ReminderCandidate = {
-  reminderType: ReminderType;
-  installment: IPurchaseInstallment;
-  userId: number;
-  telegramId: number;
-  locale: string;
-  phoneNumber?: string;
+interface ProcessingWindow {
+  dueDateFrom: string;
+  dueDateTo: string;
+  rewardMonth: string;
+  rewardMonthStart: string;
+  rewardMonthEnd: string;
+  todayKey: string;
+  todayIndex: number;
+}
+
+interface LinkedUserContext {
+  user: User;
   fullName: string;
-};
+  locale: string;
+}
+
+export interface PaymentReminderRunResult {
+  checkedCardCodes: number;
+  fetchedInstallments: number;
+  remindersSent: number;
+  reminderNotificationsSent: number;
+  rewardCouponsIssued: number;
+  rewardNotificationsSent: number;
+  unlinkedRewardCouponsIssued: number;
+  rewardTargetMonth: string;
+  dueDateFrom: string;
+  dueDateTo: string;
+}
+
+export class PaymentReminderRunAlreadyInProgressError extends Error {
+  constructor() {
+    super('Payment reminder run is already in progress');
+    this.name = 'PaymentReminderRunAlreadyInProgressError';
+  }
+}
 
 export class PaymentReminderService {
   private static readonly sapService = new SapService(new HanaService());
-  private static readonly reminderOffsets: Record<ReminderType, number> = {
-    d2: 2,
-    d1: 1,
-    d0: 0,
-    overdue: -1,
-    paid_late: -99,
-  };
+  private static readonly RUN_LOCK_KEY = 'lock:payment-reminder:run';
+  private static readonly RUN_LOCK_TTL_SECONDS = 30 * 60;
+
+  private static async getBot() {
+    const botModule = await import('../bot.js');
+    return botModule.bot;
+  }
+
+  private static buildRunLockToken(): string {
+    return `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  }
+
+  private static async acquireRunLock(): Promise<string> {
+    const token = this.buildRunLockToken();
+    const result = await redisService
+      .getClient()
+      .set(this.RUN_LOCK_KEY, token, 'EX', this.RUN_LOCK_TTL_SECONDS, 'NX');
+
+    if (result !== 'OK') {
+      throw new PaymentReminderRunAlreadyInProgressError();
+    }
+
+    return token;
+  }
+
+  private static async releaseRunLock(token: string): Promise<void> {
+    const currentToken = await redisService.get<string>(this.RUN_LOCK_KEY);
+    if (currentToken === token) {
+      await redisService.delete(this.RUN_LOCK_KEY);
+    }
+  }
 
   private static getReminderTypeByDaysLeft(daysLeft: number): ReminderType | null {
     if (daysLeft === 2) return 'd2';
@@ -44,6 +95,147 @@ export class PaymentReminderService {
   private static toDayIndex(dateString: string): number {
     const date = new Date(dateString);
     return Math.floor(date.getTime() / 86_400_000);
+  }
+
+  private static toMonthKey(date: Date): string {
+    return getTashkentDateKey(date).slice(0, 7);
+  }
+
+  private static getMonthBounds(monthKey: string): { start: string; end: string } {
+    const match = monthKey.match(/^(\d{4})-(\d{2})$/);
+    if (!match) {
+      throw new Error(`PAYMENT_REWARD_TARGET_MONTH must use YYYY-MM format. Received: ${monthKey}`);
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const start = `${match[1]}-${match[2]}-01`;
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate().toString().padStart(2, '0');
+
+    return {
+      start,
+      end: `${match[1]}-${match[2]}-${lastDay}`,
+    };
+  }
+
+  private static addDays(dateKey: string, days: number): string {
+    const date = new Date(`${dateKey}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+
+  private static buildProcessingWindow(now: Date, rewardMonthOverride?: string): ProcessingWindow {
+    const todayKey = getTashkentDateKey(now);
+    const todayIndex = this.toDayIndex(todayKey);
+    const rewardMonth = rewardMonthOverride || process.env.PAYMENT_REWARD_TARGET_MONTH || this.toMonthKey(now);
+    const rewardBounds = this.getMonthBounds(rewardMonth);
+    const reminderWindowStart = this.addDays(todayKey, -1);
+    const reminderWindowEnd = this.addDays(todayKey, 2);
+
+    return {
+      dueDateFrom: rewardBounds.start < reminderWindowStart ? rewardBounds.start : reminderWindowStart,
+      dueDateTo: rewardBounds.end > reminderWindowEnd ? rewardBounds.end : reminderWindowEnd,
+      rewardMonth,
+      rewardMonthStart: rewardBounds.start,
+      rewardMonthEnd: rewardBounds.end,
+      todayKey,
+      todayIndex,
+    };
+  }
+
+  private static isInstallmentFullyPaid(installment: IPurchaseInstallment): boolean {
+    const total =
+      typeof installment.InstTotal === 'string' ? Number(installment.InstTotal) : installment.InstTotal;
+    const paid =
+      typeof installment.InstPaidToDate === 'string'
+        ? Number(installment.InstPaidToDate)
+        : installment.InstPaidToDate;
+
+    return paid >= total;
+  }
+
+  private static isPaidOnTime(installment: IPurchaseInstallment): boolean {
+    if (!installment.InstActualPaymentDate) {
+      return false;
+    }
+
+    const actualPaymentDate = new Date(installment.InstActualPaymentDate);
+    const dueDate = new Date(installment.InstDueDate);
+
+    actualPaymentDate.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+
+    return actualPaymentDate <= dueDate;
+  }
+
+  private static isPaidLate(installment: IPurchaseInstallment): boolean {
+    if (!installment.InstActualPaymentDate) {
+      return false;
+    }
+
+    const actualPaymentDate = new Date(installment.InstActualPaymentDate);
+    const dueDate = new Date(installment.InstDueDate);
+
+    actualPaymentDate.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
+
+    return actualPaymentDate > dueDate;
+  }
+
+  private static isInstallmentInRewardMonth(
+    installment: IPurchaseInstallment,
+    window: ProcessingWindow,
+  ): boolean {
+    return installment.InstDueDate >= window.rewardMonthStart && installment.InstDueDate <= window.rewardMonthEnd;
+  }
+
+  private static buildLinkedUserMap(users: User[]): Map<string, LinkedUserContext> {
+    const map = new Map<string, LinkedUserContext>();
+
+    for (const user of users) {
+      if (!user.sap_card_code || map.has(user.sap_card_code)) {
+        continue;
+      }
+
+      map.set(user.sap_card_code, {
+        user,
+        fullName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.phone_number || 'Mijoz',
+        locale: user.language_code || 'uz',
+      });
+    }
+
+    return map;
+  }
+
+  private static getPhoneSnapshot(
+    installment: IPurchaseInstallment,
+    linkedUser?: LinkedUserContext,
+  ): string {
+    const candidates = [
+      linkedUser?.user.phone_number,
+      installment.Cellular,
+      installment.Phone1,
+      installment.Phone2,
+    ];
+
+    for (const candidate of candidates) {
+      const formatted = formatUzPhone(candidate);
+      if (formatted !== '-') {
+        return formatted;
+      }
+    }
+
+    logger.warn(
+      `[PAYMENT_REMINDER] Missing phone snapshot for CardCode ${installment.CardCode}, DocEntry ${installment.DocEntry}, installment ${installment.InstlmntID}`,
+    );
+    return '';
+  }
+
+  private static async fetchInstallments(window: ProcessingWindow): Promise<IPurchaseInstallment[]> {
+    return this.sapService.getPaymentReminderInstallments({
+      dueDateFrom: window.dueDateFrom,
+      dueDateTo: window.dueDateTo,
+    });
   }
 
   private static async hasReminderBeenSent(
@@ -87,251 +279,341 @@ export class PaymentReminderService {
     });
   }
 
-  private static async maybeIssueOnTimeReward(installment: IPurchaseInstallment): Promise<string | null> {
-    const total = typeof installment.InstTotal === 'string' ? Number(installment.InstTotal) : installment.InstTotal;
-    const paid =
-      typeof installment.InstPaidToDate === 'string'
-        ? Number(installment.InstPaidToDate)
-        : installment.InstPaidToDate;
-
-    // Check if fully paid
-    if (paid < total) {
-      return null;
-    }
-
-    // Check if payment was made in SAP
-    if (!installment.InstActualPaymentDate) {
-      return null;
-    }
-
-    const actualPaymentDate = new Date(installment.InstActualPaymentDate);
-    const dueDate = new Date(installment.InstDueDate);
-
-    // Check if payment was on time
-    // Actual payment date derived from DocDate which has no time component in some cases. Handle time boundaries.
-    actualPaymentDate.setHours(0, 0, 0, 0);
-    dueDate.setHours(0, 0, 0, 0);
-    
-    if (actualPaymentDate > dueDate) {
-      return null; // Paid late
-    }
-
-    // Since we are not tracking locally, ensure we only issue a coupon 
-    // if we haven't already generated one for this specific payment.
-    const existingCoupon = await db('coupons')
+  private static async findExistingRewardCoupon(
+    installment: IPurchaseInstallment,
+  ): Promise<Coupon | undefined> {
+    const existingCoupon = await db<Coupon>('coupons')
       .where('source_type', 'payment_on_time')
       .andWhere('sap_doc_entry', installment.DocEntry)
       .andWhere('sap_installment_id', installment.InstlmntID)
       .first();
 
-    if (existingCoupon) {
-      return null; // Already rewarded
+    return existingCoupon || undefined;
+  }
+
+  private static async notifyAdminsAboutMissingTemplates(missingTemplates: Set<string>): Promise<void> {
+    if (missingTemplates.size === 0) {
+      return;
     }
 
-    const user = await UserService.getUserBySapCardCode(installment.CardCode);
-    const promotion = await PromotionService.getCurrentPromotion();
-    if (!user || !promotion) {
-      return null;
+    const admins = await UserService.getAdmins();
+    const templateList = Array.from(missingTemplates).join(', ');
+    const bot = await this.getBot();
+
+    for (const admin of admins) {
+      try {
+        await bot.api.sendMessage(
+          admin.telegram_id,
+          `⚠️ <b>Внимание!</b>\n\nНе найдены активные шаблоны сообщений для CRON-задачи платежных напоминаний:\n<code>${templateList}</code>\n\nПожалуйста, создайте их в админ-панели.`,
+          {
+            parse_mode: 'HTML',
+            reply_markup: getAdminMissingTemplateKeyboard(admin.language_code || 'uz'),
+          },
+        );
+      } catch (error) {
+        logger.error(`Failed to send missing template warning to admin ${admin.telegram_id}`, error);
+      }
+    }
+  }
+
+  private static async issueOnTimeReward(params: {
+    installment: IPurchaseInstallment;
+    linkedUser?: LinkedUserContext;
+    promotion: Promotion | null;
+    window: ProcessingWindow;
+    dryRun: boolean;
+    missingTemplates: Set<string>;
+  }): Promise<{ couponIssued: boolean; notificationSent: boolean }> {
+    const { installment, linkedUser, promotion, window, dryRun, missingTemplates } = params;
+
+    if (!this.isInstallmentInRewardMonth(installment, window)) {
+      return { couponIssued: false, notificationSent: false };
+    }
+
+    if (!this.isInstallmentFullyPaid(installment) || !this.isPaidOnTime(installment)) {
+      return { couponIssued: false, notificationSent: false };
+    }
+
+    const existingCoupon = await this.findExistingRewardCoupon(installment);
+    if (existingCoupon) {
+      return { couponIssued: false, notificationSent: false };
+    }
+
+    if (!promotion) {
+      logger.warn(
+        `[PAYMENT_REMINDER] No active promotion configured for on-time payment reward. Skipping DocEntry ${installment.DocEntry}, installment ${installment.InstlmntID}`,
+      );
+      return { couponIssued: false, notificationSent: false };
+    }
+
+    if (dryRun) {
+      return { couponIssued: true, notificationSent: Boolean(linkedUser) };
     }
 
     const coupons = await CouponService.createCouponsForUser({
-      userId: user.id,
+      userId: linkedUser?.user.id,
       promotionId: promotion.id,
       sourceType: 'payment_on_time',
-      phoneSnapshot: user.phone_number || '',
+      phoneSnapshot: this.getPhoneSnapshot(installment, linkedUser),
+      customerFullName: linkedUser?.fullName || installment.CardName,
       sapDocEntry: installment.DocEntry,
       sapInstallmentId: installment.InstlmntID,
     });
 
     const firstCoupon = coupons[0];
-    let missingTemplate: string | null = null;
-    if (firstCoupon) {
-      const result = await BotNotificationService.sendTemplateMessage({
-        user,
-        templateType: 'payment_paid_on_time',
-        placeholders: {
-          customer_name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Mijoz',
-          coupon_code: firstCoupon.code,
-          payment_due_date: formatDateForLocale(installment.InstDueDate, user.language_code || 'uz'),
-          product_name: installment.itemsPairs || '',
-          referrer_name: '',
-          prize_name: '',
-        },
-        couponId: firstCoupon.id,
-        dispatchType: 'payment_on_time',
-      });
-
-      if (!result.delivered && result.error?.includes('Template not found')) {
-        missingTemplate = 'payment_paid_on_time';
-      }
+    if (!linkedUser || !firstCoupon) {
+      return { couponIssued: coupons.length > 0, notificationSent: false };
     }
 
-    return missingTemplate;
+    const result = await BotNotificationService.sendTemplateMessage({
+      user: linkedUser.user,
+      templateType: 'payment_paid_on_time',
+      placeholders: {
+        customer_name: linkedUser.fullName,
+        coupon_code: firstCoupon.code,
+        payment_due_date: formatDateForLocale(installment.InstDueDate, linkedUser.locale),
+        product_name: installment.itemsPairs || '',
+        referrer_name: '',
+        prize_name: '',
+      },
+      couponId: firstCoupon.id,
+      dispatchType: 'payment_on_time',
+    });
+
+    if (!result.delivered && result.error?.includes('Template not found')) {
+      missingTemplates.add('payment_paid_on_time');
+    }
+
+    return { couponIssued: coupons.length > 0, notificationSent: result.delivered };
   }
 
-  static async run(): Promise<{
-    checkedCardCodes: number;
-    fetchedInstallments: number;
-    remindersSent: number;
-  }> {
-    await CouponService.expireStaleCoupons();
+  private static async processPaidLateReminder(params: {
+    installment: IPurchaseInstallment;
+    linkedUser: LinkedUserContext;
+    dryRun: boolean;
+    missingTemplates: Set<string>;
+  }): Promise<boolean> {
+    const { installment, linkedUser, dryRun, missingTemplates } = params;
+    const alreadySent = await this.hasReminderBeenSent(
+      linkedUser.user.id,
+      installment.DocEntry,
+      installment.InstlmntID,
+      'paid_late',
+    );
 
-    const users = await UserService.getUsersWithSapCardCode();
-    const uniqueCardCodes = Array.from(new Set(users.map((user) => user.sap_card_code).filter(Boolean))) as string[];
-
-    if (uniqueCardCodes.length === 0) {
-      return { checkedCardCodes: 0, fetchedInstallments: 0, remindersSent: 0 };
+    if (alreadySent) {
+      return false;
     }
 
-    const installments = await this.sapService.getBatchPurchasesByCardCodes(uniqueCardCodes);
-    const todayIndex = this.toDayIndex(getTashkentDateKey(new Date()));
-    let remindersSent = 0;
-    const missingTemplates = new Set<string>();
+    if (dryRun) {
+      return true;
+    }
 
-    for (const installment of installments) {
-      const user = users.find((candidate) => candidate.sap_card_code === installment.CardCode);
-      if (!user) {
-        continue;
+    const result = await BotNotificationService.sendTemplateMessage({
+      user: linkedUser.user,
+      templateType: 'payment_paid_late',
+      placeholders: {
+        customer_name: linkedUser.fullName,
+        coupon_code: '',
+        payment_due_date: formatDateForLocale(installment.InstDueDate, linkedUser.locale),
+        product_name: installment.itemsPairs || '',
+        referrer_name: '',
+        prize_name: '',
+      },
+      dispatchType: 'payment_paid_late',
+    });
+
+    if (!result.delivered && result.error?.includes('Template not found')) {
+      missingTemplates.add('payment_paid_late');
+    }
+
+    await this.logReminder({
+      userId: linkedUser.user.id,
+      sapCardCode: installment.CardCode,
+      docEntry: installment.DocEntry,
+      installmentId: installment.InstlmntID,
+      reminderType: 'paid_late',
+      dueDate: installment.InstDueDate,
+      status: result.delivered ? 'sent' : 'failed',
+      errorMessage: result.error,
+    });
+
+    return result.delivered;
+  }
+
+  private static async processUnpaidReminder(params: {
+    installment: IPurchaseInstallment;
+    linkedUser: LinkedUserContext;
+    reminderType: ReminderType;
+    dryRun: boolean;
+    missingTemplates: Set<string>;
+  }): Promise<boolean> {
+    const { installment, linkedUser, reminderType, dryRun, missingTemplates } = params;
+    const alreadySent = await this.hasReminderBeenSent(
+      linkedUser.user.id,
+      installment.DocEntry,
+      installment.InstlmntID,
+      reminderType,
+    );
+
+    if (alreadySent) {
+      return false;
+    }
+
+    if (dryRun) {
+      return true;
+    }
+
+    const templateType = reminderType === 'overdue' ? 'payment_overdue' : `payment_reminder_${reminderType}`;
+    const result = await BotNotificationService.sendTemplateMessage({
+      user: linkedUser.user,
+      templateType: templateType as 'payment_overdue' | 'payment_reminder_d2' | 'payment_reminder_d1' | 'payment_reminder_d0',
+      placeholders: {
+        customer_name: linkedUser.fullName,
+        coupon_code: '',
+        payment_due_date: formatDateForLocale(installment.InstDueDate, linkedUser.locale),
+        product_name: installment.itemsPairs || '',
+        referrer_name: '',
+        prize_name: '',
+      },
+      dispatchType: templateType,
+    });
+
+    if (!result.delivered && result.error?.includes('Template not found')) {
+      missingTemplates.add(templateType);
+    }
+
+    await this.logReminder({
+      userId: linkedUser.user.id,
+      sapCardCode: installment.CardCode,
+      docEntry: installment.DocEntry,
+      installmentId: installment.InstlmntID,
+      reminderType,
+      dueDate: installment.InstDueDate,
+      status: result.delivered ? 'sent' : 'failed',
+      errorMessage: result.error,
+    });
+
+    return result.delivered;
+  }
+
+  static async run(options?: {
+    now?: Date;
+    dryRun?: boolean;
+    rewardMonth?: string;
+  }): Promise<PaymentReminderRunResult> {
+    const runLockToken = await this.acquireRunLock();
+    const now = options?.now || new Date();
+    const dryRun = options?.dryRun || false;
+    const window = this.buildProcessingWindow(now, options?.rewardMonth);
+
+    try {
+      logger.info(
+        `[PAYMENT_REMINDER] Starting run. dryRun=${dryRun} rewardMonth=${window.rewardMonth} dueDateFrom=${window.dueDateFrom} dueDateTo=${window.dueDateTo}`,
+      );
+
+      if (!dryRun) {
+        await CouponService.expireStaleCoupons();
       }
 
-      const total = typeof installment.InstTotal === 'string' ? Number(installment.InstTotal) : installment.InstTotal;
-      const paid = typeof installment.InstPaidToDate === 'string' ? Number(installment.InstPaidToDate) : installment.InstPaidToDate;
-      const isFullyPaid = paid >= total;
+      const [users, promotion, installments] = await Promise.all([
+        UserService.getUsersWithSapCardCode(),
+        PromotionService.getCurrentPromotion(now),
+        this.fetchInstallments(window),
+      ]);
 
-      if (isFullyPaid) {
-        // Handle "payment_paid_on_time" reward logic
-        const missing = await this.maybeIssueOnTimeReward(installment);
-        if (missing) missingTemplates.add(missing);
+      const linkedUsersByCardCode = this.buildLinkedUserMap(users);
+      const checkedCardCodes = new Set(installments.map((installment) => installment.CardCode)).size;
+      const missingTemplates = new Set<string>();
 
-        // Handle "payment_paid_late" logic
-        if (installment.InstActualPaymentDate) {
-          const actualPaymentDate = new Date(installment.InstActualPaymentDate);
-          const dueDate = new Date(installment.InstDueDate);
-          actualPaymentDate.setHours(0, 0, 0, 0);
-          dueDate.setHours(0, 0, 0, 0);
+      let rewardCouponsIssued = 0;
+      let rewardNotificationsSent = 0;
+      let reminderNotificationsSent = 0;
+      let unlinkedRewardCouponsIssued = 0;
 
-          if (actualPaymentDate > dueDate) {
-            const alreadySentLate = await this.hasReminderBeenSent(
-              user.id,
-              installment.DocEntry,
-              installment.InstlmntID,
-              'paid_late',
-            );
+      for (const installment of installments) {
+        const linkedUser = linkedUsersByCardCode.get(installment.CardCode);
 
-            if (!alreadySentLate) {
-              const result = await BotNotificationService.sendTemplateMessage({
-                user,
-                templateType: 'payment_paid_late',
-                placeholders: {
-                  customer_name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Mijoz',
-                  coupon_code: '',
-                  payment_due_date: formatDateForLocale(installment.InstDueDate, user.language_code || 'uz'),
-                  product_name: installment.itemsPairs || '',
-                  referrer_name: '',
-                  prize_name: '',
-                },
-                dispatchType: 'payment_paid_late',
-              });
+        if (this.isInstallmentInRewardMonth(installment, window)) {
+          const rewardResult = await this.issueOnTimeReward({
+            installment,
+            linkedUser,
+            promotion,
+            window,
+            dryRun,
+            missingTemplates,
+          });
 
-              if (!result.delivered && result.error?.includes('Template not found')) {
-                missingTemplates.add('payment_paid_late');
-              }
-
-              await this.logReminder({
-                userId: user.id,
-                sapCardCode: installment.CardCode,
-                docEntry: installment.DocEntry,
-                installmentId: installment.InstlmntID,
-                reminderType: 'paid_late',
-                dueDate: installment.InstDueDate,
-                status: result.delivered ? 'sent' : 'failed',
-                errorMessage: result.error,
-              });
-
-              if (result.delivered) {
-                remindersSent += 1;
-              }
+          if (rewardResult.couponIssued) {
+            rewardCouponsIssued += 1;
+            if (!linkedUser) {
+              unlinkedRewardCouponsIssued += 1;
             }
           }
+
+          if (rewardResult.notificationSent) {
+            rewardNotificationsSent += 1;
+          }
         }
-        continue; // Skip the standard unpaid reminders for fully paid installments
-      }
 
-      // Handle unpaid reminders (d2, d1, d0, overdue)
-      const daysLeft = this.toDayIndex(installment.InstDueDate) - todayIndex;
-      const reminderType = this.getReminderTypeByDaysLeft(daysLeft);
-      if (!reminderType) {
-        continue;
-      }
+        if (!linkedUser) {
+          continue;
+        }
 
-      const alreadySent = await this.hasReminderBeenSent(
-        user.id,
-        installment.DocEntry,
-        installment.InstlmntID,
-        reminderType,
-      );
-      if (alreadySent) {
-        continue;
-      }
+        if (this.isInstallmentFullyPaid(installment)) {
+          if (this.isPaidLate(installment)) {
+            const delivered = await this.processPaidLateReminder({
+              installment,
+              linkedUser,
+              dryRun,
+              missingTemplates,
+            });
 
-      const templateType = reminderType === 'overdue' ? 'payment_overdue' : `payment_reminder_${reminderType}`;
-      const result = await BotNotificationService.sendTemplateMessage({
-        user,
-        templateType: templateType as any,
-        placeholders: {
-          customer_name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Mijoz',
-          coupon_code: '',
-          payment_due_date: formatDateForLocale(installment.InstDueDate, user.language_code || 'uz'),
-          product_name: installment.itemsPairs || '',
-          referrer_name: '',
-          prize_name: '',
-        },
-        dispatchType: templateType,
-      });
+            if (delivered) {
+              reminderNotificationsSent += 1;
+            }
+          }
 
-      if (!result.delivered && result.error?.includes('Template not found')) {
-        missingTemplates.add(templateType);
-      }
+          continue;
+        }
 
-      await this.logReminder({
-        userId: user.id,
-        sapCardCode: installment.CardCode,
-        docEntry: installment.DocEntry,
-        installmentId: installment.InstlmntID,
-        reminderType,
-        dueDate: installment.InstDueDate,
-        status: result.delivered ? 'sent' : 'failed',
-        errorMessage: result.error,
-      });
+        const daysLeft = this.toDayIndex(installment.InstDueDate) - window.todayIndex;
+        const reminderType = this.getReminderTypeByDaysLeft(daysLeft);
+        if (!reminderType) {
+          continue;
+        }
 
-      if (result.delivered) {
-        remindersSent += 1;
-      }
-    }
+        const delivered = await this.processUnpaidReminder({
+          installment,
+          linkedUser,
+          reminderType,
+          dryRun,
+          missingTemplates,
+        });
 
-    if (missingTemplates.size > 0) {
-      const admins = await UserService.getAdmins();
-      const templateList = Array.from(missingTemplates).join(', ');
-      for (const admin of admins) {
-        try {
-          await bot.api.sendMessage(
-            admin.telegram_id,
-            `⚠️ <b>Внимание!</b>\n\nНе найдены активные шаблоны сообщений для CRON-задачи платежных напоминаний:\n<code>${templateList}</code>\n\nПожалуйста, создайте их в админ-панели.`,
-            {
-              parse_mode: 'HTML',
-              reply_markup: getAdminMissingTemplateKeyboard(admin.language_code || 'uz'),
-            },
-          );
-        } catch (err) {
-          logger.error(`Failed to send missing template warning to admin ${admin.telegram_id}`, err);
+        if (delivered) {
+          reminderNotificationsSent += 1;
         }
       }
-    }
 
-    return {
-      checkedCardCodes: uniqueCardCodes.length,
-      fetchedInstallments: installments.length,
-      remindersSent,
-    };
+      if (!dryRun) {
+        await this.notifyAdminsAboutMissingTemplates(missingTemplates);
+      }
+
+      return {
+        checkedCardCodes,
+        fetchedInstallments: installments.length,
+        remindersSent: rewardNotificationsSent + reminderNotificationsSent,
+        reminderNotificationsSent,
+        rewardCouponsIssued,
+        rewardNotificationsSent,
+        unlinkedRewardCouponsIssued,
+        rewardTargetMonth: window.rewardMonth,
+        dueDateFrom: window.dueDateFrom,
+        dueDateTo: window.dueDateTo,
+      };
+    } finally {
+      await this.releaseRunLock(runLockToken);
+    }
   }
 }

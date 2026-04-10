@@ -115,6 +115,33 @@ export class SapService {
     }
   }
 
+  async getPaymentReminderInstallments(params: {
+    dueDateFrom: string;
+    dueDateTo: string;
+  }): Promise<IPurchaseInstallment[]> {
+    const sql = loadSQL('sap/queries/get-payment-reminder-installments.sql').replace(
+      /{{schema}}/g,
+      this.schema,
+    );
+
+    this.logger.info(
+      `📦 [SAP] Fetching payment reminder installments from ${params.dueDateFrom} to ${params.dueDateTo}`,
+    );
+
+    try {
+      return await this.hana.executeOnce<IPurchaseInstallment>(sql, [
+        params.dueDateFrom,
+        params.dueDateTo,
+      ]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getPaymentReminderInstallments failed', message);
+
+      throw new Error('SAP query failed (getPaymentReminderInstallments)');
+    }
+  }
+
   async getLatestExchangeRate(currency: string = 'UZS'): Promise<number | null> {
     const sql = loadSQL('sap/queries/get-currency-rate.sql').replace(/{{schema}}/g, this.schema);
 
@@ -151,14 +178,14 @@ export class SapService {
     includeZeroOnHand = false,
   }: {
     search?: string;
-    filters?: any;
+    filters?: Record<string, string | number | boolean | undefined>;
     limit?: number;
     offset?: number;
     whsCode?: string;
     includeZeroOnHand?: boolean;
   }): Promise<{ data: ISapItem[]; total: number }> {
     const db = this.schema;
-    let whereClauses = ['1=1'];
+    const whereClauses = ['1=1'];
     if (!includeZeroOnHand) {
       whereClauses.push(`T0."OnHand" > 0`);
     }
@@ -265,7 +292,7 @@ export class SapService {
 
       return {
         data,
-        total: (totalResult[0] as any)?.total || 0,
+        total: Number(totalResult[0]?.total || 0),
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

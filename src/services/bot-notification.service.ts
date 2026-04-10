@@ -1,5 +1,4 @@
 import db from '../database/database';
-import { bot } from '../bot';
 import { isUserBlockedError } from '../utils/telegram-errors';
 import { MessageTemplate, MessageTemplateService, MessageTemplateType } from './message-template.service';
 import { User, UserService } from './user.service';
@@ -11,6 +10,11 @@ export interface NotificationResult {
 }
 
 export class BotNotificationService {
+  private static async getBot() {
+    const botModule = await import('../bot.js');
+    return botModule.bot;
+  }
+
   private static async writeDispatchLog(params: {
     userId?: number | null;
     couponId?: number | null;
@@ -76,6 +80,7 @@ export class BotNotificationService {
     try {
       const locale = params.user.language_code || 'uz';
       const text = MessageTemplateService.render(params.template, locale, params.placeholders);
+      const bot = await this.getBot();
       await bot.api.sendMessage(params.user.telegram_id, text, { parse_mode: 'HTML' });
       await UserService.unblockUserIfBlocked(params.user.telegram_id);
 
