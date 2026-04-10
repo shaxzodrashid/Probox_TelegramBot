@@ -47,7 +47,7 @@ const ensureCouponsTable = async (knex: Knex): Promise<void> => {
   if (!hasTable) {
     await knex.schema.createTable('coupons', (table) => {
       table.bigIncrements('id').primary();
-      table.string('code', 7).notNullable().unique();
+      table.string('code', 10).notNullable().unique();
       table.bigInteger('promotion_id').nullable();
       table
         .specificType('source_type', COUPON_SOURCE_TYPE)

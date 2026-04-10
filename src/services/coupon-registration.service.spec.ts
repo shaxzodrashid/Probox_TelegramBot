@@ -107,10 +107,10 @@ test('CouponRegistrationService rewards purchaser and all matched referrers on P
           id: params.sourceType === 'purchase' ? 9001 : params.userId === 21 ? 9002 : 9003,
           code:
             params.sourceType === 'purchase'
-              ? 'PRO1111'
+              ? 'PRO1111111'
               : params.userId === 21
-                ? 'PRO2222'
-                : 'PRO3333',
+                ? 'PRO2222222'
+                : 'PRO3333333',
           source_type: params.sourceType,
           expires_at: new Date('2026-04-30T00:00:00.000Z'),
           status: 'active',
@@ -311,7 +311,7 @@ test('CouponRegistrationService creates coupons for later assignment when user i
       [
         {
           id: 9101,
-          code: 'PRO9101',
+          code: 'PRO9101234',
           source_type: 'purchase',
           expires_at: new Date('2026-04-30T00:00:00.000Z'),
           status: 'active',
@@ -382,7 +382,7 @@ test('CouponRegistrationService claims pending coupons after user registration',
     CouponService.assignPendingCouponsToUser = async () => [
       {
         id: 9201,
-        code: 'PRO9201',
+        code: 'PRO9201234',
         promotion_id: 5,
         registration_event_id: 601,
         source_type: 'purchase',

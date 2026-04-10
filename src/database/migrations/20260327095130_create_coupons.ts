@@ -4,7 +4,7 @@ import type { Knex } from "knex";
 export async function up(knex: Knex): Promise<void> {
     return knex.schema.createTable("coupons", (table) => {
         table.bigIncrements("id").primary();
-        table.string("code", 7).notNullable().unique();
+        table.string("code", 10).notNullable().unique();
         table.bigInteger("promotion_id").references("id").inTable("promotions").onDelete("SET NULL");
         table
             .enu("source_type", ["store_visit", "purchase", "referral", "payment_on_time"], {

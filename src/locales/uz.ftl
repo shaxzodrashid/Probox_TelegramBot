@@ -473,7 +473,7 @@ admin_campaign_no_active_prize = Ushbu aksiya uchun aktiv yutuq topilmadi.
 admin_campaign_choose_winner_prize = G'olib uchun yutuqni tanlang:
 admin_campaign_templates_empty = Hozircha xabar shablonlari yo'q.
 admin_campaign_templates_back = 🔙 Shablonlar ro'yxatiga qaytish
-admin_campaign_coupon_search_prompt = PRO bilan boshlanadigan 7 belgili kupon kodini yuboring:
+admin_campaign_coupon_search_prompt = PRO bilan boshlanadigan 10 belgili kupon kodini yuboring:
 admin_campaign_coupon_not_found = Kupon topilmadi.
 admin_campaign_coupon_detail_header = 🎟 Kupon ma'lumotlari
 admin_campaign_mark_winner = 🏆 G'olib qilish
@@ -502,7 +502,7 @@ admin_campaign_template_create_guidance =
 
     Hozir amalda ishlaydigan placeholder'lar:
     - <code>{"{{customer_name}}"}</code> -- Mijozning ismi va familiyasi
-    - <code>{"{{coupon_code}}"}</code> -- PRO bilan boshlanadigan 7 belgili kupon kodi (avtomatik ravishda inline-code formatiga o'tkaziladi)
+    - <code>{"{{coupon_code}}"}</code> -- PRO bilan boshlanadigan 10 belgili kupon kodi (avtomatik ravishda inline-code formatiga o'tkaziladi)
     - <code>{"{{payment_due_date}}"}</code> -- Navbatdagi to'lov muddati (sana)
     - <code>{"{{product_name}}"}</code> -- Mahsulot nomi
     - <code>{"{{referrer_name}}"}</code> -- Taklif qilgan kishi ismi

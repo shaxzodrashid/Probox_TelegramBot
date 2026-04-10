@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { Knex } from 'knex';
 import db from '../database/database';
 import { isHappyHourInTashkent } from '../utils/tashkent-time.util';
@@ -54,7 +55,8 @@ export class CouponService {
   private static couponPromotionSchemaStatePromise: Promise<CouponPromotionSchemaState> | null =
     null;
   private static readonly COUPON_PREFIX = 'PRO';
-  private static readonly COUPON_TOTAL_LENGTH = 7;
+  private static readonly COUPON_TOTAL_LENGTH = 10;
+  private static readonly COUPON_INSERT_RETRY_LIMIT = 20;
   private static readonly COUPON_SUFFIX_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
   static getCouponCountForEvent(date: Date = new Date()): number {
@@ -67,24 +69,69 @@ export class CouponService {
     return expiresAt;
   }
 
-  static async generateUniqueCode(): Promise<string> {
-    for (let i = 0; i < 20; i += 1) {
-      const suffixLength = this.COUPON_TOTAL_LENGTH - this.COUPON_PREFIX.length;
-      let suffix = '';
+  private static generateCode(): string {
+    const suffixLength = this.COUPON_TOTAL_LENGTH - this.COUPON_PREFIX.length;
+    const random = randomBytes(suffixLength);
+    let suffix = '';
 
-      for (let j = 0; j < suffixLength; j += 1) {
-        const randomIndex = Math.floor(Math.random() * this.COUPON_SUFFIX_ALPHABET.length);
-        suffix += this.COUPON_SUFFIX_ALPHABET[randomIndex];
-      }
+    for (let i = 0; i < suffixLength; i += 1) {
+      suffix += this.COUPON_SUFFIX_ALPHABET[random[i] % this.COUPON_SUFFIX_ALPHABET.length];
+    }
 
-      const code = `${this.COUPON_PREFIX}${suffix}`;
-      const existing = await db<Coupon>('coupons').where('code', code).first();
-      if (!existing) {
-        return code;
+    return `${this.COUPON_PREFIX}${suffix}`;
+  }
+
+  private static isUniqueViolation(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const maybeCode = 'code' in error ? error.code : undefined;
+    return maybeCode === '23505';
+  }
+
+  private static async createCouponWithRetry(
+    params: {
+      promotionId?: number | null;
+      registrationEventId?: number | null;
+      sourceType: CouponSourceType;
+      phoneSnapshot: string;
+      leadId?: string | null;
+      customerFullName?: string | null;
+      sapDocEntry?: number | null;
+      sapInstallmentId?: number | null;
+      expiresAt: Date;
+    },
+    executor: DbExecutor,
+  ): Promise<Coupon> {
+    for (let attempt = 0; attempt < this.COUPON_INSERT_RETRY_LIMIT; attempt += 1) {
+      try {
+        const [coupon] = await executor<Coupon>('coupons')
+          .insert({
+            code: this.generateCode(),
+            promotion_id: params.promotionId || null,
+            registration_event_id: params.registrationEventId || null,
+            source_type: params.sourceType,
+            status: 'active',
+            issued_phone_snapshot: params.phoneSnapshot,
+            lead_id: params.leadId || null,
+            customer_full_name: params.customerFullName || null,
+            sap_doc_entry: params.sapDocEntry || null,
+            sap_installment_id: params.sapInstallmentId || null,
+            expires_at: params.expiresAt,
+            is_active: true,
+          })
+          .returning('*');
+
+        return coupon;
+      } catch (error) {
+        if (!this.isUniqueViolation(error)) {
+          throw error;
+        }
       }
     }
 
-    throw new Error('Failed to generate a unique 7-character coupon code.');
+    throw new Error('Failed to generate a unique 10-character coupon code.');
   }
 
   static async createCouponsForUser(
@@ -108,24 +155,20 @@ export class CouponService {
     const createdCoupons: Coupon[] = [];
 
     for (let i = 0; i < count; i += 1) {
-      const code = await this.generateUniqueCode();
-
-      const [coupon] = await executor<Coupon>('coupons')
-        .insert({
-          code,
-          promotion_id: params.promotionId || null,
-          registration_event_id: params.registrationEventId || null,
-          source_type: params.sourceType,
-          status: 'active',
-          issued_phone_snapshot: params.phoneSnapshot,
-          lead_id: params.leadId || null,
-          customer_full_name: params.customerFullName || null,
-          sap_doc_entry: params.sapDocEntry || null,
-          sap_installment_id: params.sapInstallmentId || null,
-          expires_at: expiresAt,
-          is_active: true,
-        })
-        .returning('*');
+      const coupon = await this.createCouponWithRetry(
+        {
+          promotionId: params.promotionId,
+          registrationEventId: params.registrationEventId,
+          sourceType: params.sourceType,
+          phoneSnapshot: params.phoneSnapshot,
+          leadId: params.leadId,
+          customerFullName: params.customerFullName,
+          sapDocEntry: params.sapDocEntry,
+          sapInstallmentId: params.sapInstallmentId,
+          expiresAt,
+        },
+        executor,
+      );
 
       if (params.userId) {
         await executor('coupon_user_mappings').insert({
