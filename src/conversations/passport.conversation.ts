@@ -170,7 +170,21 @@ export async function addPassportDataConversation(conversation: BotConversation,
         const hasFace = await conversation.external(() => detectFace(buffer));
         
         if (hasFace) {
-          await conversation.external(() => minioService.uploadFaceId(telegramId, buffer));
+          try {
+            await conversation.external(() => minioService.uploadFaceId(telegramId, buffer));
+          } catch (err) {
+            logger.error(`[Passport] Face ID storage failed for user ${telegramId}:`, err);
+            await faceCtx.api
+              .editMessageText(
+                faceCtx.chat!.id,
+                feedbackMsg.message_id,
+                i18n.t(locale, 'settings_passport_face_id_storage_error'),
+              )
+              .catch((editErr) => {
+                if (!isMessageToDeleteNotFoundError(editErr)) throw editErr;
+              });
+            continue;
+          }
           await faceCtx.api
             .editMessageText(
               faceCtx.chat!.id,

@@ -17,6 +17,10 @@ export class PaymentService {
   private static sapService = new SapService(this.hanaService);
   private static logger = logger;
 
+  private static getContractNumber(inst: { DocNum: number | string }): string {
+    return String(inst.DocNum).trim();
+  }
+
   /**
    * Parses the itemsPairs string from SAP into an array of PaymentItem
    * Format: "CODE1::Name1::Price1||CODE2::Name2::Price2"
@@ -127,7 +131,7 @@ export class PaymentService {
           id: inst.DocEntry.toString(),
           mainItemName: this.getMostExpensiveItem(items),
           allItems: items,
-          contractNumber: inst.DocNum.toString(),
+          contractNumber: this.getContractNumber(inst),
           cardName: inst.CardName,
           docDate: inst.DocDate,
           dueDate: inst.DocDueDate,

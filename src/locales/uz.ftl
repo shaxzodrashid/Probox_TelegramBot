@@ -173,6 +173,7 @@ settings_passport_ask_face_id = Iltimos, verifikatsiyani yakunlash uchun yuzingi
 settings_passport_face_id_processing = ⏳ Yuz rasmi tekshirilmoqda, iltimos kuting...
 settings_passport_face_id_error = ❌ Afsuski, rasmda yuz aniqlanmadi yoki rasm juda xira. Iltimos, tiniqroq selfi olib qayta urinib ko'ring.
 settings_passport_face_id_success = ✅ Yuz rasmi muvaffaqiyatli tasdiqlandi!
+settings_passport_face_id_storage_error = ❌ Selfi qabul qilindi, lekin vaqtincha fayl saqlash xizmatiga ulanib bo'lmadi. Iltimos, bir necha daqiqadan keyin qayta urinib ko'ring.
 settings_passport_enter_series = 🔢 Iltimos, pasport seriyasi va raqamini kiriting (masalan, AB1234567):
 settings_passport_invalid_series = ❌ Noto'g'ri pasport seriyasi. U 2 ta harf va 7 ta raqamdan iborat bo'lishi kerak. Iltimos, qayta kiriting:
 settings_passport_enter_jshshir = 🔢 Iltimos, 14 xonali JShShIR (PINFL) raqamingizni kiriting:

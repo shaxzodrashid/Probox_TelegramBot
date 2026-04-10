@@ -15,6 +15,10 @@ export class ContractService {
   private static sapService = new SapService(this.hanaService);
   private static logger = logger;
 
+  private static getContractNumber(inst: { DocNum: number | string }): string {
+    return String(inst.DocNum).trim();
+  }
+
   /**
    * Fetches contracts for a specific CardCode from SAP.
    * Groups installments by DocEntry to represent unique contracts.
@@ -42,7 +46,7 @@ export class ContractService {
         contractsMap.set(inst.DocEntry, {
           id: inst.DocEntry.toString(),
           itemName: formatItemsList(inst.itemsPairs),
-          contractNumber: inst.DocNum.toString(),
+          contractNumber: this.getContractNumber(inst),
           purchaseDate: inst.DocDate,
           dueDate: inst.DocDueDate,
           totalAmount: totalAmount.amount,

@@ -10,18 +10,30 @@ import sharp from 'sharp';
 class MinioServiceClass {
   private client: Minio.Client;
   private bucket: string;
+  private endpoint: string;
+  private port: number;
+  private useSSL: boolean;
 
   constructor() {
+    this.endpoint = config.MINIO_ENDPOINT;
+    this.port = config.MINIO_PORT;
+    this.useSSL = config.MINIO_USE_SSL;
     this.client = new Minio.Client({
-      endPoint: config.MINIO_ENDPOINT,
-      port: config.MINIO_PORT,
-      useSSL: config.MINIO_USE_SSL,
+      endPoint: this.endpoint,
+      port: this.port,
+      useSSL: this.useSSL,
       accessKey: config.MINIO_ACCESS_KEY,
       secretKey: config.MINIO_SECRET_KEY,
     });
     this.bucket = config.MINIO_BUCKET;
     
-    logger.info(`[MINIO] Service initialized for bucket: ${this.bucket}`);
+    logger.info(
+      `[MINIO] Service initialized. endpoint=${this.describeTarget()} bucket=${this.bucket}`,
+    );
+  }
+
+  private describeTarget(): string {
+    return `${this.useSSL ? 'https' : 'http'}://${this.endpoint}:${this.port}`;
   }
 
   /**
@@ -175,7 +187,9 @@ class MinioServiceClass {
       });
       
       stream.on('error', (err) => {
-        logger.error(`[MINIO] Error listing objects with prefix ${prefix}: ${err}`);
+        logger.error(
+          `[MINIO] Error listing objects with prefix ${prefix} via ${this.describeTarget()}: ${err}`,
+        );
         reject(err);
       });
       
@@ -197,7 +211,9 @@ class MinioServiceClass {
         logger.info(`[MINIO] Deleted ${objects.length} objects with prefix ${prefix}`);
       }
     } catch (error) {
-      logger.error(`[MINIO] Error deleting objects by prefix ${prefix}: ${error}`);
+      logger.error(
+        `[MINIO] Error deleting objects by prefix ${prefix} via ${this.describeTarget()}: ${error}`,
+      );
       throw error;
     }
   }
@@ -237,7 +253,9 @@ class MinioServiceClass {
         logger.info(`[MINIO] Handled passport update for user ${telegramId}: old deleted, new compressed and uploaded as ${filename}`);
       }
     } catch (error) {
-      logger.error(`[MINIO] Failed to handle user passport update for ${telegramId}: ${error}`);
+      logger.error(
+        `[MINIO] Failed to handle user passport update for ${telegramId} via ${this.describeTarget()}: ${error}`,
+      );
       throw error;
     }
   }
@@ -268,7 +286,9 @@ class MinioServiceClass {
       await this.uploadFile(filename, compressedBuffer);
       logger.info(`[MINIO] Handled face ID upload for user ${telegramId}: old deleted, new compressed and uploaded as ${filename}`);
     } catch (error) {
-      logger.error(`[MINIO] Failed to handle face ID upload for ${telegramId}: ${error}`);
+      logger.error(
+        `[MINIO] Failed to handle face ID upload for ${telegramId} via ${this.describeTarget()}: ${error}`,
+      );
       throw error;
     }
   }

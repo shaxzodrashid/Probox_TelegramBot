@@ -8,7 +8,7 @@ import { ISapItem } from '../interfaces/item.interface';
 
 export class SapService {
   private readonly logger = logger;
-  private readonly schema: string = process.env.SAP_SCHEMA || 'ALTITUDE_DB';
+  private readonly schema: string = process.env.SAP_SCHEMA || 'PROBOX_PROD_3';
 
   constructor(private readonly hana: HanaService) {}
 
