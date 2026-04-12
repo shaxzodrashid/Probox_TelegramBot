@@ -7,7 +7,7 @@ import {
 
 export class PaymentReminderCron {
   static init(): void {
-    const schedule = process.env.PAYMENT_REMINDER_CRON_SCHEDULE || '1 12 * * *';
+    const schedule = process.env.PAYMENT_REMINDER_CRON_SCHEDULE || '1 13 * * *';
     logger.info(`[CRON] Payment reminder job scheduled: ${schedule} (Asia/Tashkent)`);
 
     cron.schedule(
