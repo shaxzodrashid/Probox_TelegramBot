@@ -15,6 +15,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "debug:contracts": "ts-node src/scripts/debug-contracts.ts",
     "debug:payment-reminder": "ts-node src/scripts/test-payment-reminder.ts",
+    "run:payment-reminder": "ts-node src/scripts/run-payment-reminder.ts",
     "test:purchase-pdf": "ts-node src/scripts/test-purchase-pdf.ts",
     "test:payment-reminder": "node --require ts-node/register --test --test-force-exit src/services/payment-reminder.service.spec.ts",
     "compare:current": "ts-node -P passport_comparison/tsconfig.json passport_comparison/runner/run-current.ts",
