@@ -17,6 +17,8 @@ import { sanitizeName } from '../utils/formatter.util';
 import { redisService } from '../redis/redis.service';
 import { CouponRegistrationService } from '../services/coupon-registration.service';
 
+const REGISTRATION_ACTIVE_TTL_SECONDS = 60 * 60;
+
 /**
  * Checks if the user exists in SAP HANA by phone number.
  */
@@ -224,63 +226,73 @@ export async function registrationConversation(conversation: BotConversation, ct
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
 
-  // Read pendingAction from Redis
-  const pendingAction = await conversation.external(() =>
-    redisService.get<string>(`pendingAction:${telegramId}`),
+  const registrationActiveKey = `registrationActive:${telegramId}`;
+
+  await conversation.external(() =>
+    redisService.set(registrationActiveKey, true, REGISTRATION_ACTIVE_TTL_SECONDS),
   );
-  const locale = await getLocaleFromConversation(conversation);
 
-  const phoneResult = await requestPhoneNumber(conversation, ctx, locale);
-  if (!phoneResult) return;
-
-  const { phoneNumber, ctx: phoneCtx } = phoneResult;
-  logger.info(`Extracted phone number: ${phoneNumber}`);
-
-  if (ctx.session) {
-    ctx.session.user_phone = phoneNumber;
-  }
-
-  const { verified, lastCtx } = await performOtpVerification(
-    conversation,
-    phoneCtx,
-    phoneNumber,
-    locale,
-  );
-  if (!verified) return;
-
-  const user = await registerOrUpdateUser(conversation, lastCtx, phoneNumber, locale);
-  if (!user) return;
-
-  await lastCtx.reply(i18n.t(locale, 'phone_saved'), {
-    reply_markup: { remove_keyboard: true },
-  });
-
-  if (user.phone_number) {
-    await conversation.external(() => CouponRegistrationService.claimPendingCouponsForUser(user));
-  }
-
-  if (pendingAction === 'application') {
-    // Inside a conversation, ctx.conversation is unavailable (plain hydrated Context).
-    // The pendingAction key stays in Redis. The bot-level pending-action router will
-    // pick it up on the next update.
-    // Give the user a button to tap so the router fires immediately — clean UX.
-    const continueKeyboard = new InlineKeyboard().text(
-      i18n.t(locale, 'application_continue_button'),
-      'continue_to_application',
+  try {
+    // Read pendingAction from Redis
+    const pendingAction = await conversation.external(() =>
+      redisService.get<string>(`pendingAction:${telegramId}`),
     );
-    await lastCtx.reply(i18n.t(locale, 'registration_success_continue'), {
-      reply_markup: continueKeyboard,
-    });
-    return;
-  }
+    const locale = await getLocaleFromConversation(conversation);
 
-  if (user.is_admin) {
-    await lastCtx.reply(i18n.t(locale, 'admin_menu_header'), {
-      reply_markup: getAdminMenuKeyboard(locale),
+    const phoneResult = await requestPhoneNumber(conversation, ctx, locale);
+    if (!phoneResult) return;
+
+    const { phoneNumber, ctx: phoneCtx } = phoneResult;
+    logger.info(`Extracted phone number: ${phoneNumber}`);
+
+    if (ctx.session) {
+      ctx.session.user_phone = phoneNumber;
+    }
+
+    const { verified, lastCtx } = await performOtpVerification(
+      conversation,
+      phoneCtx,
+      phoneNumber,
+      locale,
+    );
+    if (!verified) return;
+
+    const user = await registerOrUpdateUser(conversation, lastCtx, phoneNumber, locale);
+    if (!user) return;
+
+    await lastCtx.reply(i18n.t(locale, 'phone_saved'), {
+      reply_markup: { remove_keyboard: true },
     });
-  } else {
-    await lastCtx.reply(i18n.t(locale, 'welcome_message'), {
-      reply_markup: getMainKeyboardByLocale(locale, false, true),
-    });
+
+    if (user.phone_number) {
+      await conversation.external(() => CouponRegistrationService.claimPendingCouponsForUser(user));
+    }
+
+    if (pendingAction === 'application') {
+      // Inside a conversation, ctx.conversation is unavailable (plain hydrated Context).
+      // The pendingAction key stays in Redis. The bot-level pending-action router will
+      // pick it up on the next update.
+      // Give the user a button to tap so the router fires immediately — clean UX.
+      const continueKeyboard = new InlineKeyboard().text(
+        i18n.t(locale, 'application_continue_button'),
+        'continue_to_application',
+      );
+      await lastCtx.reply(i18n.t(locale, 'registration_success_continue'), {
+        reply_markup: continueKeyboard,
+      });
+      return;
+    }
+
+    if (user.is_admin) {
+      await lastCtx.reply(i18n.t(locale, 'admin_menu_header'), {
+        reply_markup: getAdminMenuKeyboard(locale),
+      });
+    } else {
+      await lastCtx.reply(i18n.t(locale, 'welcome_message'), {
+        reply_markup: getMainKeyboardByLocale(locale, false, true),
+      });
+    }
+  } finally {
+    await conversation.external(() => redisService.delete(registrationActiveKey));
   }
 }

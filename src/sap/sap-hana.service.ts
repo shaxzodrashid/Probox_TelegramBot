@@ -6,11 +6,255 @@ import { loadSQL } from '../utils/sql-loader.utils';
 import { normalizeUzPhone } from '../utils/uz-phone.util';
 import { ISapItem } from '../interfaces/item.interface';
 
+interface SapCurrencyRateRow {
+  RateDate: string | Date;
+  Currency: string;
+  Rate: number | string;
+}
+
+interface ParsedItemSearch {
+  normalizedSearch: string;
+  residualSearch: string;
+  model?: string;
+  deviceType?: string | null;
+  condition?: string;
+}
+
 export class SapService {
   private readonly logger = logger;
   private readonly schema: string = process.env.SAP_SCHEMA || 'PROBOX_PROD_3';
 
   constructor(private readonly hana: HanaService) {}
+
+  private escapeSqlValue(value: string): string {
+    return value.replace(/'/g, "''").trim();
+  }
+
+  private escapeLikeValue(value: string): string {
+    return this.escapeSqlValue(value).replace(/\\/g, '\\\\').replace(/[%_]/g, '\\$&');
+  }
+
+  private normalizeSearchValue(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[‘’`´]/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private buildNormalizedEquals(column: string, value: string): string {
+    const normalizedValue = this.escapeSqlValue(this.normalizeSearchValue(value));
+    return `LOWER(TRIM(COALESCE(${column}, ''))) = '${normalizedValue}'`;
+  }
+
+  private buildNormalizedLike(column: string, value: string): string {
+    const normalizedValue = this.escapeLikeValue(this.normalizeSearchValue(value));
+    return `LOWER(COALESCE(${column}, '')) LIKE '%${normalizedValue}%' ESCAPE '\\'`;
+  }
+
+  private buildBlankDeviceTypeClause(column: string): string {
+    return `(${column} IS NULL OR TRIM(${column}) = '' OR TRIM(${column}) = '-')`;
+  }
+
+  private buildGenericItemSearchClause(value: string): string {
+    return `
+      (
+        ${this.buildNormalizedLike('T1."ItemCode"', value)}
+        OR ${this.buildNormalizedLike('T1."ItemName"', value)}
+        OR ${this.buildNormalizedLike('T1."U_Model"', value)}
+        OR ${this.buildNormalizedLike('T1."U_DeviceType"', value)}
+        OR ${this.buildNormalizedLike('T1."U_Memory"', value)}
+        OR ${this.buildNormalizedLike('T1."U_Color"', value)}
+        OR ${this.buildNormalizedLike('T1."U_Sim_type"', value)}
+        OR ${this.buildNormalizedLike('T1."U_PROD_CONDITION"', value)}
+      )
+    `;
+  }
+
+  private canonicalizeCondition(value: unknown): string | undefined {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    const raw = String(value).trim();
+    if (!raw) {
+      return undefined;
+    }
+
+    const normalized = this.normalizeSearchValue(raw);
+    const compact = normalized.replace(/[\s/-]+/g, '');
+
+    if (normalized === 'yangi' || normalized === 'new') {
+      return 'Yangi';
+    }
+
+    if (normalized === 'used' || compact === 'bu') {
+      return 'B/U';
+    }
+
+    return raw;
+  }
+
+  private canonicalizeDeviceType(value: unknown): string | null | undefined {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    const raw = String(value).trim();
+    if (!raw) {
+      return undefined;
+    }
+
+    if (raw === '-') {
+      return null;
+    }
+
+    const normalized = this.normalizeSearchValue(raw).replace(/-/g, ' ');
+    const compact = normalized.replace(/\s+/g, '');
+
+    if (
+      normalized === 'base' ||
+      normalized === 'regular' ||
+      normalized === 'standard' ||
+      normalized === 'none' ||
+      normalized === 'null'
+    ) {
+      return null;
+    }
+
+    if (normalized === 'pro max' || compact === 'promax') {
+      return 'Pro Max';
+    }
+
+    if (normalized === 'pro') {
+      return 'Pro';
+    }
+
+    return raw;
+  }
+
+  private parseStructuredItemSearch(search: string): ParsedItemSearch {
+    const normalizedSearch = this.normalizeSearchValue(search);
+    let workingSearch = ` ${normalizedSearch} `;
+
+    let condition: string | undefined;
+    const conditionPatterns = [
+      { regex: /\bb\s*\/\s*u\b/i, value: 'B/U' },
+      { regex: /\bb\s*u\b/i, value: 'B/U' },
+      { regex: /\bused\b/i, value: 'B/U' },
+      { regex: /\byangi\b/i, value: 'Yangi' },
+      { regex: /\bnew\b/i, value: 'Yangi' },
+    ];
+
+    for (const pattern of conditionPatterns) {
+      if (pattern.regex.test(workingSearch)) {
+        condition = pattern.value;
+        workingSearch = workingSearch.replace(pattern.regex, ' ');
+        break;
+      }
+    }
+
+    let deviceType: string | null | undefined;
+    const deviceTypePatterns = [
+      { regex: /\bpro[\s-]*max\b/i, value: 'Pro Max' },
+      { regex: /\bpro\b/i, value: 'Pro' },
+    ];
+
+    for (const pattern of deviceTypePatterns) {
+      if (pattern.regex.test(workingSearch)) {
+        deviceType = pattern.value;
+        workingSearch = workingSearch.replace(pattern.regex, ' ');
+        break;
+      }
+    }
+
+    const modelMatch = workingSearch.match(/\biphone\s*(\d{1,2}[a-z]?|air|se)\b/i);
+    const model = modelMatch ? `iphone ${modelMatch[1]}` : undefined;
+
+    if (modelMatch) {
+      workingSearch = workingSearch.replace(modelMatch[0], ' ');
+    }
+
+    const residualSearch = workingSearch.replace(/\s+/g, ' ').trim();
+
+    return {
+      normalizedSearch,
+      residualSearch,
+      model,
+      deviceType,
+      condition,
+    };
+  }
+
+  private buildItemOrderByClauses(options: {
+    isIMEI: boolean;
+    parsedSearch?: ParsedItemSearch;
+  }): string[] {
+    const modelExpr = `LOWER(TRIM(COALESCE(MAX(T1."U_Model"), '')))`;
+    const deviceTypeExpr = `LOWER(TRIM(COALESCE(MAX(T1."U_DeviceType"), '')))`;
+    const conditionExpr = `LOWER(TRIM(COALESCE(MAX(T1."U_PROD_CONDITION"), '')))`;
+    const itemNameExpr = `LOWER(COALESCE(MAX(T1."ItemName"), ''))`;
+    const itemCodeExpr = `LOWER(T0."ItemCode")`;
+
+    const clauses: string[] = [];
+    const parsedSearch = options.parsedSearch;
+
+    if (parsedSearch?.model) {
+      clauses.push(
+        `CASE WHEN ${modelExpr} = '${this.escapeSqlValue(parsedSearch.model)}' THEN 0 ELSE 1 END`,
+      );
+
+      if (parsedSearch.deviceType) {
+        clauses.push(
+          `CASE WHEN ${deviceTypeExpr} = '${this.escapeSqlValue(this.normalizeSearchValue(parsedSearch.deviceType))}' THEN 0 ELSE 1 END`,
+        );
+      } else {
+        clauses.push(`CASE WHEN ${deviceTypeExpr} IN ('', '-') THEN 0 ELSE 1 END`);
+      }
+    } else {
+      const fallbackSearch =
+        parsedSearch?.residualSearch ||
+        (!parsedSearch?.condition ? parsedSearch?.normalizedSearch : undefined);
+
+      if (fallbackSearch) {
+        const exactSearch = this.escapeSqlValue(fallbackSearch);
+        const likeSearch = this.escapeLikeValue(fallbackSearch);
+
+        clauses.push(
+          `CASE
+            WHEN ${itemCodeExpr} = '${exactSearch}' THEN 0
+            WHEN ${modelExpr} = '${exactSearch}' THEN 1
+            WHEN ${itemNameExpr} LIKE '%${likeSearch}%' ESCAPE '\\' THEN 2
+            ELSE 3
+          END`,
+        );
+      }
+    }
+
+    if (parsedSearch?.condition) {
+      clauses.push(
+        `CASE WHEN ${conditionExpr} = '${this.escapeSqlValue(this.normalizeSearchValue(parsedSearch.condition))}' THEN 0 ELSE 1 END`,
+      );
+    } else {
+      clauses.push(
+        `CASE
+          WHEN ${conditionExpr} = 'yangi' THEN 0
+          WHEN ${conditionExpr} = 'b/u' THEN 1
+          ELSE 2
+        END`,
+      );
+    }
+
+    clauses.push(`SUM(CAST(T0."OnHand" AS INTEGER)) DESC`);
+
+    if (!options.isIMEI) {
+      clauses.push(`MAX(PR."Price") DESC`);
+    }
+
+    clauses.push(`MAX(T1."ItemName") ASC`);
+
+    return clauses;
+  }
 
   async getBusinessPartnerByPhone(phone: string): Promise<IBusinessPartner[]> {
     const sql = loadSQL('sap/queries/get-business-partner.sql').replace(/{{schema}}/g, this.schema);
@@ -143,29 +387,47 @@ export class SapService {
   }
 
   async getLatestExchangeRate(currency: string = 'UZS'): Promise<number | null> {
+    const result = await this.getLatestExchangeRateInfo(currency);
+    return result?.rate ?? null;
+  }
+
+  async getLatestExchangeRateInfo(currency: string = 'UZS'): Promise<{
+    currency: string;
+    rate: number;
+    rateDate: string | Date;
+  } | null> {
     const sql = loadSQL('sap/queries/get-currency-rate.sql').replace(/{{schema}}/g, this.schema);
 
     const normalizedCurrency = currency.trim().toUpperCase();
     this.logger.info(`📦 [SAP] Fetching latest exchange rate for currency: ${normalizedCurrency}`);
 
     try {
-      const rows = await this.hana.executeOnce<{ Rate: number | string }>(sql, [
+      const rows = await this.hana.executeOnce<SapCurrencyRateRow>(sql, [
         normalizedCurrency,
       ]);
-      const rate = rows[0]?.Rate;
+      const row = rows[0];
+      const rate = row?.Rate;
 
       if (rate === undefined || rate === null) {
         return null;
       }
 
       const numericRate = typeof rate === 'string' ? parseFloat(rate) : rate;
-      return Number.isFinite(numericRate) ? numericRate : null;
+      if (!Number.isFinite(numericRate)) {
+        return null;
+      }
+
+      return {
+        currency: row.Currency?.trim()?.toUpperCase() || normalizedCurrency,
+        rate: numericRate,
+        rateDate: row.RateDate,
+      };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
 
       this.logger.error('❌ [SAP] getLatestExchangeRate failed', message);
 
-      throw new Error(`SAP query failed (getLatestExchangeRate)`);
+      throw new Error(`SAP query failed (getLatestExchangeRateInfo)`);
     }
   }
 
@@ -175,17 +437,23 @@ export class SapService {
     limit = 50,
     offset = 0,
     whsCode,
+    storeName,
     includeZeroOnHand = false,
+    groupByWarehouse = false,
   }: {
     search?: string;
     filters?: Record<string, string | number | boolean | undefined>;
     limit?: number;
     offset?: number;
     whsCode?: string;
+    storeName?: string;
     includeZeroOnHand?: boolean;
+    groupByWarehouse?: boolean;
   }): Promise<{ data: ISapItem[]; total: number }> {
     const db = this.schema;
     const whereClauses = ['1=1'];
+    const parsedSearch = search ? this.parseStructuredItemSearch(search) : undefined;
+
     if (!includeZeroOnHand) {
       whereClauses.push(`T0."OnHand" > 0`);
     }
@@ -193,12 +461,19 @@ export class SapService {
     let imeiJoin = '';
     let imeiWhere = '';
 
-    const isIMEI = search && /^\d+$/.test(search) && search.length >= 4;
+    const isIMEI = Boolean(search && /^\d+$/.test(search) && search.length >= 4);
 
-    if (whsCode) whereClauses.push(`T0."WhsCode" = '${whsCode}'`);
+    if (whsCode) {
+      whereClauses.push(`T0."WhsCode" = '${this.escapeSqlValue(whsCode)}'`);
+    }
+
+    if (storeName) {
+      whereClauses.push(this.buildNormalizedLike('T2."WhsName"', storeName));
+    }
 
     if (isIMEI) {
-      const whsCondition = whsCode ? ` AND Q."WhsCode" = '${whsCode}'` : ``;
+      const escapedSearch = this.escapeSqlValue(search || '');
+      const whsCondition = whsCode ? ` AND Q."WhsCode" = '${this.escapeSqlValue(whsCode)}'` : ``;
 
       imeiJoin = `
       LEFT JOIN ${db}."OSRN" R
@@ -210,32 +485,85 @@ export class SapService {
     `;
 
       imeiWhere = `
-      AND R."DistNumber" LIKE '%${search}%'
+      AND R."DistNumber" LIKE '%${escapedSearch}%'
       AND Q."Quantity" > 0
     `;
     } else if (search) {
-      const s = search.toLowerCase();
-      whereClauses.push(`
-      (
-        LOWER(T1."ItemCode") LIKE '%${s}%'
-        OR LOWER(T1."ItemName") LIKE '%${s}%'
-        OR LOWER(T1."U_Model") LIKE '%${s}%'
-      )
-    `);
+      if (parsedSearch?.model) {
+        whereClauses.push(this.buildNormalizedEquals('T1."U_Model"', parsedSearch.model));
+
+        if (parsedSearch.deviceType) {
+          whereClauses.push(this.buildNormalizedEquals('T1."U_DeviceType"', parsedSearch.deviceType));
+        } else {
+          whereClauses.push(this.buildBlankDeviceTypeClause('T1."U_DeviceType"'));
+        }
+
+        if (parsedSearch.condition) {
+          whereClauses.push(this.buildNormalizedEquals('T1."U_PROD_CONDITION"', parsedSearch.condition));
+        }
+
+        if (parsedSearch.residualSearch) {
+          whereClauses.push(this.buildGenericItemSearchClause(parsedSearch.residualSearch));
+        }
+      } else {
+        if (parsedSearch?.condition) {
+          whereClauses.push(this.buildNormalizedEquals('T1."U_PROD_CONDITION"', parsedSearch.condition));
+        }
+
+        const fallbackSearch =
+          parsedSearch?.residualSearch || (!parsedSearch?.condition ? search : undefined);
+
+        if (fallbackSearch) {
+          whereClauses.push(this.buildGenericItemSearchClause(fallbackSearch));
+        }
+      }
     }
 
-    if (filters.model) whereClauses.push(`T1."U_Model" = '${filters.model}'`);
-    if (filters.deviceType) whereClauses.push(`T1."U_DeviceType" = '${filters.deviceType}'`);
-    if (filters.memory) whereClauses.push(`T1."U_Memory" = '${filters.memory}'`);
-    if (filters.simType) whereClauses.push(`T1."U_Sim_type" = '${filters.simType}'`);
-    if (filters.condition) whereClauses.push(`T1."U_PROD_CONDITION" = '${filters.condition}'`);
-    if (filters.color) whereClauses.push(`T1."U_Color" = '${filters.color}'`);
+    if (filters.model) {
+      whereClauses.push(this.buildNormalizedEquals('T1."U_Model"', String(filters.model)));
+    }
 
-    if (filters.itemGroupCode) whereClauses.push(`T1."ItmsGrpCod" = '${filters.itemGroupCode}'`);
+    const normalizedDeviceType = this.canonicalizeDeviceType(filters.deviceType);
+    if (normalizedDeviceType !== undefined) {
+      if (normalizedDeviceType === null) {
+        whereClauses.push(this.buildBlankDeviceTypeClause('T1."U_DeviceType"'));
+      } else {
+        whereClauses.push(this.buildNormalizedEquals('T1."U_DeviceType"', normalizedDeviceType));
+      }
+    }
+
+    if (filters.memory) {
+      whereClauses.push(this.buildNormalizedEquals('T1."U_Memory"', String(filters.memory)));
+    }
+
+    if (filters.simType) {
+      whereClauses.push(this.buildNormalizedEquals('T1."U_Sim_type"', String(filters.simType)));
+    }
+
+    const normalizedCondition = this.canonicalizeCondition(filters.condition);
+    if (normalizedCondition) {
+      whereClauses.push(this.buildNormalizedEquals('T1."U_PROD_CONDITION"', normalizedCondition));
+    }
+
+    if (filters.color) {
+      whereClauses.push(this.buildNormalizedEquals('T1."U_Color"', String(filters.color)));
+    }
+
+    if (filters.itemGroupCode) {
+      whereClauses.push(`T1."ItmsGrpCod" = '${this.escapeSqlValue(String(filters.itemGroupCode))}'`);
+    }
 
     const whereQuery = 'WHERE ' + whereClauses.join(' AND ') + imeiWhere;
 
     const imeiSelect = isIMEI ? `R."DistNumber" AS "IMEI",` : '';
+    const warehouseGroupColumns = groupByWarehouse ? `, T0."WhsCode"` : '';
+    const warehouseDistinctExpr = groupByWarehouse
+      ? `T0."ItemCode" || ':' || T0."WhsCode"`
+      : `T0."ItemCode"`;
+    const orderByClauses = this.buildItemOrderByClauses({
+      isIMEI,
+      parsedSearch: isIMEI ? undefined : parsedSearch,
+    });
 
     const baseFrom = `
     FROM ${db}."OITW" T0
@@ -253,7 +581,7 @@ export class SapService {
     SELECT
       ${imeiSelect}
       T0."ItemCode",
-      MAX(T0."WhsCode")                     AS "WhsCode",
+      ${groupByWarehouse ? `T0."WhsCode"` : `MAX(T0."WhsCode")`} AS "WhsCode",
       SUM(CAST(T0."OnHand" AS INTEGER))     AS "OnHand",
       MAX(T1."ItemName")                    AS "ItemName",
       T1."ItmsGrpCod"                       AS "ItemGroupCode",
@@ -271,15 +599,15 @@ export class SapService {
     ${baseFrom}
     GROUP BY
       T0."ItemCode",
-      T1."ItmsGrpCod"
+      T1."ItmsGrpCod"${warehouseGroupColumns}
       ${isIMEI ? `, R."DistNumber"` : ''}
-    ORDER BY MAX(T1."U_Model") DESC
+    ORDER BY ${orderByClauses.join(', ')}
     LIMIT ${limit}
     OFFSET ${offset}
 `;
 
     const countSql = `
-    SELECT COUNT(DISTINCT ${isIMEI ? `R."DistNumber"` : `T0."ItemCode"`}) AS "total"
+    SELECT COUNT(DISTINCT ${isIMEI ? `R."DistNumber"` : warehouseDistinctExpr}) AS "total"
     ${baseFrom}
 `;
 

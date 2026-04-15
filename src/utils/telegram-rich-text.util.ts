@@ -128,3 +128,24 @@ export const telegramMessageToHtml = (message: MessageLike): string => {
 
   return renderRange(text, entities, 0, text.length);
 };
+
+export const markdownToTelegramHtml = (text: string): string => {
+  // First escape all existing HTML to prevent raw injection, 
+  // since Telegram HTML parse mode only supports specific tags.
+  let html = escapeHtml(text);
+
+  // Markdown Bold: **text**
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+  // Markdown Italic: *text* or _text_ (excluding bold). 
+  html = html.replace(/(?<!\w)\*([^*]+)\*(?!\w)/g, '<i>$1</i>');
+  html = html.replace(/(?<!\w)_([^_]+)_(?!\w)/g, '<i>$1</i>');
+
+  // Markdown Code inline: `text`
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Markdown links: [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+  return html;
+};

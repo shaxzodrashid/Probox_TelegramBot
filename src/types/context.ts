@@ -81,4 +81,5 @@ export interface SessionData {
   adminFaqAnswerVariants?: FaqAnswerVariants;
   adminFaqAnswerRegenerationInstructions?: string;
   adminFaqListPage?: number;
+  adminFaqAgentToken?: string;
 }

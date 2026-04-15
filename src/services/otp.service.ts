@@ -39,7 +39,7 @@ export class OtpService {
   }
 
   private static async send_code(phoneNumber: string, code: string): Promise<void> {
-    const fixed_phone = Number(phoneNumber.slice(-9));
+    const fixed_phone = `998${phoneNumber.replace(/\D/g, '').slice(-9)}`;
 
     logger.info(`Sending OTP to ${fixed_phone} with code ${code}`);
 
@@ -54,12 +54,12 @@ export class OtpService {
     logger.info(`Message ID: ${message_id}`);
 
     const data_to_send = {
-      recipient: Number(fixed_phone),
+      recipient: fixed_phone,
       'message-id': message_id,
       sms: {
         originator: config.SMS_ORIGINATOR,
         content: {
-          text: `Tasdiqlash kodi: ${code}\nKod faqat siz uchun. Uni boshqalarga bermang.`,
+          text: `Probox telegram botida ro'yxatdan o'tishni tasdiqlash kodi - ${code}}`,
         },
       },
     };

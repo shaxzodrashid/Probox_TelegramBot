@@ -17,6 +17,8 @@ const FAQ_ANSWER_CONFIRM_CALLBACK = 'faq_answer_confirm';
 const FAQ_ANSWER_REJECT_CALLBACK = 'faq_answer_reject';
 const FAQ_ANSWER_MANUAL_CALLBACK = 'faq_answer_manual';
 const FAQ_ANSWER_REGENERATE_CALLBACK = 'faq_answer_regenerate';
+const FAQ_MODE_ANSWER_CALLBACK = 'faq_mode_answer';
+const FAQ_MODE_AGENT_CALLBACK = 'faq_mode_agent';
 const FAQ_MANUAL_CONFIRM_CALLBACK = 'faq_manual_confirm';
 const FAQ_MANUAL_REENTER_CALLBACK = 'faq_manual_reenter';
 
@@ -34,6 +36,12 @@ const getAnswerReviewKeyboard = (locale: string) =>
   new InlineKeyboard()
     .text(i18n.t(locale, 'admin_confirm_yes'), FAQ_ANSWER_CONFIRM_CALLBACK)
     .text(i18n.t(locale, 'admin_confirm_no'), FAQ_ANSWER_REJECT_CALLBACK);
+
+const getAnswerModeKeyboard = (locale: string) =>
+  new InlineKeyboard()
+    .text(i18n.t(locale, 'admin_faq_add_answer'), FAQ_MODE_ANSWER_CALLBACK)
+    .row()
+    .text(i18n.t(locale, 'admin_faq_mark_for_agent'), FAQ_MODE_AGENT_CALLBACK);
 
 const getAnswerRejectedKeyboard = (locale: string) =>
   new InlineKeyboard()
@@ -82,7 +90,10 @@ const clearFaqSession = (ctx: BotContext) => {
   session.adminFaqDraftId = undefined;
   session.adminFaqAnswerVariants = undefined;
   session.adminFaqAnswerRegenerationInstructions = undefined;
+  session.adminFaqAgentToken = undefined;
 };
+
+const buildAgentFaqToken = (faqId: number): string => `__AGENT_FAQ_${faqId}__`;
 
 const getLocale = async (conversation: BotConversation): Promise<string> => {
   const session = await conversation.external((ctx) => ctx.session);
@@ -260,23 +271,10 @@ const collectManualAnswers = async (
   return { answer_uz, answer_ru, answer_en };
 };
 
-const saveAndPublishFaq = async (
-  conversation: BotConversation,
-  ctx: BotContext,
-  locale: string,
-  draft: FaqRecord,
-  answers: FaqAnswerVariants,
-) => {
+const saveAndPublishFaq = async (conversation: BotConversation, ctx: BotContext, locale: string, draft: FaqRecord) => {
   const adminId = ctx.from?.id;
   if (!adminId) {
     throw new Error('Admin id is missing');
-  }
-
-  const updatedDraft = await conversation.external(() =>
-    FaqService.updateDraftAnswerVariants(draft.id, adminId, answers),
-  );
-  if (!updatedDraft) {
-    throw new Error('Failed to update FAQ draft answers');
   }
 
   const published = await conversation.external(() =>
@@ -290,6 +288,102 @@ const saveAndPublishFaq = async (
   await ctx.reply(i18n.t(locale, 'admin_faq_published'), {
     reply_markup: getAdminMenuKeyboard(locale),
   });
+};
+
+const hasDraftAnswers = (draft: FaqRecord): boolean =>
+  Boolean(draft.answer_uz?.trim() && draft.answer_ru?.trim() && draft.answer_en?.trim());
+
+const persistDraftAnswers = async (
+  conversation: BotConversation,
+  draft: FaqRecord,
+  adminId: number,
+  answers: FaqAnswerVariants,
+): Promise<FaqRecord> => {
+  const updatedDraft = await conversation.external(() =>
+    FaqService.updateDraftAnswerVariants(draft.id, adminId, answers),
+  );
+  if (!updatedDraft) {
+    throw new Error('Failed to update FAQ draft answers');
+  }
+
+  return updatedDraft;
+};
+
+const updateDraftAgentState = async (
+  conversation: BotConversation,
+  draft: FaqRecord,
+  adminId: number,
+  agentEnabled: boolean,
+  agentToken: string | null,
+): Promise<FaqRecord> => {
+  const updatedDraft = await conversation.external(() =>
+    FaqService.updateDraftAgentSettings(draft.id, adminId, {
+      agentEnabled,
+      agentToken,
+    }),
+  );
+
+  if (!updatedDraft) {
+    throw new Error('Failed to update FAQ agent settings');
+  }
+
+  return updatedDraft;
+};
+
+const runAgentMarkFlow = async (
+  conversation: BotConversation,
+  ctx: BotContext,
+  locale: string,
+  draft: FaqRecord,
+) => {
+  const adminId = ctx.from?.id;
+  if (!adminId) {
+    throw new Error('Admin id is missing');
+  }
+
+  const agentToken = buildAgentFaqToken(draft.id);
+  getSession(ctx).adminFaqAgentToken = agentToken;
+
+  const updatedWithAnswer = await persistDraftAnswers(conversation, draft, adminId, {
+    answer_uz: agentToken,
+    answer_ru: agentToken,
+    answer_en: agentToken,
+  });
+  const updatedDraft = await updateDraftAgentState(
+    conversation,
+    updatedWithAnswer,
+    adminId,
+    true,
+    agentToken,
+  );
+
+  await saveAndPublishFaq(conversation, ctx, locale, updatedDraft);
+};
+
+const runAnswerModeSelectionFlow = async (
+  conversation: BotConversation,
+  ctx: BotContext,
+  locale: string,
+  draft: FaqRecord,
+) => {
+  while (true) {
+    await ctx.reply(i18n.t(locale, 'admin_faq_answer_mode_prompt'), {
+      reply_markup: getAnswerModeKeyboard(locale),
+    });
+
+    const choice = await waitForCallbackChoice(conversation, locale, [
+      FAQ_MODE_ANSWER_CALLBACK,
+      FAQ_MODE_AGENT_CALLBACK,
+    ]);
+
+    if (choice === FAQ_MODE_ANSWER_CALLBACK) {
+      await runAnswerFlow(conversation, ctx, locale, draft);
+      return;
+    }
+
+    await runAgentMarkFlow(conversation, ctx, locale, draft);
+    return;
+  }
 };
 
 const runQuestionDraftFlow = async (
@@ -428,7 +522,15 @@ const runAnswerFlow = async (
         ]);
 
         if (choice === FAQ_ANSWER_CONFIRM_CALLBACK) {
-          await saveAndPublishFaq(conversation, ctx, locale, draft, answers);
+          const updatedDraft = await persistDraftAnswers(conversation, draft, ctx.from!.id, answers);
+          const standardDraft = await updateDraftAgentState(
+            conversation,
+            updatedDraft,
+            ctx.from!.id,
+            false,
+            null,
+          );
+          await saveAndPublishFaq(conversation, ctx, locale, standardDraft);
           return;
         }
 
@@ -462,7 +564,15 @@ const runAnswerFlow = async (
               continue;
             }
 
-            await saveAndPublishFaq(conversation, ctx, locale, draft, manualAnswers);
+            const updatedDraft = await persistDraftAnswers(conversation, draft, ctx.from!.id, manualAnswers);
+            const standardDraft = await updateDraftAgentState(
+              conversation,
+              updatedDraft,
+              ctx.from!.id,
+              false,
+              null,
+            );
+            await saveAndPublishFaq(conversation, ctx, locale, standardDraft);
             return;
           }
         }
@@ -511,7 +621,12 @@ export async function adminFaqCreateConversation(
       }
     }
 
-    await runAnswerFlow(conversation, ctx, locale, draft);
+    if (hasDraftAnswers(draft)) {
+      await saveAndPublishFaq(conversation, ctx, locale, draft);
+      return;
+    }
+
+    await runAnswerModeSelectionFlow(conversation, ctx, locale, draft);
   } finally {
     clearFaqSession(ctx);
   }

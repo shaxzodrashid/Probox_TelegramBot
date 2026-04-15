@@ -3,6 +3,8 @@
  */
 
 export type TicketStatus = 'open' | 'replied' | 'closed';
+export type SupportHandlingMode = 'human' | 'agent';
+export type SupportMessageSenderType = 'user' | 'agent' | 'admin' | 'system';
 export type BroadcastStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 export type BroadcastTargetType = 'all' | 'single';
 
@@ -15,11 +17,26 @@ export interface SupportTicket {
     group_message_id?: number;
     photo_file_id?: string;
     status: TicketStatus;
+    handling_mode: SupportHandlingMode;
+    matched_faq_id?: number | null;
+    agent_token?: string | null;
+    agent_escalation_reason?: string | null;
     replied_by_admin_id?: number;
     replied_at?: Date;
     reply_message?: string;
     created_at: Date;
     updated_at: Date;
+}
+
+export interface SupportTicketMessage {
+    id: number;
+    ticket_id: number;
+    sender_type: SupportMessageSenderType;
+    message_text: string;
+    photo_file_id?: string | null;
+    telegram_message_id?: number | null;
+    group_message_id?: number | null;
+    created_at: Date;
 }
 
 export interface BroadcastMessage {
@@ -48,6 +65,9 @@ export interface CreateTicketParams {
     messageText: string;
     messageId?: number;
     photoFileId?: string;
+    handlingMode?: SupportHandlingMode;
+    matchedFaqId?: number | null;
+    agentToken?: string | null;
 }
 
 export interface CreateBroadcastParams {

@@ -18,6 +18,8 @@ export interface FaqRecord extends FaqQuestionVariants, FaqAnswerVariants {
   id: number;
   status: FaqStatus;
   vector_embedding: string;
+  agent_enabled: boolean;
+  agent_token: string | null;
   created_by_admin_telegram_id: number;
   locked_by_admin_telegram_id: number | null;
   workflow_stage: FaqWorkflowStage | null;

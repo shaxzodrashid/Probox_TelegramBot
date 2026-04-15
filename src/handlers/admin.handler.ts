@@ -77,6 +77,7 @@ import {
     getAdminFaqListKeyboard,
 } from '../keyboards/faq.keyboards';
 import { FaqService } from '../services/faq.service';
+import { getFaqAgentToken } from '../utils/faq-match.util';
 import { FaqRecord } from '../types/faq.types';
 
 /**
@@ -161,6 +162,11 @@ const buildAdminFaqListText = (
 };
 
 const buildAdminFaqDetailText = (locale: string, faq: FaqRecord) => {
+    const agentToken = getFaqAgentToken(faq, faq.agent_token || null);
+    const agentStatus = agentToken
+        ? i18n.t(locale, 'admin_faq_agent_status_enabled')
+        : i18n.t(locale, 'admin_faq_agent_status_disabled');
+
     return [
         `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_title'))}</b>`,
         '',
@@ -181,6 +187,12 @@ const buildAdminFaqDetailText = (locale: string, faq: FaqRecord) => {
         '',
         `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_answer_en'))}</b>`,
         escapeHtml(faq.answer_en),
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_agent_status'))}</b>`,
+        escapeHtml(agentStatus),
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_agent_token'))}</b>`,
+        escapeHtml(agentToken || i18n.t(locale, 'admin_faq_agent_token_empty')),
     ].join('\n');
 };
 

@@ -154,6 +154,7 @@ settings_header = ⚙️ <b>Sozlamalar</b>
     🌐 <b>Til:</b> { $language }
     🪪 <b>Pasport:</b> <tg-spoiler>{ $passport_series }</tg-spoiler>
     🔢 <b>JShShIR:</b> <tg-spoiler>{ $jshshir }</tg-spoiler>
+    🏠 <b>Manzil:</b> { $address }
     
     Kerakli bo'limni tanlang:
 settings_select_language = Iltimos, o'zingizga qulay tilni tanlang 👇
@@ -174,6 +175,13 @@ settings_passport_face_id_processing = ⏳ Yuz rasmi tekshirilmoqda, iltimos kut
 settings_passport_face_id_error = ❌ Afsuski, rasmda yuz aniqlanmadi yoki rasm juda xira. Iltimos, tiniqroq selfi olib qayta urinib ko'ring.
 settings_passport_face_id_success = ✅ Yuz rasmi muvaffaqiyatli tasdiqlandi!
 settings_passport_face_id_storage_error = ❌ Selfi qabul qilindi, lekin vaqtincha fayl saqlash xizmatiga ulanib bo'lmadi. Iltimos, bir necha daqiqadan keyin qayta urinib ko'ring.
+settings_passport_ask_address = 🏠 Manzilingizni kiriting.
+  Manzilingizni matn ko'rinishida yozib qoldirishingiz yoki quyidagi tugma orqali lokatsiya jo'natishingiz mumkin.
+settings_passport_btn_send_location = 📍 Lokatsiya yuborish
+settings_passport_address_invalid = ❌ Manzilni aniqlab bo'lmadi. Iltimos, boshqatdan yozing yoki lokatsiya yuboring.
+settings_passport_address_success = ✅ Manzilingiz muvaffaqiyatli saqlandi!
+settings_passport_saving = ⏳ Ma'lumotlar saqlanmoqda, iltimos kuting...
+settings_passport_address_processing = ⏳ Manzil aniqlanmoqda, iltimos kuting...
 settings_passport_enter_series = 🔢 Iltimos, pasport seriyasi va raqamini kiriting (masalan, AB1234567):
 settings_passport_invalid_series = ❌ Noto'g'ri pasport seriyasi. U 2 ta harf va 7 ta raqamdan iborat bo'lishi kerak. Iltimos, qayta kiriting:
 settings_passport_enter_jshshir = 🔢 Iltimos, 14 xonali JShShIR (PINFL) raqamingizni kiriting:
@@ -213,6 +221,8 @@ support_cancel = 🔙 Bekor qilish
 support_not_registered = ⚠️ Avval ro'yxatdan o'ting.
 support_error = ❌ Xatolik yuz berdi. Iltimos, keyinroq urinib ko'ring.
 support_reply_received = 📩 Murojaatingiz <b>#{ $ticket }</b> ga javob:
+support_ai_thinking = ⏳ So'rovingiz ustida ishlayapman, iltimos kuting...
+
 
 # Admin Support
 admin_ticket_reply = ✏️ Javob berish
@@ -550,6 +560,9 @@ admin_faq_manual_answer_uz_prompt = O'zbekcha javob variantini yuboring:
 admin_faq_manual_answer_ru_prompt = Ruscha javob variantini yuboring:
 admin_faq_manual_answer_en_prompt = Inglizcha javob variantini yuboring:
 admin_faq_reenter_manual_answers = 🔁 Qo'lda qayta kiritish
+admin_faq_answer_mode_prompt = Ushbu savol uchun javob turini tanlang:
+admin_faq_add_answer = ✍️ Javob qo'shish
+admin_faq_mark_for_agent = 🤖 Agent uchun belgilash
 admin_faq_published = ✅ FAQ muvaffaqiyatli nashr qilindi.
 admin_faq_generation_error = FAQ uchun AI yoki embedding amali bajarilmadi. Qayta urinib ko'ring.
 admin_faq_finish_locked_draft = Savol embeddigi saqlangan. Chiqishdan oldin shu FAQ draftini yakunlang.
@@ -567,3 +580,8 @@ admin_faq_detail_question_en = Savol (EN)
 admin_faq_detail_answer_uz = Javob (UZ)
 admin_faq_detail_answer_ru = Javob (RU)
 admin_faq_detail_answer_en = Javob (EN)
+admin_faq_detail_agent_status = Agent handoff
+admin_faq_detail_agent_token = Agent token
+admin_faq_agent_status_enabled = Yoqilgan
+admin_faq_agent_status_disabled = O'chirilgan
+admin_faq_agent_token_empty = Belgilanmagan

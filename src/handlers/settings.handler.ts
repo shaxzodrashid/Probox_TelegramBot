@@ -21,7 +21,8 @@ export async function settingsHandler(ctx: BotContext) {
     phone: formatUzPhone(user.phone_number),
     language: locale === 'uz' ? i18n.t('uz', 'uz_button') : i18n.t('ru', 'ru_button'),
     passport_series: user.passport_series || '—',
-    jshshir: user.jshshir || '—'
+    jshshir: user.jshshir || '—',
+    address: user.address || '—'
   });
 
   if (ctx.callbackQuery) {

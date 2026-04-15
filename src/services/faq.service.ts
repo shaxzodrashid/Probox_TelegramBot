@@ -1,3 +1,4 @@
+import { config } from '../config';
 import db from '../database/database';
 import {
   FaqAnswerVariants,
@@ -5,11 +6,18 @@ import {
   FaqQuestionVariants,
   FaqRecord,
 } from '../types/faq.types';
+import { FaqEmbeddingService } from './faq-embedding.service';
+import { isExactFaqQuestionMatch } from '../utils/faq-match.util';
 import { logger } from '../utils/logger';
 
 interface CreateDraftFaqInput extends FaqQuestionVariants {
   embedding: number[];
   adminTelegramId: number;
+}
+
+interface UpdateDraftAgentSettingsInput {
+  agentEnabled: boolean;
+  agentToken: string | null;
 }
 
 export interface PaginatedFaqResult {
@@ -19,6 +27,53 @@ export interface PaginatedFaqResult {
   total: number;
   totalPages: number;
 }
+
+export interface SemanticFaqMatchResult {
+  faq: FaqRecord;
+  distance: number;
+}
+
+export interface FaqCandidateRecord {
+  faq: FaqRecord;
+  distance: number;
+}
+
+const previewQuestionForLogs = (question: string, maxLength: number = 160): string => {
+  const normalized = question.replace(/\s+/g, ' ').trim();
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 3)}...`;
+};
+
+const toSafeNumber = (value: unknown): number => {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+};
+
+const normalizeFaqRecord = (faq: FaqRecord): FaqRecord => ({
+  ...faq,
+  id: toSafeNumber(faq.id),
+  agent_enabled: faq.agent_enabled === true,
+  agent_token: faq.agent_token?.trim() || null,
+  created_by_admin_telegram_id: toSafeNumber(faq.created_by_admin_telegram_id),
+  locked_by_admin_telegram_id:
+    faq.locked_by_admin_telegram_id === null
+      ? null
+      : toSafeNumber(faq.locked_by_admin_telegram_id),
+});
 
 export class FaqService {
   private static isMissingFaqTableError(error: unknown): boolean {
@@ -43,7 +98,7 @@ export class FaqService {
         .orderBy('updated_at', 'desc')
         .first();
 
-      return record || null;
+      return record ? normalizeFaqRecord(record) : null;
     } catch (error) {
       if (this.isMissingFaqTableError(error)) {
         logger.warn('FAQ table is missing while checking locked draft; returning no draft.');
@@ -98,6 +153,8 @@ export class FaqService {
         answer_ru: '',
         answer_en: '',
         status: 'draft',
+        agent_enabled: false,
+        agent_token: null,
         created_by_admin_telegram_id: input.adminTelegramId,
         locked_by_admin_telegram_id: input.adminTelegramId,
         workflow_stage: 'awaiting_answer',
@@ -106,7 +163,7 @@ export class FaqService {
       })
       .returning('*');
 
-    return record;
+    return normalizeFaqRecord(record);
   }
 
   static async listPublishedFaqs(
@@ -132,7 +189,7 @@ export class FaqService {
       .limit(safePageSize);
 
     return {
-      items,
+      items: items.map(normalizeFaqRecord),
       page: normalizedPage,
       pageSize: safePageSize,
       total,
@@ -148,7 +205,149 @@ export class FaqService {
       })
       .first();
 
-    return record || null;
+    return record ? normalizeFaqRecord(record) : null;
+  }
+
+  static async getPublishedFaqsByIds(faqIds: number[]): Promise<FaqRecord[]> {
+    if (faqIds.length === 0) {
+      return [];
+    }
+
+    const items = await db<FaqRecord>('faqs')
+      .where({ status: 'published' })
+      .whereIn('id', faqIds)
+      .select('*');
+
+    const normalizedItems = items.map(normalizeFaqRecord);
+    const itemsById = new Map(normalizedItems.map((item) => [item.id, item]));
+    return faqIds
+      .map((faqId) => itemsById.get(faqId))
+      .filter((item): item is FaqRecord => Boolean(item));
+  }
+
+  static async findExactPublishedFaqByQuestion(question: string): Promise<FaqRecord | null> {
+    try {
+      const publishedFaqs = await db<FaqRecord>('faqs')
+        .where({ status: 'published' })
+        .orderBy('created_at', 'desc')
+        .select('*');
+
+      const exactMatch = publishedFaqs.find((faq) => isExactFaqQuestionMatch(faq, question));
+      logger.debug(
+        `[FAQ_EXACT] Checked ${publishedFaqs.length} published FAQs for question="${previewQuestionForLogs(question)}"; matched=${exactMatch ? `faq:${exactMatch.id}` : 'none'}`,
+      );
+      return exactMatch || null;
+    } catch (error) {
+      if (this.isMissingFaqTableError(error)) {
+        logger.warn('FAQ table is missing while checking exact FAQ support matches.');
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  static async findSemanticPublishedFaqByQuestion(
+    question: string,
+  ): Promise<SemanticFaqMatchResult | null> {
+    try {
+      const embedding = await FaqEmbeddingService.embedQuestionQuery(question);
+      const [bestNeighbor] = await this.searchNearestPublishedFaqs(embedding, 1);
+
+      if (!bestNeighbor || bestNeighbor.distance > config.FAQ_AUTO_REPLY_MAX_DISTANCE) {
+        return null;
+      }
+
+      const faq = await this.getPublishedFaqById(bestNeighbor.id);
+      if (!faq) {
+        return null;
+      }
+
+      return {
+        faq,
+        distance: bestNeighbor.distance,
+      };
+    } catch (error) {
+      if (this.isMissingFaqTableError(error)) {
+        logger.warn('FAQ table is missing while checking semantic FAQ support matches.');
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  static async findSemanticFaqCandidatesByQuestion(
+    question: string,
+    limit: number = config.FAQ_SIMILAR_LIMIT,
+  ): Promise<FaqCandidateRecord[]> {
+    try {
+      logger.info(
+        `[FAQ_SEMANTIC] Searching candidates for question="${previewQuestionForLogs(question)}" limit=${limit} maxDistance=${config.FAQ_AUTO_REPLY_MAX_DISTANCE.toFixed(4)}`,
+      );
+      const embedding = await FaqEmbeddingService.embedQuestionQuery(question);
+      logger.debug(
+        `[FAQ_SEMANTIC] Generated embedding with ${embedding.length} dimensions for question="${previewQuestionForLogs(question)}"`,
+      );
+      const neighbors = await this.searchNearestPublishedFaqs(embedding, limit);
+      logger.debug(
+        `[FAQ_SEMANTIC] Raw nearest neighbors: ${
+          neighbors.length > 0
+            ? neighbors.map((neighbor) => `faq:${neighbor.id}@${neighbor.distance.toFixed(4)}`).join(', ')
+            : 'none'
+        }`,
+      );
+      const eligibleNeighbors = neighbors.filter(
+        (neighbor) => neighbor.distance <= config.FAQ_AUTO_REPLY_MAX_DISTANCE,
+      );
+
+      logger.info(
+        `[FAQ_SEMANTIC] Eligible neighbors within threshold: ${
+          eligibleNeighbors.length > 0
+            ? eligibleNeighbors.map((neighbor) => `faq:${neighbor.id}@${neighbor.distance.toFixed(4)}`).join(', ')
+            : 'none'
+        }`,
+      );
+
+      if (eligibleNeighbors.length === 0) {
+        return [];
+      }
+
+      const faqs = await this.getPublishedFaqsByIds(eligibleNeighbors.map((neighbor) => neighbor.id));
+      const normalizedFaqs = faqs.map(normalizeFaqRecord);
+      const faqById = new Map(normalizedFaqs.map((faq) => [faq.id, faq]));
+
+      const candidates = eligibleNeighbors
+        .map((neighbor) => {
+          const faq = faqById.get(neighbor.id);
+          if (!faq) {
+            return null;
+          }
+
+          return {
+            faq,
+            distance: neighbor.distance,
+          };
+        })
+        .filter((item): item is FaqCandidateRecord => Boolean(item));
+
+      logger.info(
+        `[FAQ_SEMANTIC] Final FAQ candidates: ${
+          candidates.length > 0
+            ? candidates.map((candidate) => `faq:${candidate.faq.id}@${candidate.distance.toFixed(4)}`).join(', ')
+            : 'none'
+        }`,
+      );
+
+      return candidates;
+    } catch (error) {
+      if (this.isMissingFaqTableError(error)) {
+        logger.warn('FAQ table is missing while searching semantic FAQ support candidates.');
+        return [];
+      }
+
+      throw error;
+    }
   }
 
   static async updateDraftAnswerVariants(
@@ -168,7 +367,28 @@ export class FaqService {
       })
       .returning('*');
 
-    return record || null;
+    return record ? normalizeFaqRecord(record) : null;
+  }
+
+  static async updateDraftAgentSettings(
+    faqId: number,
+    adminTelegramId: number,
+    input: UpdateDraftAgentSettingsInput,
+  ): Promise<FaqRecord | null> {
+    const [record] = await db<FaqRecord>('faqs')
+      .where({
+        id: faqId,
+        status: 'draft',
+        locked_by_admin_telegram_id: adminTelegramId,
+      })
+      .update({
+        agent_enabled: input.agentEnabled,
+        agent_token: input.agentToken?.trim() || null,
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    return record ? normalizeFaqRecord(record) : null;
   }
 
   static async publishFaq(
@@ -189,6 +409,6 @@ export class FaqService {
       })
       .returning('*');
 
-    return record || null;
+    return record ? normalizeFaqRecord(record) : null;
   }
 }

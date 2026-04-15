@@ -9,6 +9,7 @@ export interface User {
   sap_card_code?: string;
   jshshir?: string;
   passport_series?: string;
+  address?: string;
   language_code: string;
   is_admin: boolean;
   is_support_banned?: boolean;
@@ -81,6 +82,12 @@ export class UserService {
     await db('users')
       .where('telegram_id', telegramId)
       .update({ jshshir, passport_series: passportSeries, updated_at: new Date() });
+  }
+
+  static async updateUserAddress(telegramId: number, address: string): Promise<void> {
+    await db('users')
+      .where('telegram_id', telegramId)
+      .update({ address, updated_at: new Date() });
   }
 
   /**

@@ -1,5 +1,12 @@
 import db from '../database/database';
-import { SupportTicket, CreateTicketParams, SupportTicketWithUser } from '../types/support.types';
+import {
+    CreateTicketParams,
+    SupportHandlingMode,
+    SupportMessageSenderType,
+    SupportTicket,
+    SupportTicketMessage,
+    SupportTicketWithUser,
+} from '../types/support.types';
 import { logger } from '../utils/logger';
 import { redisService } from '../redis/redis.service';
 
@@ -9,6 +16,63 @@ import { redisService } from '../redis/redis.service';
 export class SupportService {
     private static readonly TICKET_CACHE_PREFIX = 'ticket:msg:';
     private static readonly TICKET_CACHE_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+
+    private static toSafeNumber(value: unknown): number {
+        if (typeof value === 'number') {
+            return value;
+        }
+
+        if (typeof value === 'string') {
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+
+        return 0;
+    }
+
+    private static normalizeTicket(ticket: SupportTicket | null | undefined): SupportTicket | null {
+        if (!ticket) {
+            return null;
+        }
+
+        return {
+            ...ticket,
+            id: this.toSafeNumber(ticket.id),
+            user_telegram_id: this.toSafeNumber(ticket.user_telegram_id),
+            message_id: ticket.message_id === undefined || ticket.message_id === null
+                ? undefined
+                : this.toSafeNumber(ticket.message_id),
+            group_message_id: ticket.group_message_id === undefined || ticket.group_message_id === null
+                ? undefined
+                : this.toSafeNumber(ticket.group_message_id),
+            handling_mode: (ticket.handling_mode || 'human') as SupportHandlingMode,
+            matched_faq_id: ticket.matched_faq_id === undefined || ticket.matched_faq_id === null
+                ? null
+                : this.toSafeNumber(ticket.matched_faq_id),
+            agent_token: ticket.agent_token?.trim() || null,
+            agent_escalation_reason: ticket.agent_escalation_reason?.trim() || null,
+            replied_by_admin_id: ticket.replied_by_admin_id === undefined || ticket.replied_by_admin_id === null
+                ? undefined
+                : this.toSafeNumber(ticket.replied_by_admin_id),
+        };
+    }
+
+    private static normalizeMessage(message: SupportTicketMessage): SupportTicketMessage {
+        return {
+            ...message,
+            id: this.toSafeNumber(message.id),
+            ticket_id: this.toSafeNumber(message.ticket_id),
+            telegram_message_id: message.telegram_message_id === undefined || message.telegram_message_id === null
+                ? null
+                : this.toSafeNumber(message.telegram_message_id),
+            group_message_id: message.group_message_id === undefined || message.group_message_id === null
+                ? null
+                : this.toSafeNumber(message.group_message_id),
+            photo_file_id: message.photo_file_id || null,
+        };
+    }
 
     /**
      * Generate unique ticket number (format: ABC123)
@@ -28,7 +92,15 @@ export class SupportService {
      * @returns Created support ticket
      */
     static async createTicket(params: CreateTicketParams): Promise<SupportTicket> {
-        const { userTelegramId, messageText, messageId, photoFileId } = params;
+        const {
+            userTelegramId,
+            messageText,
+            messageId,
+            photoFileId,
+            handlingMode = 'human',
+            matchedFaqId = null,
+            agentToken = null,
+        } = params;
 
         // Generate unique ticket number (retry if collision)
         let ticketNumber = this.generateTicketNumber();
@@ -58,12 +130,15 @@ export class SupportService {
                 message_id: messageId,
                 photo_file_id: photoFileId,
                 status: 'open',
+                handling_mode: handlingMode,
+                matched_faq_id: matchedFaqId,
+                agent_token: agentToken,
             })
             .returning('*');
 
         logger.info(`Created support ticket ${ticketNumber} for user ${userTelegramId}`);
 
-        return result;
+        return this.normalizeTicket(result)!;
     }
 
     /**
@@ -102,7 +177,7 @@ export class SupportService {
             const ticket = await db('support_tickets')
                 .where('id', parseInt(cachedTicketId, 10))
                 .first();
-            return ticket || null;
+            return this.normalizeTicket(ticket);
         }
 
         // Fallback to database
@@ -115,7 +190,7 @@ export class SupportService {
             await redisService.set(cacheKey, ticket.id.toString(), this.TICKET_CACHE_TTL);
         }
 
-        return ticket || null;
+        return this.normalizeTicket(ticket);
     }
 
     /**
@@ -127,7 +202,7 @@ export class SupportService {
         const ticket = await db('support_tickets')
             .where('ticket_number', ticketNumber.toUpperCase())
             .first();
-        return ticket || null;
+        return this.normalizeTicket(ticket);
     }
 
     /**
@@ -137,7 +212,107 @@ export class SupportService {
         const ticket = await db('support_tickets')
             .where('id', ticketId)
             .first();
-        return ticket || null;
+        return this.normalizeTicket(ticket);
+    }
+
+    static async getOpenAgentTicketByUserTelegramId(userTelegramId: number): Promise<SupportTicket | null> {
+        const ticket = await db<SupportTicket>('support_tickets')
+            .where('user_telegram_id', userTelegramId)
+            .where('status', 'open')
+            .where('handling_mode', 'agent')
+            .orderBy('created_at', 'desc')
+            .first();
+
+        return this.normalizeTicket(ticket);
+    }
+
+    static async appendMessage(params: {
+        ticketId: number;
+        senderType: SupportMessageSenderType;
+        messageText: string;
+        photoFileId?: string | null;
+        telegramMessageId?: number | null;
+        groupMessageId?: number | null;
+    }): Promise<SupportTicketMessage> {
+        const [result] = await db<SupportTicketMessage>('support_ticket_messages')
+            .insert({
+                ticket_id: params.ticketId,
+                sender_type: params.senderType,
+                message_text: params.messageText,
+                photo_file_id: params.photoFileId || null,
+                telegram_message_id: params.telegramMessageId || null,
+                group_message_id: params.groupMessageId || null,
+            })
+            .returning('*');
+
+        await db('support_tickets')
+            .where('id', params.ticketId)
+            .update({
+                updated_at: new Date(),
+            });
+
+        return this.normalizeMessage(result);
+    }
+
+    static async syncTicketPreviewMessage(params: {
+        ticketId: number;
+        messageText: string;
+        messageId?: number | null;
+        photoFileId?: string | null;
+    }): Promise<void> {
+        await db('support_tickets')
+            .where('id', params.ticketId)
+            .update({
+                message_text: params.messageText,
+                message_id: params.messageId || null,
+                photo_file_id: params.photoFileId || null,
+                updated_at: new Date(),
+            });
+    }
+
+    static async getTicketMessages(ticketId: number): Promise<SupportTicketMessage[]> {
+        const messages = await db<SupportTicketMessage>('support_ticket_messages')
+            .where('ticket_id', ticketId)
+            .orderBy('created_at', 'asc')
+            .orderBy('id', 'asc');
+
+        return messages.map((message) => this.normalizeMessage(message));
+    }
+
+    static async updateLatestMessageGroupMessageId(
+        ticketId: number,
+        senderType: SupportMessageSenderType,
+        groupMessageId: number,
+    ): Promise<void> {
+        const latestMessage = await db<SupportTicketMessage>('support_ticket_messages')
+            .where('ticket_id', ticketId)
+            .where('sender_type', senderType)
+            .orderBy('created_at', 'desc')
+            .orderBy('id', 'desc')
+            .first();
+
+        if (!latestMessage) {
+            return;
+        }
+
+        await db('support_ticket_messages')
+            .where('id', latestMessage.id)
+            .update({
+                group_message_id: groupMessageId,
+            });
+    }
+
+    static async escalateAgentTicket(ticketId: number, reason: string): Promise<SupportTicket | null> {
+        const [result] = await db<SupportTicket>('support_tickets')
+            .where('id', ticketId)
+            .update({
+                handling_mode: 'human',
+                agent_escalation_reason: reason,
+                updated_at: new Date(),
+            })
+            .returning('*');
+
+        return this.normalizeTicket(result);
     }
 
     /**
@@ -190,7 +365,9 @@ export class SupportService {
             .where('user_telegram_id', userTelegramId)
             .where('status', 'open')
             .orderBy('created_at', 'desc');
-        return tickets;
+        return tickets
+            .map((ticket: SupportTicket) => this.normalizeTicket(ticket))
+            .filter((ticket): ticket is SupportTicket => Boolean(ticket));
     }
 
     /**
@@ -227,7 +404,17 @@ export class SupportService {
                 'users.phone_number'
             )
             .orderBy('support_tickets.created_at', 'desc');
-        return tickets;
+        return tickets
+            .map((ticket: SupportTicketWithUser) => {
+                const normalizedTicket = this.normalizeTicket(ticket);
+                return normalizedTicket
+                    ? {
+                        ...ticket,
+                        ...normalizedTicket,
+                    }
+                    : null;
+            })
+            .filter((ticket): ticket is SupportTicketWithUser => Boolean(ticket));
     }
 
     /**

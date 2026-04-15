@@ -187,6 +187,34 @@ import { redisService } from './redis/redis.service';
 
 export const bot = new Bot<BotContext>(config.BOT_TOKEN);
 
+// Global API transformer to set default parse_mode to HTML
+bot.api.config.use((prev, method, payload, signal) => {
+  if (!payload || typeof payload !== 'object') {
+    return prev(method, payload, signal);
+  }
+
+  const methodsWithParseMode = [
+    'sendMessage',
+    'sendPhoto',
+    'sendVideo',
+    'sendAnimation',
+    'sendAudio',
+    'sendDocument',
+    'sendVoice',
+    'editMessageText',
+    'editMessageCaption',
+    'editMessageMedia',
+    'copyMessage',
+    'answerInlineQuery',
+  ];
+
+  if (methodsWithParseMode.includes(method) && !('parse_mode' in (payload as any))) {
+    Object.assign(payload, { parse_mode: 'HTML' });
+  }
+
+  return prev(method, payload, signal);
+});
+
 
 
 // Middlewares
@@ -619,11 +647,16 @@ bot.on(['message:text', 'message:photo'], async (ctx) => {
     return; // Ignore if in a conversation (they handle their own input)
   }
 
-  // Also ignore if it's a command (already handled by bot.command)
-  if (ctx.message.text?.startsWith('/')) return;
-
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
+
+  const isRegistrationActive = await redisService.exists(`registrationActive:${telegramId}`);
+  if (isRegistrationActive) {
+    return; // Ignore while registration is waiting for phone/OTP input
+  }
+
+  // Also ignore if it's a command (already handled by bot.command)
+  if (ctx.message.text?.startsWith('/')) return;
 
   // 1. Get or create user
   let user = await UserService.getUserByTelegramId(telegramId);

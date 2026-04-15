@@ -168,6 +168,9 @@ export async function handlePhotoMethod(
       );
       logger.debug('[Passport] Processing message sent successfully.');
       processingMsgId = msg.message_id;
+
+      // Show action to user
+      await ctx.api.sendChatAction(chatId, 'upload_photo').catch(() => {});
     }
   } catch (err) {
     logger.debug(`[Passport] Error sending processing message: ${err}`);
@@ -231,6 +234,9 @@ export async function handlePhotoMethod(
       logger.debug(`[Passport] Failed to delete processing message: ${err}`);
     });
   }
+  
+  // Proceed directly - grammY handles sequential updates automatically
+  
   logger.debug('[Passport] Processing message deleted. Moving to variable assignment.');
 
   let finalSeries = result.cardNumber;

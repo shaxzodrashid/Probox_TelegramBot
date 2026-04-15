@@ -9,7 +9,7 @@ import { isUserBlockedError, isMessageToDeleteNotFoundError } from '../utils/tel
 import { bot } from '../bot';
 import { config } from '../config';
 import { i18n } from '../i18n';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml, markdownToTelegramHtml } from '../utils/telegram-rich-text.util';
 
 // Redis key prefix for admin reply session data (must match handler)
 const ADMIN_REPLY_KEY_PREFIX = 'admin:reply:';
@@ -264,6 +264,14 @@ async function processReply(
         await conversation.external(() =>
             SupportService.markAsReplied(ticket.id, adminId, replyText)
         );
+        await conversation.external(() =>
+            SupportService.appendMessage({
+                ticketId: ticket.id,
+                senderType: 'admin',
+                messageText: replyText,
+                photoFileId: photoFileId || null,
+            })
+        );
 
         // 4. Send reply to user
         try {
@@ -280,11 +288,11 @@ async function processReply(
 
             if (photoFileId) {
                 await bot.api.sendPhoto(ticket.user_telegram_id, photoFileId, {
-                    caption: escapeHtml(replyText),
+                    caption: markdownToTelegramHtml(replyText),
                     ...replyOptions
                 });
             } else {
-                await bot.api.sendMessage(ticket.user_telegram_id, escapeHtml(replyText),  replyOptions);
+                await bot.api.sendMessage(ticket.user_telegram_id, markdownToTelegramHtml(replyText),  replyOptions);
             }
             logger.info(`Reply sent to user ${ticket.user_telegram_id} for ticket ${ticket.ticket_number}`);
 

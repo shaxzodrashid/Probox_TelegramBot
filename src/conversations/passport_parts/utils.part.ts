@@ -1,4 +1,4 @@
-import { BotContext } from '../../types/context';
+import { BotContext, BotConversation } from '../../types/context';
 import { config } from '../../config';
 import axios from 'axios';
 import { logger } from '../../utils/logger';
@@ -40,4 +40,11 @@ export function normalizeButtonText(value?: string): string {
     .replace(/\s+/g, ' ')
     .toLowerCase()
     .trim();
+}
+
+export async function flushConversation(_conversation: BotConversation) {
+  // Clearing queued updates is not directly supported in grammY v2 as it uses a replay engine.
+  // Updates are delivered sequentially by the bot runner. To ignore "stale" input,
+  // compare the update timestamp with a 'start' time captured via conversation.now().
+  return;
 }

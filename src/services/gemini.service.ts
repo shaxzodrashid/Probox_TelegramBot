@@ -3,12 +3,20 @@ import { config } from '../config';
 
 interface GeminiGeneratePart {
   text?: string;
+  thoughtSignature?: string;
+  functionCall?: {
+    id?: string;
+    name?: string;
+    args?: Record<string, unknown>;
+  };
 }
 
 interface GeminiGenerateCandidate {
   content?: {
+    role?: string;
     parts?: GeminiGeneratePart[];
   };
+  finishReason?: string;
 }
 
 interface GeminiGenerateResponse {
@@ -34,10 +42,28 @@ const TRANSIENT_GEMINI_ERROR_CODES = new Set([
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export interface GeminiToolDeclaration {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
+export interface GeminiTool {
+  declaration: GeminiToolDeclaration;
+  execute: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 export class GeminiService {
   private static readonly client: AxiosInstance = axios.create({
     baseURL: 'https://generativelanguage.googleapis.com/v1beta/models',
-    timeout: 30000,
+    timeout: config.GEMINI_REQUEST_TIMEOUT_MS,
   });
   private static readonly maxRetries = 2;
 
@@ -122,6 +148,126 @@ export class GeminiService {
     } catch (error) {
       throw new Error(`Failed to parse Gemini ${params.schemaName} JSON: ${String(error)}`);
     }
+  }
+
+  static async generateJsonWithTools<T>(params: {
+    model?: string;
+    prompt: string;
+    schemaName: string;
+    tools: GeminiTool[];
+    maxToolIterations?: number;
+  }): Promise<T> {
+    if (params.tools.length === 0) {
+      return this.generateJson<T>({
+        model: params.model,
+        prompt: params.prompt,
+        schemaName: params.schemaName,
+      });
+    }
+
+    const model = params.model || config.GEMINI_TEXT_MODEL;
+    const maxToolIterations = Math.max(1, params.maxToolIterations || 3);
+    const toolMap = new Map(params.tools.map((tool) => [tool.declaration.name, tool]));
+    const contents: Array<{
+      role: string;
+      parts: Array<Record<string, unknown>>;
+    }> = [
+      {
+        role: 'user',
+        parts: [{ text: params.prompt }],
+      },
+    ];
+
+    for (let iteration = 0; iteration < maxToolIterations; iteration += 1) {
+      const response = await this.withRetry(() =>
+        this.client.post<GeminiGenerateResponse>(
+          `/${model}:generateContent`,
+          {
+            contents,
+            tools: [
+              {
+                functionDeclarations: params.tools.map((tool) => tool.declaration),
+              },
+            ],
+          },
+          {
+            params: {
+              key: this.getApiKey(),
+            },
+          },
+        ),
+      );
+
+      const candidate = response.data.candidates?.[0];
+      const candidateContent = candidate?.content;
+      const parts = candidateContent?.parts || [];
+      const functionCalls = parts
+        .map((part) => part.functionCall)
+        .filter((call): call is NonNullable<GeminiGeneratePart['functionCall']> => Boolean(call?.name));
+
+      if (functionCalls.length === 0) {
+        const text = parts
+          .map((part) => part.text || '')
+          .join('')
+          .trim();
+
+        if (!text) {
+          const finishReason = candidate?.finishReason ? ` (finishReason=${candidate.finishReason})` : '';
+          throw new Error(`Gemini returned an empty ${params.schemaName} payload${finishReason}`);
+        }
+
+        try {
+          return JSON.parse(text) as T;
+        } catch (error) {
+          throw new Error(`Failed to parse Gemini ${params.schemaName} JSON: ${String(error)}`);
+        }
+      }
+
+      if (!candidateContent) {
+        throw new Error(`Gemini returned tool calls without content for ${params.schemaName}`);
+      }
+
+      contents.push({
+        role: candidateContent.role || 'model',
+        parts: candidateContent.parts?.map((part) => ({ ...part })) || [],
+      });
+
+      const functionResponseParts: Array<Record<string, unknown>> = [];
+
+      for (const functionCall of functionCalls) {
+        const tool = toolMap.get(functionCall.name || '');
+        if (!tool) {
+          throw new Error(`Gemini requested unsupported tool: ${functionCall.name || 'unknown'}`);
+        }
+
+        const rawArgs = isRecord(functionCall.args) ? functionCall.args : {};
+
+        let toolResult: unknown;
+        try {
+          toolResult = await tool.execute(rawArgs);
+        } catch (error) {
+          toolResult = {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+
+        functionResponseParts.push({
+          functionResponse: {
+            name: functionCall.name,
+            response: toolResult,
+            ...(functionCall.id ? { id: functionCall.id } : {}),
+          },
+        });
+      }
+
+      contents.push({
+        role: 'user',
+        parts: functionResponseParts,
+      });
+    }
+
+    throw new Error(`Gemini ${params.schemaName} exceeded the tool iteration limit`);
   }
 
   static async embedText(params: {

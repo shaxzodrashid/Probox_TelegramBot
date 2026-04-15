@@ -3,6 +3,7 @@ import { BotConversation, BotContext } from '../types/context';
 import { i18n } from '../i18n';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { UserService } from '../services/user.service';
+import { BranchService } from '../services/branch.service';
 import { minioService } from '../services/minio.service';
 import { logger } from '../utils/logger';
 import { normalizeButtonText, downloadFileByPath, getTelegramFilePath } from './passport_parts/utils.part';
@@ -117,6 +118,15 @@ export async function addPassportDataConversation(conversation: BotConversation,
     currentCtx = confirmedData.lastCtx;
     logger.debug(`[Passport] Confirmation done. series=${currentSeries}, jshshir=${currentJshshir}`);
 
+    let savingMsgId: number | null = null;
+    try {
+      const msg = await currentCtx.reply(i18n.t(locale, 'settings_passport_saving'));
+      savingMsgId = msg.message_id;
+      await ctx.api.sendChatAction(currentCtx.chat!.id, 'typing').catch(() => {});
+    } catch (e) {
+      logger.debug(`[Passport] Error sending saving message: ${e}`);
+    }
+
     await conversation.external(async () => {
       await UserService.updateUserPassportData(telegramId, currentJshshir, currentSeries);
 
@@ -138,6 +148,10 @@ export async function addPassportDataConversation(conversation: BotConversation,
         }
       }
     });
+
+    if (savingMsgId) {
+      await currentCtx.api.deleteMessage(currentCtx.chat!.id, savingMsgId).catch(() => {});
+    }
 
     // --- Face ID STEP ---
     logger.debug(`[Passport] Starting Face ID step for user ${telegramId}`);
@@ -167,6 +181,7 @@ export async function addPassportDataConversation(conversation: BotConversation,
           continue;
         }
 
+        await ctx.api.sendChatAction(faceCtx.chat!.id, 'typing').catch(() => {});
         const hasFace = await conversation.external(() => detectFace(buffer));
         
         if (hasFace) {
@@ -189,11 +204,13 @@ export async function addPassportDataConversation(conversation: BotConversation,
             .editMessageText(
               faceCtx.chat!.id,
               feedbackMsg.message_id,
-              i18n.t(locale, 'settings_passport_face_id_success'),
+              i18n.t(locale, 'settings_passport_face_id_success')
             )
             .catch((err) => {
               if (!isMessageToDeleteNotFoundError(err)) throw err;
             });
+          
+          // Continue to next step
           break;
         } else {
           await faceCtx.api
@@ -213,8 +230,53 @@ export async function addPassportDataConversation(conversation: BotConversation,
     }
     // --- End Face ID STEP ---
 
+    // --- Address STEP ---
+    logger.debug(`[Passport] Starting Address step for user ${telegramId}`);
+    
+    await currentCtx.reply(i18n.t(locale, 'settings_passport_ask_address'), {
+      reply_markup: new Keyboard()
+        .requestLocation(i18n.t(locale, 'settings_passport_btn_send_location'))
+        .resized()
+        .oneTime(),
+    });
+
+    while (true) {
+      const addressCtx = await conversation.wait();
+      currentCtx = addressCtx;
+
+      let extractedAddress: string | null = null;
+      
+      if (addressCtx.message?.location) {
+        let addressProcessingMsgId: number | null = null;
+        try {
+          const msg = await addressCtx.reply(i18n.t(locale, 'settings_passport_address_processing'));
+          addressProcessingMsgId = msg.message_id;
+          await ctx.api.sendChatAction(addressCtx.chat!.id, 'find_location').catch(() => {});
+        } catch (e) {}
+
+        const { latitude, longitude } = addressCtx.message.location;
+        extractedAddress = await conversation.external(() => 
+          BranchService.reverseGeocode(latitude, longitude)
+        );
+
+        if (addressProcessingMsgId) {
+          await addressCtx.api.deleteMessage(addressCtx.chat!.id, addressProcessingMsgId).catch(() => {});
+        }
+      } else if (addressCtx.message?.text) {
+        extractedAddress = addressCtx.message.text.trim();
+      }
+
+      if (!extractedAddress || extractedAddress.length === 0) {
+        await currentCtx.reply(i18n.t(locale, 'settings_passport_address_invalid'));
+        continue;
+      }
+
+      await conversation.external(() => UserService.updateUserAddress(telegramId, extractedAddress as string));
+      await currentCtx.reply(i18n.t(locale, 'settings_passport_address_success'));
+      break;
+    }
+
     if (shouldResumeApplication) {
-      logger.info(`[Passport] Resuming application flow for user ${telegramId}`);
       await ctx.reply(i18n.t(locale, 'settings_passport_success'), {
         reply_markup: { remove_keyboard: true },
       });
