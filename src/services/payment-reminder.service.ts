@@ -154,32 +154,44 @@ export class PaymentReminderService {
     return paid >= total;
   }
 
+  private static getInstallmentPaymentDate(installment: IPurchaseInstallment): Date | null {
+    const rawDate = installment.InstActualPaymentDate || installment.DocDate;
+
+    if (!rawDate) {
+      return null;
+    }
+
+    const paymentDate = new Date(rawDate);
+    if (Number.isNaN(paymentDate.getTime())) {
+      return null;
+    }
+
+    paymentDate.setHours(0, 0, 0, 0);
+    return paymentDate;
+  }
+
   private static isPaidOnTime(installment: IPurchaseInstallment): boolean {
-    if (!installment.InstActualPaymentDate) {
+    const paymentDate = this.getInstallmentPaymentDate(installment);
+    if (!paymentDate) {
       return false;
     }
 
-    const actualPaymentDate = new Date(installment.InstActualPaymentDate);
     const dueDate = new Date(installment.InstDueDate);
-
-    actualPaymentDate.setHours(0, 0, 0, 0);
     dueDate.setHours(0, 0, 0, 0);
 
-    return actualPaymentDate <= dueDate;
+    return paymentDate <= dueDate;
   }
 
   private static isPaidLate(installment: IPurchaseInstallment): boolean {
-    if (!installment.InstActualPaymentDate) {
+    const paymentDate = this.getInstallmentPaymentDate(installment);
+    if (!paymentDate) {
       return false;
     }
 
-    const actualPaymentDate = new Date(installment.InstActualPaymentDate);
     const dueDate = new Date(installment.InstDueDate);
-
-    actualPaymentDate.setHours(0, 0, 0, 0);
     dueDate.setHours(0, 0, 0, 0);
 
-    return actualPaymentDate > dueDate;
+    return paymentDate > dueDate;
   }
 
   private static isInstallmentInRewardMonth(

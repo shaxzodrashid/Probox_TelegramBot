@@ -611,16 +611,64 @@ export class SapService {
     ${baseFrom}
 `;
 
+    const searchMode = isIMEI ? 'imei' : parsedSearch?.model ? 'structured_model' : search ? 'generic' : 'none';
+    const deviceTypeResolution = parsedSearch?.model
+      ? parsedSearch.deviceType
+        ? `exact:${parsedSearch.deviceType}`
+        : 'blank_base_variant_only'
+      : null;
+
     try {
+      this.logger.debug('📦 [SAP] getItems search analysis', {
+        search: search || null,
+        searchMode,
+        parsedSearch: parsedSearch
+          ? {
+              normalizedSearch: parsedSearch.normalizedSearch,
+              model: parsedSearch.model || null,
+              deviceType: parsedSearch.deviceType ?? null,
+              residualSearch: parsedSearch.residualSearch || null,
+              condition: parsedSearch.condition || null,
+            }
+          : null,
+        deviceTypeResolution,
+        filters,
+        whsCode: whsCode || null,
+        storeName: storeName || null,
+        includeZeroOnHand,
+        groupByWarehouse,
+        limit,
+        offset,
+      });
       this.logger.info(`📦 [SAP] getItems query executed (search=${search})`);
       const [data, totalResult] = await Promise.all([
         this.hana.executeOnce<ISapItem>(dataSql),
         this.hana.executeOnce<{ total: number }>(countSql),
       ]);
 
+      const total = Number(totalResult[0]?.total || 0);
+
+      this.logger.info('📦 [SAP] getItems query completed', {
+        search: search || null,
+        searchMode,
+        deviceTypeResolution,
+        total,
+        returnedRows: data.length,
+        sampleItems: data.slice(0, 3).map((item) => ({
+          itemCode: item.ItemCode,
+          itemName: item.ItemName,
+          whsCode: item.WhsCode,
+          whsName: item.WhsName,
+          onHand: item.OnHand,
+          model: item.U_Model || null,
+          deviceType: item.U_DeviceType || null,
+          memory: item.U_Memory || null,
+        })),
+      });
+
       return {
         data,
-        total: Number(totalResult[0]?.total || 0),
+        total,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

@@ -3,13 +3,13 @@ import db from '../database/database';
 export interface User {
   id: number;
   telegram_id: number;
-  first_name?: string;
-  last_name?: string;
-  phone_number?: string;
-  sap_card_code?: string;
-  jshshir?: string;
-  passport_series?: string;
-  address?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone_number?: string | null;
+  sap_card_code?: string | null;
+  jshshir?: string | null;
+  passport_series?: string | null;
+  address?: string | null;
   language_code: string;
   is_admin: boolean;
   is_support_banned?: boolean;
@@ -18,6 +18,40 @@ export interface User {
   created_at: Date;
   updated_at: Date;
 }
+
+export const normalizeUserPhoneForIdentity = (
+  phoneNumber?: string | null,
+): string | null => {
+  if (!phoneNumber) {
+    return null;
+  }
+
+  const digits = phoneNumber.replace(/\D/g, '');
+  if (digits.length < 9) {
+    return null;
+  }
+
+  return `+998${digits.slice(-9)}`;
+};
+
+export const isUserIdentitySwitch = (
+  currentPhoneNumber?: string | null,
+  nextPhoneNumber?: string | null,
+): boolean => {
+  const normalizedCurrent = normalizeUserPhoneForIdentity(currentPhoneNumber);
+  const normalizedNext = normalizeUserPhoneForIdentity(nextPhoneNumber);
+
+  return Boolean(normalizedCurrent && normalizedNext && normalizedCurrent !== normalizedNext);
+};
+
+export const getUserIdentityResetData = (): Pick<
+  User,
+  'jshshir' | 'passport_series' | 'address'
+> => ({
+  jshshir: null,
+  passport_series: null,
+  address: null,
+});
 
 export class UserService {
   static async getUserById(id: number): Promise<User | null> {

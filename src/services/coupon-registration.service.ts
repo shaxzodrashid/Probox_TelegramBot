@@ -244,7 +244,7 @@ export class CouponRegistrationService {
       user: params.user
         ? {
             telegram_id: params.user.telegram_id,
-            phone_number: params.user.phone_number,
+            phone_number: params.user.phone_number ?? undefined,
           }
         : undefined,
       promotion: {
@@ -479,7 +479,7 @@ export class CouponRegistrationService {
         user: user
           ? {
               telegram_id: user.telegram_id,
-              phone_number: user.phone_number,
+              phone_number: user.phone_number ?? undefined,
             }
           : undefined,
         promotion: {

@@ -4,6 +4,10 @@ import { UserService } from '../services/user.service';
 import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
 import { normalizeUzPhone } from '../utils/uz-phone.util';
+import {
+  isSapBusinessPartnerAdmin,
+  selectPreferredSapBusinessPartner,
+} from '../utils/sap-business-partner.util';
 
 export class SapSyncCron {
   private static readonly logger = logger;
@@ -69,26 +73,39 @@ export class SapSyncCron {
     // 4. Update users
     let updatedCount = 0;
 
-    for (const partner of sapPartners) {
-      // Find user(s) matching this partner by phone
-      const partnerPhone1 = partner.Phone1 ? normalizeUzPhone(partner.Phone1).full : null;
-      const partnerPhone2 = partner.Phone2 ? normalizeUzPhone(partner.Phone2).full : null;
+    for (const user of users) {
+      if (!user.phone_number) {
+        continue;
+      }
 
-      const matchingUsers = users.filter((u) => {
-        if (!u.phone_number) return false;
-        const userPhoneFull = normalizeUzPhone(u.phone_number).full;
+      let userPhoneFull: string;
+
+      try {
+        userPhoneFull = normalizeUzPhone(user.phone_number).full;
+      } catch {
+        this.logger.warn(`⚠️ [SAP-SYNC] Skipping invalid phone number for user ${user.telegram_id}: ${user.phone_number}`);
+        continue;
+      }
+
+      const matchingPartners = sapPartners.filter((partner) => {
+        const partnerPhone1 = partner.Phone1 ? normalizeUzPhone(partner.Phone1).full : null;
+        const partnerPhone2 = partner.Phone2 ? normalizeUzPhone(partner.Phone2).full : null;
+
         return userPhoneFull === partnerPhone1 || userPhoneFull === partnerPhone2;
       });
 
-      for (const user of matchingUsers) {
-        try {
-          const isAdmin = partner.U_admin === 'yes';
-          this.logger.info(`📦 [SAP-SYNC] Updating user ${user.telegram_id} (CardCode: ${partner.CardCode}, isAdmin: ${isAdmin})`);
-          await UserService.syncUserWithSap(user.telegram_id, partner.CardCode, isAdmin);
-          updatedCount++;
-        } catch (error) {
-          this.logger.error(`❌ [SAP-SYNC] Failed to update user ${user.telegram_id}`, error);
-        }
+      const selectedPartner = selectPreferredSapBusinessPartner(matchingPartners);
+      if (!selectedPartner) {
+        continue;
+      }
+
+      try {
+        const isAdmin = isSapBusinessPartnerAdmin(selectedPartner);
+        this.logger.info(`📦 [SAP-SYNC] Updating user ${user.telegram_id} (CardCode: ${selectedPartner.CardCode}, isAdmin: ${isAdmin})`);
+        await UserService.syncUserWithSap(user.telegram_id, selectedPartner.CardCode, isAdmin);
+        updatedCount++;
+      } catch (error) {
+        this.logger.error(`❌ [SAP-SYNC] Failed to update user ${user.telegram_id}`, error);
       }
     }
 

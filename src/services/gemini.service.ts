@@ -57,8 +57,40 @@ export interface GeminiTool {
   execute: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
+export type GeminiFunctionCallingMode = 'AUTO' | 'VALIDATED' | 'ANY' | 'NONE';
+
+export interface GeminiFunctionCallingConfig {
+  mode?: GeminiFunctionCallingMode;
+  allowedFunctionNames?: string[];
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const dedupeStrings = (values: string[]): string[] => {
+  const seen = new Set<string>();
+  const uniqueValues: string[] = [];
+
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    uniqueValues.push(normalized);
+  }
+
+  return uniqueValues;
+};
+
+const NON_STANDARD_JSON_KEYWORDS: Record<string, string> = {
+  true: 'true',
+  false: 'false',
+  null: 'null',
+  none: 'null',
+  undefined: 'null',
+};
 
 export class GeminiService {
   private static readonly client: AxiosInstance = axios.create({
@@ -107,6 +139,425 @@ export class GeminiService {
     }
   }
 
+  private static extractFirstJsonValue(text: string): string | null {
+    for (let startIndex = 0; startIndex < text.length; startIndex += 1) {
+      const startChar = text[startIndex];
+      if (startChar !== '{' && startChar !== '[') {
+        continue;
+      }
+
+      const stack = [startChar];
+      let inString = false;
+      let isEscaped = false;
+
+      for (let cursor = startIndex + 1; cursor < text.length; cursor += 1) {
+        const currentChar = text[cursor];
+
+        if (inString) {
+          if (isEscaped) {
+            isEscaped = false;
+            continue;
+          }
+
+          if (currentChar === '\\') {
+            isEscaped = true;
+            continue;
+          }
+
+          if (currentChar === '"') {
+            inString = false;
+          }
+
+          continue;
+        }
+
+        if (currentChar === '"') {
+          inString = true;
+          continue;
+        }
+
+        if (currentChar === '{' || currentChar === '[') {
+          stack.push(currentChar);
+          continue;
+        }
+
+        if (currentChar !== '}' && currentChar !== ']') {
+          continue;
+        }
+
+        const expectedStartChar = currentChar === '}' ? '{' : '[';
+        if (stack[stack.length - 1] !== expectedStartChar) {
+          break;
+        }
+
+        stack.pop();
+        if (stack.length === 0) {
+          return text.slice(startIndex, cursor + 1).trim();
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private static buildJsonCandidates(text: string): string[] {
+    const normalized = text.replace(/^\uFEFF/, '').trim();
+    const candidates = [normalized];
+    const fullFenceMatch = normalized.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+
+    if (fullFenceMatch?.[1]) {
+      candidates.push(fullFenceMatch[1]);
+    }
+
+    for (const fenceMatch of normalized.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi)) {
+      if (fenceMatch[1]) {
+        candidates.push(fenceMatch[1]);
+      }
+    }
+
+    const firstJsonValue = this.extractFirstJsonValue(normalized);
+    if (firstJsonValue) {
+      candidates.push(firstJsonValue);
+    }
+
+    return dedupeStrings(candidates);
+  }
+
+  private static normalizeQuoteCharacters(text: string): string {
+    return text
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+  }
+
+  private static isWhitespaceCharacter(char: string | undefined): boolean {
+    return Boolean(char && /\s/.test(char));
+  }
+
+  private static shouldCloseSingleQuotedString(text: string, quoteIndex: number): boolean {
+    let cursor = quoteIndex + 1;
+    while (cursor < text.length && this.isWhitespaceCharacter(text[cursor])) {
+      cursor += 1;
+    }
+
+    const nextChar = text[cursor];
+    return (
+      !nextChar || nextChar === ',' || nextChar === '}' || nextChar === ']' || nextChar === ':'
+    );
+  }
+
+  private static normalizeJsonLikeText(text: string): string | null {
+    const normalized = this.normalizeQuoteCharacters(text).replace(/\r\n?/g, '\n');
+    let result = '';
+    let activeQuote: '"' | "'" | null = null;
+    let isEscaped = false;
+
+    for (let index = 0; index < normalized.length; index += 1) {
+      const currentChar = normalized[index] as string;
+      const nextChar = normalized[index + 1];
+
+      if (activeQuote) {
+        if (isEscaped) {
+          result += currentChar;
+          isEscaped = false;
+          continue;
+        }
+
+        if (currentChar === '\\') {
+          result += currentChar;
+          isEscaped = true;
+          continue;
+        }
+
+        if (currentChar === '\n') {
+          result += '\\n';
+          continue;
+        }
+
+        if (currentChar === activeQuote) {
+          if (activeQuote === "'" && !this.shouldCloseSingleQuotedString(normalized, index)) {
+            result += currentChar;
+            continue;
+          }
+
+          result += '"';
+          activeQuote = null;
+          continue;
+        }
+
+        if (activeQuote === "'" && currentChar === '"') {
+          result += '\\"';
+          continue;
+        }
+
+        result += currentChar;
+        continue;
+      }
+
+      if (currentChar === '/' && nextChar === '/') {
+        while (index < normalized.length && normalized[index] !== '\n') {
+          index += 1;
+        }
+
+        if (normalized[index] === '\n') {
+          result += '\n';
+        }
+        continue;
+      }
+
+      if (currentChar === '/' && nextChar === '*') {
+        index += 2;
+        while (
+          index < normalized.length &&
+          !(normalized[index] === '*' && normalized[index + 1] === '/')
+        ) {
+          index += 1;
+        }
+        index += 1;
+        continue;
+      }
+
+      if (currentChar === '"' || currentChar === "'") {
+        activeQuote = currentChar;
+        result += '"';
+        continue;
+      }
+
+      result += currentChar;
+    }
+
+    if (activeQuote || isEscaped) {
+      return null;
+    }
+
+    return result.trim();
+  }
+
+  private static quoteUnquotedJsonKeys(text: string): string {
+    let result = '';
+    let inString = false;
+    let isEscaped = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+      const currentChar = text[index] as string;
+
+      if (inString) {
+        result += currentChar;
+
+        if (isEscaped) {
+          isEscaped = false;
+          continue;
+        }
+
+        if (currentChar === '\\') {
+          isEscaped = true;
+          continue;
+        }
+
+        if (currentChar === '"') {
+          inString = false;
+        }
+
+        continue;
+      }
+
+      if (currentChar === '"') {
+        inString = true;
+        result += currentChar;
+        continue;
+      }
+
+      if (currentChar !== '{' && currentChar !== ',') {
+        result += currentChar;
+        continue;
+      }
+
+      result += currentChar;
+
+      let cursor = index + 1;
+      while (cursor < text.length && this.isWhitespaceCharacter(text[cursor])) {
+        result += text[cursor];
+        cursor += 1;
+      }
+
+      if (text[cursor] === '"') {
+        index = cursor - 1;
+        continue;
+      }
+
+      const keyMatch = text.slice(cursor).match(/^([A-Za-z_$][A-Za-z0-9_$-]*)(\s*:)/);
+      if (!keyMatch) {
+        index = cursor - 1;
+        continue;
+      }
+
+      result += `"${keyMatch[1]}"${keyMatch[2]}`;
+      index = cursor + keyMatch[0].length - 1;
+    }
+
+    return result;
+  }
+
+  private static normalizeNonStandardJsonKeywords(text: string): string {
+    let result = '';
+    let inString = false;
+    let isEscaped = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+      const currentChar = text[index] as string;
+
+      if (inString) {
+        result += currentChar;
+
+        if (isEscaped) {
+          isEscaped = false;
+          continue;
+        }
+
+        if (currentChar === '\\') {
+          isEscaped = true;
+          continue;
+        }
+
+        if (currentChar === '"') {
+          inString = false;
+        }
+
+        continue;
+      }
+
+      if (currentChar === '"') {
+        inString = true;
+        result += currentChar;
+        continue;
+      }
+
+      if (!/[A-Za-z]/.test(currentChar)) {
+        result += currentChar;
+        continue;
+      }
+
+      let cursor = index + 1;
+      while (cursor < text.length && /[A-Za-z]/.test(text[cursor] as string)) {
+        cursor += 1;
+      }
+
+      const token = text.slice(index, cursor);
+      const replacement = NON_STANDARD_JSON_KEYWORDS[token.toLowerCase()];
+      result += replacement || token;
+      index = cursor - 1;
+    }
+
+    return result;
+  }
+
+  private static removeTrailingJsonCommas(text: string): string {
+    let result = '';
+    let inString = false;
+    let isEscaped = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+      const currentChar = text[index] as string;
+
+      if (inString) {
+        result += currentChar;
+
+        if (isEscaped) {
+          isEscaped = false;
+          continue;
+        }
+
+        if (currentChar === '\\') {
+          isEscaped = true;
+          continue;
+        }
+
+        if (currentChar === '"') {
+          inString = false;
+        }
+
+        continue;
+      }
+
+      if (currentChar === '"') {
+        inString = true;
+        result += currentChar;
+        continue;
+      }
+
+      if (currentChar !== ',') {
+        result += currentChar;
+        continue;
+      }
+
+      let cursor = index + 1;
+      while (cursor < text.length && this.isWhitespaceCharacter(text[cursor])) {
+        cursor += 1;
+      }
+
+      const nextChar = text[cursor];
+      if (nextChar === '}' || nextChar === ']') {
+        continue;
+      }
+
+      result += currentChar;
+    }
+
+    return result;
+  }
+
+  private static repairJsonCandidate(text: string): string | null {
+    const normalized = this.normalizeJsonLikeText(text);
+    if (!normalized) {
+      return null;
+    }
+
+    const repaired = this.removeTrailingJsonCommas(
+      this.normalizeNonStandardJsonKeywords(this.quoteUnquotedJsonKeys(normalized)),
+    ).trim();
+
+    return repaired || null;
+  }
+
+  private static parseJsonPayload<T>(text: string, schemaName: string): T {
+    let lastError: unknown = null;
+
+    for (const candidate of this.buildJsonCandidates(text)) {
+      try {
+        return JSON.parse(candidate) as T;
+      } catch (error) {
+        lastError = error;
+      }
+
+      const repairedCandidate = this.repairJsonCandidate(candidate);
+      if (!repairedCandidate || repairedCandidate === candidate) {
+        continue;
+      }
+
+      try {
+        return JSON.parse(repairedCandidate) as T;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw new Error(`Failed to parse Gemini ${schemaName} JSON: ${String(lastError)}`);
+  }
+
+  private static buildSystemInstruction(
+    value: string | string[] | undefined,
+  ): { parts: Array<{ text: string }> } | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    const parts = (Array.isArray(value) ? value : [value])
+      .map((text) => text.trim())
+      .filter(Boolean)
+      .map((text) => ({ text }));
+
+    return parts.length > 0 ? { parts } : undefined;
+  }
+
   static async generateJson<T>(params: {
     model?: string;
     prompt: string;
@@ -143,11 +594,7 @@ export class GeminiService {
       throw new Error(`Gemini returned an empty ${params.schemaName} payload`);
     }
 
-    try {
-      return JSON.parse(text) as T;
-    } catch (error) {
-      throw new Error(`Failed to parse Gemini ${params.schemaName} JSON: ${String(error)}`);
-    }
+    return this.parseJsonPayload<T>(text, params.schemaName);
   }
 
   static async generateJsonWithTools<T>(params: {
@@ -156,6 +603,9 @@ export class GeminiService {
     schemaName: string;
     tools: GeminiTool[];
     maxToolIterations?: number;
+    systemInstruction?: string | string[];
+    responseSchema?: Record<string, unknown>;
+    functionCallingConfig?: GeminiFunctionCallingConfig;
   }): Promise<T> {
     if (params.tools.length === 0) {
       return this.generateJson<T>({
@@ -168,6 +618,8 @@ export class GeminiService {
     const model = params.model || config.GEMINI_TEXT_MODEL;
     const maxToolIterations = Math.max(1, params.maxToolIterations || 3);
     const toolMap = new Map(params.tools.map((tool) => [tool.declaration.name, tool]));
+    const systemInstruction = this.buildSystemInstruction(params.systemInstruction);
+    const functionCallingConfig = params.functionCallingConfig;
     const contents: Array<{
       role: string;
       parts: Array<Record<string, unknown>>;
@@ -189,6 +641,18 @@ export class GeminiService {
                 functionDeclarations: params.tools.map((tool) => tool.declaration),
               },
             ],
+            ...(systemInstruction ? { systemInstruction } : {}),
+            ...(functionCallingConfig
+              ? {
+                  toolConfig: {
+                    functionCallingConfig,
+                  },
+                }
+              : {}),
+            generationConfig: {
+              responseMimeType: 'application/json',
+              ...(params.responseSchema ? { responseSchema: params.responseSchema } : {}),
+            },
           },
           {
             params: {
@@ -203,7 +667,9 @@ export class GeminiService {
       const parts = candidateContent?.parts || [];
       const functionCalls = parts
         .map((part) => part.functionCall)
-        .filter((call): call is NonNullable<GeminiGeneratePart['functionCall']> => Boolean(call?.name));
+        .filter((call): call is NonNullable<GeminiGeneratePart['functionCall']> =>
+          Boolean(call?.name),
+        );
 
       if (functionCalls.length === 0) {
         const text = parts
@@ -212,15 +678,13 @@ export class GeminiService {
           .trim();
 
         if (!text) {
-          const finishReason = candidate?.finishReason ? ` (finishReason=${candidate.finishReason})` : '';
+          const finishReason = candidate?.finishReason
+            ? ` (finishReason=${candidate.finishReason})`
+            : '';
           throw new Error(`Gemini returned an empty ${params.schemaName} payload${finishReason}`);
         }
 
-        try {
-          return JSON.parse(text) as T;
-        } catch (error) {
-          throw new Error(`Failed to parse Gemini ${params.schemaName} JSON: ${String(error)}`);
-        }
+        return this.parseJsonPayload<T>(text, params.schemaName);
       }
 
       if (!candidateContent) {

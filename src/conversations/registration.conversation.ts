@@ -4,7 +4,12 @@ import { config } from '../config';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { i18n } from '../i18n';
-import { User, UserService } from '../services/user.service';
+import {
+  getUserIdentityResetData,
+  isUserIdentitySwitch,
+  User,
+  UserService,
+} from '../services/user.service';
 import { OtpService } from '../services/otp.service';
 import { logger } from '../utils/logger';
 import { SapService } from '../sap/sap-hana.service';
@@ -16,6 +21,11 @@ import { formatUzPhone } from '../utils/uz-phone.util';
 import { sanitizeName } from '../utils/formatter.util';
 import { redisService } from '../redis/redis.service';
 import { CouponRegistrationService } from '../services/coupon-registration.service';
+import { clearAccountSwitchArtifacts } from '../utils/account-switch.util';
+import {
+  isSapBusinessPartnerAdmin,
+  selectPreferredSapBusinessPartner,
+} from '../utils/sap-business-partner.util';
 
 const REGISTRATION_ACTIVE_TTL_SECONDS = 60 * 60;
 
@@ -25,10 +35,10 @@ const REGISTRATION_ACTIVE_TTL_SECONDS = 60 * 60;
 export async function verifySapUser(phoneNumber: string): Promise<IBusinessPartner | undefined> {
   const hanaService = new HanaService();
   const sapService = new SapService(hanaService);
-  const user = await sapService.getBusinessPartnerByPhone(phoneNumber);
+  const partners = await sapService.getBusinessPartnerByPhone(phoneNumber);
 
-  if (user && user.length > 0) {
-    return user[0];
+  if (partners && partners.length > 0) {
+    return selectPreferredSapBusinessPartner(partners);
   }
   return undefined;
 }
@@ -198,13 +208,16 @@ async function registerOrUpdateUser(
   const telegramId = ctx.from?.id;
   if (!telegramId) return null;
 
-  const data_to_store: any = {
+  const dataToStore: Omit<User, 'id' | 'telegram_id' | 'created_at'> & {
+    telegram_id?: number;
+    created_at?: Date;
+  } = {
     first_name: sanitizeName(sapUser?.CardName?.split(' ')[0] || ctx.from?.first_name),
     last_name: sanitizeName(sapUser?.CardName?.split(' ')[1] || ctx.from?.last_name),
     phone_number: phoneNumber,
     language_code: locale,
     sap_card_code: sapUser?.CardCode || '',
-    is_admin: sapUser?.U_admin === 'yes',
+    is_admin: isSapBusinessPartnerAdmin(sapUser),
     is_logged_out: false,
     updated_at: new Date(),
   };
@@ -214,12 +227,25 @@ async function registerOrUpdateUser(
   );
 
   if (existingUser) {
-    return conversation.external(() => UserService.updateUser(existingUser.id, data_to_store));
+    const switchedAccount = isUserIdentitySwitch(existingUser.phone_number, phoneNumber);
+    const updatePayload = switchedAccount
+      ? { ...dataToStore, ...getUserIdentityResetData() }
+      : dataToStore;
+
+    const updatedUser = await conversation.external(() =>
+      UserService.updateUser(existingUser.id, updatePayload),
+    );
+
+    if (switchedAccount) {
+      await conversation.external(() => clearAccountSwitchArtifacts(telegramId));
+    }
+
+    return updatedUser;
   }
 
-  data_to_store.telegram_id = telegramId;
-  data_to_store.created_at = new Date();
-  return conversation.external(() => UserService.createUser(data_to_store));
+  dataToStore.telegram_id = telegramId;
+  dataToStore.created_at = new Date();
+  return conversation.external(() => UserService.createUser(dataToStore));
 }
 
 export async function registrationConversation(conversation: BotConversation, ctx: BotContext) {

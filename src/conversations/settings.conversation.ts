@@ -6,6 +6,7 @@ import { getMainKeyboardByLocale } from '../keyboards';
 import { getLocaleFromConversation } from '../utils/locale';
 import { sanitizeName } from '../utils/formatter.util';
 import { CouponRegistrationService } from '../services/coupon-registration.service';
+import { isSapBusinessPartnerAdmin } from '../utils/sap-business-partner.util';
 
 /**
  * Conversation to change user's name
@@ -101,12 +102,11 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
             sapUser.CardName?.split(' ')[1] || existingUser.last_name || '',
           );
           dataToUpdate.sap_card_code = sapUser.CardCode || '';
-          dataToUpdate.is_admin = sapUser.U_admin === 'yes';
+          dataToUpdate.is_admin = isSapBusinessPartnerAdmin(sapUser);
         }
 
         await conversation.external(() => UserService.updateUser(existingUser.id, dataToUpdate));
       } else {
-        // Update in DB
         await conversation.external(() => UserService.updateUserPhone(telegramId, phoneNumber));
       }
 

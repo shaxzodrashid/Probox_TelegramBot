@@ -304,11 +304,11 @@ export class PurchasePdfDeliveryService {
         ? {
             id: resolvedUser.user.id,
             telegramId: resolvedUser.user.telegram_id,
-            firstName: resolvedUser.user.first_name,
-            lastName: resolvedUser.user.last_name,
-            phoneNumber: resolvedUser.user.phone_number,
-            sapCardCode: resolvedUser.user.sap_card_code,
-            jshshir: resolvedUser.user.jshshir,
+            firstName: resolvedUser.user.first_name ?? undefined,
+            lastName: resolvedUser.user.last_name ?? undefined,
+            phoneNumber: resolvedUser.user.phone_number ?? undefined,
+            sapCardCode: resolvedUser.user.sap_card_code ?? undefined,
+            jshshir: resolvedUser.user.jshshir ?? undefined,
           }
         : null,
       errors: {},
