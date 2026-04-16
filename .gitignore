@@ -7,4 +7,3 @@ dist/
 logs/
 .codex/
 output/
-*.log

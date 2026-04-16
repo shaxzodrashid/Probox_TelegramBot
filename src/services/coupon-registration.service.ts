@@ -145,7 +145,7 @@ export class CouponRegistrationService {
         user,
         templateType,
         placeholders: {
-          customer_name: event?.customer_full_name || this.buildName(user),
+          customer_name: event?.customer_full_name || 'Mijoz',
           coupon_code: coupon.code,
           payment_due_date: formatDateForLocale(coupon.expires_at, user.language_code || 'uz'),
           product_name: event?.product_name || '',
@@ -178,8 +178,8 @@ export class CouponRegistrationService {
     payload: CouponRegistrationPayload,
     fallbackUser?: User,
   ): string {
-    const normalized = payload.full_name.trim();
-    return normalized || (fallbackUser ? this.buildName(fallbackUser) : 'Mijoz');
+    const normalized = (payload.full_name || '').trim();
+    return normalized || 'Mijoz';
   }
 
   private static getEventLockKey(payload: CouponRegistrationPayload): string {

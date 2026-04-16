@@ -22,13 +22,6 @@ export const validatePayload = (payload: CouponRegistrationPayload): void => {
     );
   }
 
-  if (!payload.full_name?.trim()) {
-    throw new ApiError(
-      400,
-      'full_name is required.',
-      'MISSING_FULL_NAME',
-    );
-  }
 
   if (!payload.lead_id?.trim()) {
     throw new ApiError(

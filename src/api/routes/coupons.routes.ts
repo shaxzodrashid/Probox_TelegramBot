@@ -18,7 +18,7 @@ const couponRegistrationBodySchema = {
   ],
   properties: {
     phone_number: { type: 'string', pattern: '^(\\+?998)?\\d{9}$' },
-    full_name: { type: 'string', minLength: 1 },
+    full_name: { type: 'string' },
     lead_id: { type: 'string', minLength: 1 },
     status: { type: 'string', enum: ['Purchased', 'VisitedStore'] },
     product_name: { type: 'string', minLength: 1 },

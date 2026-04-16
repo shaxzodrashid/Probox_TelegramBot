@@ -53,8 +53,9 @@ export class SapService {
   }
 
   private buildBlankDeviceTypeClause(column: string): string {
-    return `(${column} IS NULL OR TRIM(${column}) = '' OR TRIM(${column}) = '-')`;
+    return `(${column} IS NULL OR TRIM(${column}) = '' OR TRIM(${column}) = '-' OR LOWER(TRIM(${column})) = 'null')`;
   }
+
 
   private buildGenericItemSearchClause(value: string): string {
     return `
@@ -96,8 +97,11 @@ export class SapService {
   }
 
   private canonicalizeDeviceType(value: unknown): string | null | undefined {
-    if (value === undefined || value === null) {
+    if (value === undefined) {
       return undefined;
+    }
+    if (value === null) {
+      return null;
     }
 
     const raw = String(value).trim();

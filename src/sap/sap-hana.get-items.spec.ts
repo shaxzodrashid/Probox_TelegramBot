@@ -61,7 +61,7 @@ const itemSearchScenarios = [
     params: { search: '  iPhOnE 17  ', groupByWarehouse: true },
     expectedPatterns: [
       /LOWER\(TRIM\(COALESCE\(T1\."U_Model", ''\)\)\) = 'iphone 17'/,
-      /\(T1\."U_DeviceType" IS NULL OR TRIM\(T1\."U_DeviceType"\) = '' OR TRIM\(T1\."U_DeviceType"\) = '-'\)/,
+      /\(T1\."U_DeviceType" IS NULL OR TRIM\(T1\."U_DeviceType"\) = '' OR TRIM\(T1\."U_DeviceType"\) = '-' OR LOWER\(TRIM\(T1\."U_DeviceType"\)\) = 'null'\)/,
       /CASE WHEN LOWER\(TRIM\(COALESCE\(MAX\(T1\."U_Model"\), ''\)\)\) = 'iphone 17' THEN 0 ELSE 1 END/,
     ],
   },
@@ -169,7 +169,7 @@ test('SapService getItems normalizes device-type filters for blank base variants
   assert.match(dataQuery, /LOWER\(TRIM\(COALESCE\(T1\."U_Model", ''\)\)\) = 'iphone 17'/);
   assert.match(
     dataQuery,
-    /\(T1\."U_DeviceType" IS NULL OR TRIM\(T1\."U_DeviceType"\) = '' OR TRIM\(T1\."U_DeviceType"\) = '-'\)/,
+    /\(T1\."U_DeviceType" IS NULL OR TRIM\(T1\."U_DeviceType"\) = '' OR TRIM\(T1\."U_DeviceType"\) = '-' OR LOWER\(TRIM\(T1\."U_DeviceType"\)\) = 'null'\)/,
   );
   assert.match(dataQuery, /LOWER\(TRIM\(COALESCE\(T1\."U_PROD_CONDITION", ''\)\)\) = 'yangi'/);
 });
@@ -187,7 +187,7 @@ test('SapService getItems treats device-type aliases like standard and regular a
 
   assert.match(
     dataQuery,
-    /\(T1\."U_DeviceType" IS NULL OR TRIM\(T1\."U_DeviceType"\) = '' OR TRIM\(T1\."U_DeviceType"\) = '-'\)/,
+    /\(T1\."U_DeviceType" IS NULL OR TRIM\(T1\."U_DeviceType"\) = '' OR TRIM\(T1\."U_DeviceType"\) = '-' OR LOWER\(TRIM\(T1\."U_DeviceType"\)\) = 'null'\)/,
   );
 });
 
