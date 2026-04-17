@@ -23,6 +23,7 @@ import {
     ADMIN_PRIZE_DELETE_CALLBACK_PREFIX,
     ADMIN_PRIZE_DETAIL_CALLBACK_PREFIX,
     ADMIN_PRIZE_EDIT_CALLBACK_PREFIX,
+    ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX,
     ADMIN_PRIZE_PAGE_CALLBACK_PREFIX,
     ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX,
     ADMIN_PROMOTION_ARCHIVE_CALLBACK_PREFIX,
@@ -38,6 +39,7 @@ import { CouponExportService } from '../services/coupon/coupon-export.service';
 import { CouponService } from '../services/coupon/coupon.service';
 import { BotNotificationService } from '../services/bot-notification.service';
 import { MessageTemplateService } from '../services/message-template.service';
+import { minioService } from '../services/minio.service';
 import { i18n } from '../i18n';
 import { logger } from '../utils/logger';
 import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
@@ -1074,6 +1076,32 @@ export const adminPrizeDeleteHandler = async (ctx: BotContext) => {
     }
 };
 
+export const adminPrizeImageRemoveHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const prizeId = Number(ctx.callbackQuery?.data?.slice(ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX.length) || 0);
+        const updated = await PromotionService.removePrizeImage(prizeId);
+
+        await cleanupCallbackMessage(ctx);
+
+        if (!updated) {
+            await ctx.reply(i18n.t(locale, 'admin_campaign_prize_not_found'), {
+                reply_markup: getAdminMenuKeyboard(locale),
+            });
+            return;
+        }
+
+        await ctx.reply(i18n.t(locale, 'admin_campaign_image_removed'));
+        await showAdminPrizeDetailCard(ctx, locale, prizeId);
+    } catch (error) {
+        logger.error('Error in adminPrizeImageRemoveHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
 export const adminCampaignTemplatesHandler = async (ctx: BotContext) => {
     try {
         if (!await requireAdmin(ctx)) return;
@@ -1440,6 +1468,19 @@ export const adminWinnerPrizeSelectHandler = async (ctx: BotContext) => {
         await cleanupCallbackMessage(ctx);
 
         if (updated && user) {
+            let prizePhoto: { buffer: Buffer; fileName?: string | null } | undefined;
+
+            if (prize.image_object_key) {
+                try {
+                    prizePhoto = {
+                        buffer: await minioService.getFileAsBuffer(prize.image_object_key),
+                        fileName: prize.image_file_name || `prize-${prize.id}.jpg`,
+                    };
+                } catch (error) {
+                    logger.error('Error loading winner prize image from MinIO:', error);
+                }
+            }
+
             await BotNotificationService.sendTemplateMessage({
                 user,
                 templateType: 'winner_notification',
@@ -1453,6 +1494,7 @@ export const adminWinnerPrizeSelectHandler = async (ctx: BotContext) => {
                 },
                 couponId: updated.id,
                 dispatchType: 'winner_notification',
+                photo: prizePhoto,
             });
         }
 

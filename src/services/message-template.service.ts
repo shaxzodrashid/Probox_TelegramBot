@@ -26,6 +26,15 @@ export interface MessageTemplate {
 }
 
 export class MessageTemplateService {
+  static getContent(template: MessageTemplate, locale: string): string {
+    return locale === 'ru' ? template.content_ru : template.content_uz;
+  }
+
+  static hasPlaceholder(template: MessageTemplate, locale: string, placeholder: string): boolean {
+    const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\{\\{\\s*${escapedPlaceholder}\\s*\\}\\}`).test(this.getContent(template, locale));
+  }
+
   static async getActiveTemplateByType(type: MessageTemplateType): Promise<MessageTemplate | null> {
     const template = await db<MessageTemplate>('message_templates')
       .where({ template_type: type, is_active: true, channel: 'telegram_bot' })
@@ -83,7 +92,7 @@ export class MessageTemplateService {
     locale: string,
     placeholders: Record<string, string | number | null | undefined>,
   ): string {
-    const raw = locale === 'ru' ? template.content_ru : template.content_uz;
+    const raw = this.getContent(template, locale);
 
     return raw.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key: string, offset: number) => {
       const value = placeholders[key];

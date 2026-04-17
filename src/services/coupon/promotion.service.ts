@@ -26,6 +26,9 @@ export interface PromotionPrize {
   promotion_id: number;
   title: string;
   description?: string | null;
+  image_object_key?: string | null;
+  image_mime_type?: string | null;
+  image_file_name?: string | null;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -143,6 +146,11 @@ export class PromotionService {
   private static buildImageObjectKey(promotionId: number, fileName?: string | null): string {
     const extension = (fileName ? path.extname(fileName) : '') || '.jpg';
     return `promotions/${promotionId}/cover/cover-${Date.now()}${extension}`;
+  }
+
+  private static buildPrizeImageObjectKey(prizeId: number, fileName?: string | null): string {
+    const extension = (fileName ? path.extname(fileName) : '') || '.jpg';
+    return `promotion-prizes/${prizeId}/image/image-${Date.now()}${extension}`;
   }
 
   private static normalizePrizeInput<T extends CreatePrizeInput | UpdatePrizeInput>(input: T): T {
@@ -391,6 +399,57 @@ export class PromotionService {
         cover_image_object_key: null,
         cover_image_mime_type: null,
         cover_image_file_name: null,
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    return updated || null;
+  }
+
+  static async replacePrizeImage(id: number, input: PromotionImageInput): Promise<PromotionPrize | null> {
+    const prize = await db<PromotionPrize>('promotion_prizes').where({ id }).first();
+    if (!prize) {
+      return null;
+    }
+
+    const objectKey = this.buildPrizeImageObjectKey(id, input.fileName);
+    await minioService.uploadFile(objectKey, input.buffer, {
+      'Content-Type': input.mimeType || 'image/jpeg',
+    });
+
+    if (prize.image_object_key) {
+      await minioService.deleteFile(prize.image_object_key).catch(() => undefined);
+    }
+
+    const [updated] = await db<PromotionPrize>('promotion_prizes')
+      .where({ id })
+      .update({
+        image_object_key: objectKey,
+        image_mime_type: input.mimeType || 'image/jpeg',
+        image_file_name: input.fileName || path.basename(objectKey),
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    return updated || null;
+  }
+
+  static async removePrizeImage(id: number): Promise<PromotionPrize | null> {
+    const prize = await db<PromotionPrize>('promotion_prizes').where({ id }).first();
+    if (!prize) {
+      return null;
+    }
+
+    if (prize.image_object_key) {
+      await minioService.deleteFile(prize.image_object_key).catch(() => undefined);
+    }
+
+    const [updated] = await db<PromotionPrize>('promotion_prizes')
+      .where({ id })
+      .update({
+        image_object_key: null,
+        image_mime_type: null,
+        image_file_name: null,
         updated_at: new Date(),
       })
       .returning('*');

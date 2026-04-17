@@ -33,7 +33,9 @@ type PromotionDraft = CreatePromotionInput & {
   image?: PromotionImageInput | null;
 };
 
-type PrizeDraft = CreatePrizeInput;
+type PrizeDraft = CreatePrizeInput & {
+  image?: PromotionImageInput | null;
+};
 
 const PROMOTION_CONFIRM_SAVE_CALLBACK = 'promotion_confirm_save';
 const PROMOTION_CONFIRM_CANCEL_CALLBACK = 'promotion_confirm_cancel';
@@ -154,6 +156,20 @@ const getPromotionImageInput = async (promotion: Promotion): Promise<InputFile |
     return new InputFile(buffer, promotion.cover_image_file_name || `promotion-${promotion.id}.jpg`);
   } catch (error) {
     logger.error('Error loading promotion image from MinIO:', error);
+    return null;
+  }
+};
+
+const getPrizeImageInput = async (prize: PromotionPrizeListItem): Promise<InputFile | null> => {
+  if (!prize.image_object_key) {
+    return null;
+  }
+
+  try {
+    const buffer = await minioService.getFileAsBuffer(prize.image_object_key);
+    return new InputFile(buffer, prize.image_file_name || `prize-${prize.id}.jpg`);
+  } catch (error) {
+    logger.error('Error loading prize image from MinIO:', error);
     return null;
   }
 };
@@ -561,7 +577,7 @@ const waitForOptionalImage = async (
 
     return {
       buffer,
-      fileName: `promotion-${Date.now()}.jpg`,
+      fileName: `image-${Date.now()}.jpg`,
       mimeType: 'image/jpeg',
     };
   }
@@ -716,13 +732,19 @@ const buildAdminPrizeSummary = (prize: PromotionPrizeListItem, locale: string): 
     `<b>${escapeHtml(prize.title)}</b>`,
     `${i18n.t(locale, 'admin_campaign_prize_promotion_label')}: ${escapeHtml(getPromotionTitleForLocale(prize, locale))}`,
     `${i18n.t(locale, 'admin_campaign_status_label')}: ${escapeHtml(status)}`,
+    `${i18n.t(locale, 'admin_campaign_image_label')}: ${prize.image_object_key ? escapeHtml(i18n.t(locale, 'admin_yes')) : escapeHtml(i18n.t(locale, 'admin_no'))}`,
     '',
     `${i18n.t(locale, 'admin_campaign_prize_description_label')}:`,
     prize.description ? escapeHtml(prize.description) : escapeHtml(i18n.t(locale, 'admin_campaign_prize_description_empty')),
   ].join('\n');
 };
 
-const buildPrizeDraftSummary = (draft: PrizeDraft, promotion: Promotion, locale: string): string => {
+const buildPrizeDraftSummary = (
+  draft: PrizeDraft,
+  promotion: Promotion,
+  locale: string,
+  hasImage: boolean = Boolean(draft.image),
+): string => {
   const status = draft.is_active
     ? i18n.t(locale, 'admin_campaign_status_active')
     : i18n.t(locale, 'admin_campaign_status_inactive');
@@ -732,6 +754,7 @@ const buildPrizeDraftSummary = (draft: PrizeDraft, promotion: Promotion, locale:
     '',
     `${i18n.t(locale, 'admin_campaign_prize_promotion_label')}: ${escapeHtml(locale === 'ru' ? promotion.title_ru : promotion.title_uz)}`,
     `${i18n.t(locale, 'admin_campaign_status_label')}: ${escapeHtml(status)}`,
+    `${i18n.t(locale, 'admin_campaign_image_label')}: ${hasImage ? escapeHtml(i18n.t(locale, 'admin_yes')) : escapeHtml(i18n.t(locale, 'admin_no'))}`,
     `${i18n.t(locale, 'admin_campaign_edit_prize_title')}: ${escapeHtml(draft.title)}`,
     `${i18n.t(locale, 'admin_campaign_prize_description_label')}:`,
     draft.description ? escapeHtml(draft.description) : escapeHtml(i18n.t(locale, 'admin_campaign_prize_description_empty')),
@@ -816,9 +839,26 @@ export const showAdminPrizeDetailCard = async (
     return;
   }
 
-  await ctx.reply(buildAdminPrizeSummary(prize, locale), {
+  const summary = buildAdminPrizeSummary(prize, locale);
+  const keyboard = getAdminPrizeDetailKeyboard(prize.id, Boolean(prize.image_object_key), prize.is_active, locale);
+  const image = await getPrizeImageInput(prize);
+
+  if (image) {
+    try {
+      await ctx.replyWithPhoto(image, {
+        caption: summary,
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
+      return;
+    } catch {
+      logger.warn('Prize detail caption fallback triggered.');
+    }
+  }
+
+  await ctx.reply(summary, {
     parse_mode: 'HTML',
-    reply_markup: getAdminPrizeDetailKeyboard(prize.id, prize.is_active, locale),
+    reply_markup: keyboard,
   });
 };
 
@@ -1310,6 +1350,7 @@ export async function adminPrizeCreateConversation(
     promotion_id: 0,
     title: '',
     description: null,
+    image: null,
     is_active: true,
   };
 
@@ -1342,6 +1383,17 @@ export async function adminPrizeCreateConversation(
   }
   draft.description = description === SKIP_SYMBOL ? null : description;
 
+  const image = await waitForOptionalImage(
+    conversation,
+    ctx,
+    locale,
+    i18n.t(locale, 'admin_campaign_ask_prize_image'),
+  );
+  if (image === null) {
+    return;
+  }
+  draft.image = image === SKIP_SYMBOL ? null : image;
+
   const isActive = await waitForActiveState(
     conversation,
     ctx,
@@ -1371,7 +1423,15 @@ export async function adminPrizeCreateConversation(
   }
 
   try {
-    const created = await conversation.external(() => PromotionService.createPrize(draft));
+    const created = await conversation.external(() => PromotionService.createPrize({
+      promotion_id: draft.promotion_id,
+      title: draft.title,
+      description: draft.description,
+      is_active: draft.is_active,
+    }));
+    if (draft.image) {
+      await conversation.external(() => PromotionService.replacePrizeImage(created.id, draft.image!));
+    }
     await ctx.reply(i18n.t(locale, 'admin_campaign_prize_created'), {
       reply_markup: getAdminMenuKeyboard(locale),
     });
@@ -1411,6 +1471,7 @@ export async function adminPrizeEditConversation(
   }
 
   const update: UpdatePrizeInput = {};
+  let imageUpdate: PromotionImageInput | null | typeof SKIP_SYMBOL = SKIP_SYMBOL;
 
   switch (target.field) {
     case 'promotion_id': {
@@ -1457,12 +1518,28 @@ export async function adminPrizeEditConversation(
       update.description = description === SKIP_SYMBOL ? null : description;
       break;
     }
+    case 'image': {
+      imageUpdate = await waitForOptionalImage(
+        conversation,
+        ctx,
+        locale,
+        i18n.t(locale, 'admin_campaign_edit_prompt_prize_image'),
+      );
+      if (imageUpdate === null) {
+        await conversation.external((c) => {
+          if (c.session) c.session.adminPrizeEditTarget = undefined;
+        });
+        return;
+      }
+      break;
+    }
   }
 
   const preview: PrizeDraft = {
     promotion_id: update.promotion_id ?? prize.promotion_id,
     title: update.title ?? prize.title,
     description: update.description === undefined ? prize.description ?? null : update.description,
+    image: imageUpdate && imageUpdate !== SKIP_SYMBOL ? imageUpdate : null,
     is_active: prize.is_active,
   };
 
@@ -1477,7 +1554,12 @@ export async function adminPrizeEditConversation(
     return;
   }
 
-  await ctx.reply(buildPrizeDraftSummary(preview, promotion, locale), {
+  const previewHasImage =
+    imageUpdate === SKIP_SYMBOL
+      ? Boolean(prize.image_object_key)
+      : Boolean(imageUpdate);
+
+  await ctx.reply(buildPrizeDraftSummary(preview, promotion, locale, previewHasImage), {
     parse_mode: 'HTML',
     reply_markup: getConfirmKeyboard(locale),
   });
@@ -1491,6 +1573,9 @@ export async function adminPrizeEditConversation(
 
   try {
     await conversation.external(() => PromotionService.updatePrize(prize.id, update));
+    if (imageUpdate && imageUpdate !== SKIP_SYMBOL) {
+      await conversation.external(() => PromotionService.replacePrizeImage(prize.id, imageUpdate));
+    }
     await ctx.reply(i18n.t(locale, 'admin_campaign_prize_updated'), {
       reply_markup: getAdminMenuKeyboard(locale),
     });

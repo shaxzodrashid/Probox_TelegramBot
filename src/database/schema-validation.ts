@@ -41,6 +41,18 @@ const REQUIRED_COLUMNS = {
     'created_at',
     'updated_at',
   ],
+  promotion_prizes: [
+    'id',
+    'promotion_id',
+    'title',
+    'description',
+    'image_object_key',
+    'image_mime_type',
+    'image_file_name',
+    'is_active',
+    'created_at',
+    'updated_at',
+  ],
   coupon_registration_events: [
     'id',
     'user_id',
@@ -126,6 +138,7 @@ export const validateDatabaseSchema = async (): Promise<void> => {
   const missingCouponColumns = await getMissingColumns('coupons');
   const missingTemplateColumns = await getMissingColumns('message_templates');
   const missingPromotionColumns = await getMissingColumns('promotions');
+  const missingPrizeColumns = await getMissingColumns('promotion_prizes');
   const missingCouponEventColumns = await getMissingColumns('coupon_registration_events');
   const missingReferralColumns = await getMissingColumns('referrals');
   const missingReferralRewardLogColumns = await getMissingColumns('referral_reward_logs');
@@ -156,6 +169,10 @@ export const validateDatabaseSchema = async (): Promise<void> => {
 
   if (missingPromotionColumns.length > 0) {
     issues.push(`Missing columns in promotions: ${missingPromotionColumns.join(', ')}`);
+  }
+
+  if (missingPrizeColumns.length > 0) {
+    issues.push(`Missing columns in promotion_prizes: ${missingPrizeColumns.join(', ')}`);
   }
 
   if (missingCouponEventColumns.length > 0) {

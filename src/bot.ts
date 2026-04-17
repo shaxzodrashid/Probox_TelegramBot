@@ -89,6 +89,7 @@ import {
   adminPrizeDeleteHandler,
   adminPrizeDetailHandler,
   adminPrizeEditHandler,
+  adminPrizeImageRemoveHandler,
   adminPrizePageHandler,
   adminPrizeToggleHandler,
   adminCampaignTemplatesHandler,
@@ -125,6 +126,7 @@ import {
   ADMIN_PRIZE_DELETE_CALLBACK_PREFIX,
   ADMIN_PRIZE_DETAIL_CALLBACK_PREFIX,
   ADMIN_PRIZE_EDIT_CALLBACK_PREFIX,
+  ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX,
   ADMIN_PRIZE_PAGE_CALLBACK_PREFIX,
   ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX,
   ADMIN_PROMOTION_ARCHIVE_CALLBACK_PREFIX,
@@ -569,6 +571,7 @@ bot.callbackQuery(ADMIN_PRIZE_CREATE_CALLBACK, adminPrizeCreateHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminPrizeEditHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminPrizeToggleHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_DELETE_CALLBACK_PREFIX}\\d+$`), adminPrizeDeleteHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX}\\d+$`), adminPrizeImageRemoveHandler);
 bot.callbackQuery(ADMIN_PRIZE_BACK_TO_LIST_CALLBACK, adminPrizeBackToListHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_PAGE_CALLBACK_PREFIX}\\d+$`), adminTemplatePageHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_DETAIL_CALLBACK_PREFIX}\\d+$`), adminTemplateDetailHandler);

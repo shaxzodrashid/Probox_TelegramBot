@@ -16,6 +16,7 @@ export const ADMIN_PRIZE_DETAIL_CALLBACK_PREFIX = 'aprd:';
 export const ADMIN_PRIZE_EDIT_CALLBACK_PREFIX = 'apre:';
 export const ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX = 'aprt:';
 export const ADMIN_PRIZE_DELETE_CALLBACK_PREFIX = 'aprdl:';
+export const ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX = 'aprir:';
 export const ADMIN_PRIZE_CREATE_CALLBACK = 'admin_prize_create';
 export const ADMIN_PRIZE_BACK_TO_LIST_CALLBACK = 'admin_prizes_back';
 export const ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX = 'awps:';
@@ -173,6 +174,7 @@ export const getAdminPrizesKeyboard = (
 
 export const getAdminPrizeDetailKeyboard = (
   prizeId: number,
+  hasImage: boolean,
   isActive: boolean,
   locale: string,
 ) => {
@@ -185,11 +187,21 @@ export const getAdminPrizeDetailKeyboard = (
     .row()
     .text(i18n.t(locale, 'admin_campaign_edit_prize_description'), `${ADMIN_PRIZE_EDIT_CALLBACK_PREFIX}${prizeId}:description`)
     .row()
+    .text(i18n.t(locale, 'admin_campaign_edit_prize_image'), `${ADMIN_PRIZE_EDIT_CALLBACK_PREFIX}${prizeId}:image`)
+    .row()
     .text(
       isActive ? i18n.t(locale, 'admin_campaign_make_inactive') : i18n.t(locale, 'admin_campaign_make_active'),
       `${ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX}${prizeId}`,
     )
-    .row()
+    .row();
+
+  if (hasImage) {
+    keyboard
+      .text(i18n.t(locale, 'admin_campaign_remove_prize_image'), `${ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX}${prizeId}`)
+      .row();
+  }
+
+  keyboard
     .text(i18n.t(locale, 'admin_campaign_delete'), `${ADMIN_PRIZE_DELETE_CALLBACK_PREFIX}${prizeId}`)
     .row()
     .text(i18n.t(locale, 'admin_campaign_prizes_back'), ADMIN_PRIZE_BACK_TO_LIST_CALLBACK);
@@ -219,4 +231,3 @@ export const getAdminMissingPrizeKeyboard = (locale: string) => {
     .row()
     .text(i18n.t(locale, 'admin_back_to_menu'), 'admin_back_to_menu');
 };
-

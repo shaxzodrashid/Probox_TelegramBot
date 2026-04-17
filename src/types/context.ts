@@ -24,7 +24,8 @@ export type PromotionEditableField =
 export type PromotionPrizeEditableField =
   | 'promotion_id'
   | 'title'
-  | 'description';
+  | 'description'
+  | 'image';
 
 export type MessageTemplateEditableField =
   | 'template_key'
