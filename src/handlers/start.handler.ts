@@ -5,8 +5,8 @@ import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import { logger } from '../utils/logger';
 import { UserService } from '../services/user.service';
 import { getDeepLinkConfig, DeepLinkConfig } from '../config/deep-links';
-import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
+import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 
 const START_COMMAND_REGEX = /^\/start(?:@\w+)?(?:\s+(.+))?$/;
 

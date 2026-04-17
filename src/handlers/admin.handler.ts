@@ -1,10 +1,10 @@
 import { BotContext, PromotionEditableField, PromotionPrizeEditableField } from '../types/context';
 import { AdminService } from '../services/admin.service';
 import { ExportService } from '../services/export.service';
-import { SupportService } from '../services/support.service';
+import { SupportService } from '../services/support/support.service';
 import { UserService } from '../services/user.service';
 import { BranchService } from '../services/branch.service';
-import { PromotionService } from '../services/promotion.service';
+import { PromotionService } from '../services/coupon/promotion.service';
 import { InputFile } from 'grammy';
 import {
     getAdminMenuKeyboard,
@@ -34,13 +34,13 @@ import {
     ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX,
     getAdminMissingPrizeKeyboard,
 } from '../keyboards/campaign.keyboards';
-import { CouponExportService } from '../services/coupon-export.service';
-import { CouponService } from '../services/coupon.service';
+import { CouponExportService } from '../services/coupon/coupon-export.service';
+import { CouponService } from '../services/coupon/coupon.service';
 import { BotNotificationService } from '../services/bot-notification.service';
 import { MessageTemplateService } from '../services/message-template.service';
 import { i18n } from '../i18n';
 import { logger } from '../utils/logger';
-import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { formatBranchDetails } from '../utils/branch.util';
 import {
@@ -65,7 +65,7 @@ import {
     getAdminMissingTemplateKeyboard
 } from '../keyboards/template.keyboards';
 import { MessageTemplateEditableField } from '../types/context';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import {
     ADMIN_FAQ_BACK_CALLBACK,
     ADMIN_FAQ_BACK_TO_LIST_CALLBACK,
@@ -76,8 +76,8 @@ import {
     getAdminFaqDetailKeyboard,
     getAdminFaqListKeyboard,
 } from '../keyboards/faq.keyboards';
-import { FaqService } from '../services/faq.service';
-import { getFaqAgentToken } from '../utils/faq-match.util';
+import { FaqService } from '../services/faq/faq.service';
+import { getFaqAgentToken } from '../utils/faq/faq-match.util';
 import { FaqRecord } from '../types/faq.types';
 
 /**

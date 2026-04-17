@@ -1,6 +1,6 @@
 import { BotContext } from '../types/context';
 import { getHelpKeyboard } from '../keyboards';
-import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
 
 export const helpHandler = async (ctx: BotContext) => {
   const text = ctx.t('help_message');

@@ -3,8 +3,8 @@ import { InputFile } from 'grammy';
 import { bot } from '../bot';
 import { config } from '../config';
 import { logger } from '../utils/logger';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
-import { isUserBlockedError } from '../utils/telegram-errors';
+import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
+import { isUserBlockedError } from '../utils/telegram/telegram-errors';
 import { User, UserService } from './user.service';
 
 export type PurchasePdfMatchBy = 'jshshir' | 'cardCode' | null;

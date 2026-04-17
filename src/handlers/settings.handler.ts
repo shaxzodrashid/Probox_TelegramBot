@@ -3,7 +3,7 @@ import { getSettingsKeyboard, getSettingsLanguageKeyboard } from '../keyboards';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
 import { i18n } from '../i18n';
-import { isCallbackQueryExpiredError } from '../utils/telegram-errors';
+import { isCallbackQueryExpiredError } from '../utils/telegram/telegram-errors';
 
 export async function settingsHandler(ctx: BotContext) {
   // Check if user is registered, if not, prompt to register

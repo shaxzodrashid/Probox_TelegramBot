@@ -1,6 +1,6 @@
 import { InlineKeyboard, Keyboard } from 'grammy';
 import { i18n } from '../i18n';
-import { Promotion, PromotionPrize, PromotionPrizeListItem } from '../services/promotion.service';
+import { Promotion, PromotionPrize, PromotionPrizeListItem } from '../services/coupon/promotion.service';
 
 export const ADMIN_PROMOTION_PAGE_CALLBACK_PREFIX = 'apg:';
 export const ADMIN_PROMOTION_DETAIL_CALLBACK_PREFIX = 'apd:';

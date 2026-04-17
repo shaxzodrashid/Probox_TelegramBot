@@ -7,12 +7,12 @@ import { UserService } from '../services/user.service';
 import { logger } from '../utils/logger';
 import { getLocaleFromConversation } from '../utils/locale';
 import { bot } from '../bot';
-import { processSupportRequest } from '../utils/support.util';
+import { processSupportRequest } from '../utils/support/support.util';
 import {
     resolveUiTextAction,
     routeUiTextAction,
     showSafeMenuFallback,
-} from '../utils/ui-text-resolver';
+} from '../utils/formatting/ui-text-resolver';
 
 
 

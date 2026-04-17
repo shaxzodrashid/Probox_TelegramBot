@@ -2,7 +2,7 @@ import { Keyboard } from 'grammy';
 import { BotConversation, BotContext } from '../../types/context';
 import { i18n } from '../../i18n';
 import { normalizeButtonText } from './utils.part';
-import { escapeHtml } from '../../utils/telegram-rich-text.util';
+import { escapeHtml } from '../../utils/telegram/telegram-rich-text.util';
 
 export async function runConfirmationLoop(
   conversation: BotConversation,

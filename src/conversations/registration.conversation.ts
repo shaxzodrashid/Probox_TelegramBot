@@ -16,11 +16,11 @@ import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
 import { getLocaleFromConversation } from '../utils/locale';
-import { isCallbackQueryExpiredError } from '../utils/telegram-errors';
+import { isCallbackQueryExpiredError } from '../utils/telegram/telegram-errors';
 import { formatUzPhone } from '../utils/uz-phone.util';
-import { sanitizeName } from '../utils/formatter.util';
+import { sanitizeName } from '../utils/formatting/formatter.util';
 import { redisService } from '../redis/redis.service';
-import { CouponRegistrationService } from '../services/coupon-registration.service';
+import { CouponRegistrationService } from '../services/coupon/coupon-registration.service';
 import { clearAccountSwitchArtifacts } from '../utils/account-switch.util';
 import {
   isSapBusinessPartnerAdmin,

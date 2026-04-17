@@ -4,8 +4,8 @@ import { UserService } from '../services/user.service';
 import { performOtpVerification, verifySapUser } from './registration.conversation';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getLocaleFromConversation } from '../utils/locale';
-import { sanitizeName } from '../utils/formatter.util';
-import { CouponRegistrationService } from '../services/coupon-registration.service';
+import { sanitizeName } from '../utils/formatting/formatter.util';
+import { CouponRegistrationService } from '../services/coupon/coupon-registration.service';
 import { isSapBusinessPartnerAdmin } from '../utils/sap-business-partner.util';
 
 /**

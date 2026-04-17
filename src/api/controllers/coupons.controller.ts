@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { CouponRegistrationPayload, CouponRegistrationService } from '../../services/coupon-registration.service';
+import { CouponRegistrationPayload, CouponRegistrationService } from '../../services/coupon/coupon-registration.service';
 import { ApiError } from '../errors/api-error';
 import { normalizeUzPhone } from '../../utils/uz-phone.util';
 

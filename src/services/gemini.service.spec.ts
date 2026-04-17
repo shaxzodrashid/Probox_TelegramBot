@@ -166,7 +166,7 @@ test('GeminiService.generateJsonWithTools extracts JSON from wrapped model text'
   }
 });
 
-test('GeminiService.generateJsonWithTools sends system instructions and structured output config', async () => {
+test('GeminiService.generateJsonWithTools sends system instructions and tool config without JSON mode', async () => {
   const client = getGeminiClient();
   const originalPost = client.post;
   const originalApiKey = config.GEMINI_API_KEY;
@@ -243,16 +243,7 @@ test('GeminiService.generateJsonWithTools sends system instructions and structur
         mode: 'VALIDATED',
       },
     });
-    assert.deepEqual(requestBody['generationConfig'], {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'object',
-        properties: {
-          reply_text: { type: 'string' },
-        },
-        required: ['reply_text'],
-      },
-    });
+    assert.equal(requestBody['generationConfig'], undefined);
   } finally {
     client.post = originalPost;
     config.GEMINI_API_KEY = originalApiKey;

@@ -173,14 +173,14 @@ import { applicationHandler } from './handlers/application.handler';
 import { applicationConversation } from './conversations/application.conversation';
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
-import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from './utils/telegram-errors';
-import { processSupportRequest } from './utils/support.util';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from './utils/telegram/telegram-errors';
+import { processSupportRequest } from './utils/support/support.util';
 import { getMainKeyboardByLocale } from './keyboards';
-import { FaqService } from './services/faq.service';
+import { FaqService } from './services/faq/faq.service';
 import {
   resolveUiTextAction,
   routeUiTextAction,
-} from './utils/ui-text-resolver';
+} from './utils/formatting/ui-text-resolver';
 
 import { RedisAdapter } from '@grammyjs/storage-redis';
 import { redisService } from './redis/redis.service';

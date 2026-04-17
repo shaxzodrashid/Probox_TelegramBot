@@ -1,14 +1,14 @@
 import { BotContext } from '../types/context';
 import { getMainKeyboardByLocale, getPaymentsKeyboard } from '../keyboards';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
-import { PaymentService } from '../services/payment.service';
+import { PaymentService } from '../services/payment/payment.service';
 import { User, UserService } from '../services/user.service';
 import { i18n } from '../i18n';
 import { logger } from '../utils/logger';
-import { formatDate, formatCurrency } from '../utils/formatter.util';
+import { formatDate, formatCurrency } from '../utils/formatting/formatter.util';
 import { PaymentContract } from '../interfaces/payment.interface';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 
 const getSapLookupIdentifiers = (user?: Pick<User, 'jshshir' | 'sap_card_code'> | null) => ({
   jshshir: user?.jshshir?.trim() || undefined,

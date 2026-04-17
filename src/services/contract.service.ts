@@ -1,6 +1,6 @@
 import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
-import { formatItemsList } from '../utils/items-formatter.util';
+import { formatItemsList } from '../utils/formatting/items-formatter.util';
 import { Contract } from '../data/contracts.mock';
 import { convertAmountForDisplay } from '../utils/currency-conversion.util';
 import { logger } from '../utils/logger';

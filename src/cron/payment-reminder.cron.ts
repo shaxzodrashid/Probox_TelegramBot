@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 import {
   PaymentReminderRunAlreadyInProgressError,
   PaymentReminderService,
-} from '../services/payment-reminder.service';
+} from '../services/payment/payment-reminder.service';
 
 export class PaymentReminderCron {
   static init(): void {

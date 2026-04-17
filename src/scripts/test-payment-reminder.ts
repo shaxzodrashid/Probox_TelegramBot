@@ -1,4 +1,4 @@
-import { PaymentReminderService } from '../services/payment-reminder.service';
+import { PaymentReminderService } from '../services/payment/payment-reminder.service';
 import { logger } from '../utils/logger';
 
 async function main(): Promise<void> {

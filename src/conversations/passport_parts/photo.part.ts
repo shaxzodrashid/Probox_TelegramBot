@@ -8,8 +8,8 @@ import jsQR from 'jsqr';
 import { OCRService, PassportDataFields } from '../../services/ocr.service';
 import { InputFile } from 'grammy';
 import path from 'path';
-import { buildPassportImageVariants, PassportImageVariant } from '../../utils/passport-image.util';
-import { findBestPassportScan } from '../../utils/passport-scan.util';
+import { buildPassportImageVariants, PassportImageVariant } from '../../utils/passport/passport-image.util';
+import { findBestPassportScan } from '../../utils/passport/passport-scan.util';
 
 function normalizeNamePart(value: string | null): string | null {
   if (!value || value.length > 20) return null;

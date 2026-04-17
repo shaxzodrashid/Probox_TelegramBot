@@ -2,14 +2,14 @@ import { BotContext } from '../types/context';
 import { InputFile } from 'grammy';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getPromotionsKeyboard, getPromotionDetailKeyboard, getCouponsKeyboard } from '../keyboards/campaign.keyboards';
-import { CouponService } from '../services/coupon.service';
-import { PromotionService } from '../services/promotion.service';
+import { CouponService } from '../services/coupon/coupon.service';
+import { PromotionService } from '../services/coupon/promotion.service';
 import { UserService } from '../services/user.service';
 import { minioService } from '../services/minio.service';
-import { formatDateForLocale } from '../utils/tashkent-time.util';
-import { buildPromotionText } from '../utils/promotion-text.util';
+import { formatDateForLocale } from '../utils/time/tashkent-time.util';
+import { buildPromotionText } from '../utils/formatting/promotion-text.util';
 import { logger } from '../utils/logger';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 
 const resolveLocale = async (ctx: BotContext): Promise<string> => (await ctx.i18n.getLocale()) || 'uz';
 

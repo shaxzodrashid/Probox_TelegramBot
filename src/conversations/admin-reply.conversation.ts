@@ -1,15 +1,15 @@
 import { BotConversation, BotContext } from '../types/context';
-import { SupportService } from '../services/support.service';
+import { SupportService } from '../services/support/support.service';
 import { LockService } from '../services/lock.service';
 import { UserService } from '../services/user.service';
 import { redisService } from '../redis/redis.service';
 import { getSupportTicketRepliedKeyboard, getAdminReplyCancelKeyboard } from '../keyboards';
 import { logger } from '../utils/logger';
-import { isUserBlockedError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
+import { isUserBlockedError, isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
 import { bot } from '../bot';
 import { config } from '../config';
 import { i18n } from '../i18n';
-import { escapeHtml, markdownToTelegramHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml, markdownToTelegramHtml } from '../utils/telegram/telegram-rich-text.util';
 
 // Redis key prefix for admin reply session data (must match handler)
 const ADMIN_REPLY_KEY_PREFIX = 'admin:reply:';

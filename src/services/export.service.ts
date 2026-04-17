@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { AdminService } from './admin.service';
-import { SupportService } from './support.service';
+import { SupportService } from './support/support.service';
 import { User } from './user.service';
 import { logger } from '../utils/logger';
 import { redisService } from '../redis/redis.service';

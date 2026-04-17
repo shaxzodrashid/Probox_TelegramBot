@@ -64,13 +64,13 @@ export const config = {
   CRM_PASS: process.env.CRM_PASS || '',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
   GEMINI_REQUEST_TIMEOUT_MS: Math.max(1000, parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS || '60000', 10) || 60000),
-  GEMINI_TEXT_MODEL: process.env.GEMINI_TEXT_MODEL || 'gemini-robotics-er-1.5-preview',
-  GEMINI_SUPPORT_AGENT_MODEL: process.env.GEMINI_SUPPORT_AGENT_MODEL || 'gemini-robotics-er-1.5-preview',
+  GEMINI_TEXT_MODEL: process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash',
+  GEMINI_SUPPORT_AGENT_MODEL: process.env.GEMINI_SUPPORT_AGENT_MODEL || 'gemini-2.5-flash',
   GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2-preview',
   FAQ_EMBEDDING_DIM: parseInt(process.env.FAQ_EMBEDDING_DIM || '1536', 10),
   FAQ_SIMILAR_LIMIT: parseInt(process.env.FAQ_SIMILAR_LIMIT || '5', 10),
   FAQ_SEMANTIC_AUTO_REPLY_ENABLED: parseBoolean(process.env.FAQ_SEMANTIC_AUTO_REPLY_ENABLED, true),
-  FAQ_AUTO_REPLY_MAX_DISTANCE: parseFloat(process.env.FAQ_AUTO_REPLY_MAX_DISTANCE || '0.35'),
+  FAQ_AUTO_REPLY_MAX_DISTANCE: parseFloat(process.env.FAQ_AUTO_REPLY_MAX_DISTANCE || '0.40'),
   FAQ_AUTO_REPLY_MIN_CONFIDENCE: parseFloat(process.env.FAQ_AUTO_REPLY_MIN_CONFIDENCE || '0.85'),
   PURCHASE_PDF_API_BASE_URL: process.env.PURCHASE_PDF_API_BASE_URL || 'https://work-api.probox.uz/api/basic/purchases/pdfs',
   PURCHASE_PDF_API_USER: process.env.PURCHASE_PDF_API_USER || '',
@@ -90,4 +90,3 @@ if (config.API_ENABLED && !config.API_KEY && !isLoopbackHost(config.API_HOST)) {
 }
 
 export const isLoopbackApiHost = isLoopbackHost(config.API_HOST);
-

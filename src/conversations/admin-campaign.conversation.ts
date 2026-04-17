@@ -10,8 +10,8 @@ import {
   PromotionService,
   UpdatePrizeInput,
   UpdatePromotionInput,
-} from '../services/promotion.service';
-import { CouponService } from '../services/coupon.service';
+} from '../services/coupon/promotion.service';
+import { CouponService } from '../services/coupon/coupon.service';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import {
   getAdminPrizeDetailKeyboard,
@@ -22,10 +22,10 @@ import {
   getCouponAdminKeyboard,
 } from '../keyboards/campaign.keyboards';
 import { i18n } from '../i18n';
-import { formatDateForLocale, formatDateTimeForLocale } from '../utils/tashkent-time.util';
-import { buildPromotionText, getPromotionCaptionLength } from '../utils/promotion-text.util';
-import { telegramMessageToHtml } from '../utils/telegram-rich-text.util';
-import { downloadTelegramFileByPath, getTelegramFilePath } from '../utils/telegram-file.util';
+import { formatDateForLocale, formatDateTimeForLocale } from '../utils/time/tashkent-time.util';
+import { buildPromotionText, getPromotionCaptionLength } from '../utils/formatting/promotion-text.util';
+import { telegramMessageToHtml } from '../utils/telegram/telegram-rich-text.util';
+import { downloadTelegramFileByPath, getTelegramFilePath } from '../utils/telegram/telegram-file.util';
 import { minioService } from '../services/minio.service';
 import { logger } from '../utils/logger';
 

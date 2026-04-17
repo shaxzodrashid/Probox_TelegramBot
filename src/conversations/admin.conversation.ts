@@ -6,10 +6,10 @@ import { UserService } from '../services/user.service';
 import { getAdminCancelKeyboard, getAdminMenuKeyboard, getBroadcastConfirmKeyboard, getBroadcastTargetKeyboard } from '../keyboards/admin.keyboards';
 import { getAdminBranchPhoneKeyboard } from '../keyboards/branch.keyboards';
 import { i18n } from '../i18n';
-import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
 import { logger } from '../utils/logger';
 import { formatUzPhone } from '../utils/uz-phone.util';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import { parseWorkTimeRange } from '../utils/branch.util';
 
 /**

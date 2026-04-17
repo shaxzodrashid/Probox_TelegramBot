@@ -12,8 +12,8 @@ import { handleManualMethod } from './passport_parts/manual.part';
 import { runConfirmationLoop } from './passport_parts/confirmation.part';
 import { submitApplication } from './application.conversation';
 import { redisService } from '../redis/redis.service';
-import { detectFace } from '../utils/face-detection.util';
-import { isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
+import { detectFace } from '../utils/passport/face-detection.util';
+import { isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
 
 export async function addPassportDataConversation(conversation: BotConversation, ctx: BotContext) {
   const telegramId = ctx.from?.id;

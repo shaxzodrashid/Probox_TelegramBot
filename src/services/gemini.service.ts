@@ -620,6 +620,8 @@ export class GeminiService {
     const toolMap = new Map(params.tools.map((tool) => [tool.declaration.name, tool]));
     const systemInstruction = this.buildSystemInstruction(params.systemInstruction);
     const functionCallingConfig = params.functionCallingConfig;
+    // Gemini rejects combining function calling with JSON-mode response mime types.
+    // For tool-enabled requests we rely on prompt instructions and local JSON repair/parsing instead.
     const contents: Array<{
       role: string;
       parts: Array<Record<string, unknown>>;
@@ -649,10 +651,6 @@ export class GeminiService {
                   },
                 }
               : {}),
-            generationConfig: {
-              responseMimeType: 'application/json',
-              ...(params.responseSchema ? { responseSchema: params.responseSchema } : {}),
-            },
           },
           {
             params: {

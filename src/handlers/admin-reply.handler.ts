@@ -1,5 +1,5 @@
 import { BotContext } from '../types/context';
-import { SupportService } from '../services/support.service';
+import { SupportService } from '../services/support/support.service';
 import { AdminService } from '../services/admin.service';
 import { LockService } from '../services/lock.service';
 import { UserService } from '../services/user.service';
@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
 import { bot } from '../bot';
 import { config } from '../config';
 import { i18n } from '../i18n';
-import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram-errors';
+import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
 
 // Redis key prefix for admin reply session data
 const ADMIN_REPLY_KEY_PREFIX = 'admin:reply:';

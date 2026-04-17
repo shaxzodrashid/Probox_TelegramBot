@@ -10,10 +10,10 @@ import { logger } from '../utils/logger';
 import {
   isCallbackQueryExpiredError,
   isMessageToDeleteNotFoundError,
-} from '../utils/telegram-errors';
-import { formatDate, formatCurrency } from '../utils/formatter.util';
+} from '../utils/telegram/telegram-errors';
+import { formatDate, formatCurrency } from '../utils/formatting/formatter.util';
 import { checkRegistrationOrPrompt } from '../utils/registration.check';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import { PurchasePdfService } from '../services/purchase-pdf.service';
 
 const PAGE_SIZE = 10;

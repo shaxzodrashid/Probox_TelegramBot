@@ -1,12 +1,12 @@
 import { InlineKeyboard, Keyboard } from 'grammy';
 import { config } from '../config';
 import { i18n } from '../i18n';
-import { FaqAiService } from '../services/faq-ai.service';
-import { FaqEmbeddingService } from '../services/faq-embedding.service';
-import { FaqService } from '../services/faq.service';
+import { FaqAiService } from '../services/faq/faq-ai.service';
+import { FaqEmbeddingService } from '../services/faq/faq-embedding.service';
+import { FaqService } from '../services/faq/faq.service';
 import { BotContext, BotConversation, SessionData } from '../types/context';
 import { FaqAnswerVariants, FaqNeighbor, FaqQuestionVariants, FaqRecord } from '../types/faq.types';
-import { escapeHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import { logger } from '../utils/logger';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 

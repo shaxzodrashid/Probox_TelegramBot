@@ -1,5 +1,5 @@
 import db from '../database/database';
-import { isUserBlockedError } from '../utils/telegram-errors';
+import { isUserBlockedError } from '../utils/telegram/telegram-errors';
 import { MessageTemplate, MessageTemplateService, MessageTemplateType } from './message-template.service';
 import { User, UserService } from './user.service';
 

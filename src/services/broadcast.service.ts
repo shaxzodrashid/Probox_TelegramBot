@@ -4,9 +4,9 @@ import { AdminService } from './admin.service';
 import { UserService } from './user.service';
 import { config } from '../config';
 import { logger } from '../utils/logger';
-import { isUserBlockedError } from '../utils/telegram-errors';
+import { isUserBlockedError } from '../utils/telegram/telegram-errors';
 import { bot } from '../bot';
-import { escapeHtml, markdownToTelegramHtml } from '../utils/telegram-rich-text.util';
+import { escapeHtml, markdownToTelegramHtml } from '../utils/telegram/telegram-rich-text.util';
 
 /**
  * BroadcastService - Broadcasting logic for admin messages
