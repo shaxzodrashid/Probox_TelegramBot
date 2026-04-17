@@ -10,6 +10,28 @@ import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 
 const START_COMMAND_REGEX = /^\/start(?:@\w+)?(?:\s+(.+))?$/;
 
+const sendPromoMedia = async (ctx: BotContext, config: DeepLinkConfig) => {
+  if (!config.media) return;
+
+  try {
+    if (config.media.type === 'copy_message') {
+      const chatId = ctx.chat?.id;
+      if (!chatId) {
+        logger.warn(`[WARN] Unable to copy promo media for slug ${config.slug}: target chat id is missing`);
+        return;
+      }
+
+      await ctx.api.copyMessage(chatId, config.media.fromChatId, config.media.messageId);
+      return;
+    }
+
+    await ctx.replyWithVideoNote(new InputFile(config.media.path));
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.warn(`[WARN] Unable to send promo media for slug ${config.slug}: ${errorMessage}`);
+  }
+};
+
 const extractStartPayload = (text?: string) => {
   if (!text) return null;
 
@@ -54,21 +76,29 @@ const showPromoMessage = async (ctx: BotContext, config: DeepLinkConfig) => {
     const text1 = ctx.t(config.messageKey, { name });
     const text2 = ctx.t(config.secondaryMessageKey, { name });
 
+    if (config.mediaPlacement === 'before_text') {
+      await sendPromoMedia(ctx, config);
+    }
+
     await ctx.reply(text1, { parse_mode: 'HTML' });
 
-    if (config.videoNotePath) {
-      await ctx.replyWithVideoNote(new InputFile(config.videoNotePath));
+    if (config.mediaPlacement === 'between_texts' || config.mediaPlacement === 'after_primary_text') {
+      await sendPromoMedia(ctx, config);
     }
 
     await ctx.reply(text2, { reply_markup: keyboard, parse_mode: 'HTML' });
   } else {
     const text = ctx.t(config.messageKey, { name });
 
-    if (config.videoNotePath) {
-      await ctx.replyWithVideoNote(new InputFile(config.videoNotePath));
+    if (config.mediaPlacement === 'before_text') {
+      await sendPromoMedia(ctx, config);
     }
 
     await ctx.reply(text, { reply_markup: keyboard, parse_mode: 'HTML' });
+
+    if (config.mediaPlacement === 'after_primary_text') {
+      await sendPromoMedia(ctx, config);
+    }
   }
 };
 

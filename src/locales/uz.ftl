@@ -66,7 +66,13 @@ promo_aksiya_02 =
     Aytgancha, qo‘ng‘iroqdan keyin bizdan sotib olishga majbur bo‘lmaysiz ✅
     
 promo_aksiya_03 =
-    { $name }, ushbu videoni tomosha qiling! ✅
+    Assalomu alaykum, { $name } ✅
+
+    Ismim Odil. Men Probox kompaniyasida ijrochi direktorman.
+
+    Hozirda bizda qanday aksiya ketayotganini sizga qisqacha tushuntirmoqchiman 🚀
+
+    Aksiya shartlari dumaloq video shaklida quyida yuborildi 👇
 
 promo_aksiya_04_part1 =
     { $name }, bilasizmi… ✅

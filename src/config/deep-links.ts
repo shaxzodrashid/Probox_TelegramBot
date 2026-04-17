@@ -8,7 +8,17 @@ export interface DeepLinkConfig {
   secondaryMessageKey?: string;
   ctaAction: 'application' | 'link' | 'none';
   url?: string;
-  videoNotePath?: string;
+  mediaPlacement?: 'before_text' | 'after_primary_text' | 'between_texts';
+  media?:
+    | {
+        type: 'video_note_file';
+        path: string;
+      }
+    | {
+        type: 'copy_message';
+        fromChatId: number;
+        messageId: number;
+      };
 }
 
 const deepLinkConfig: Record<DeepLinkSlug, DeepLinkConfig> = {
@@ -27,14 +37,23 @@ const deepLinkConfig: Record<DeepLinkSlug, DeepLinkConfig> = {
     slug: 'aksiya_03',
     messageKey: 'promo_aksiya_03',
     ctaAction: 'none',
-    videoNotePath: 'src/uploads/test.mp4',
+    mediaPlacement: 'after_primary_text',
+    media: {
+      type: 'copy_message',
+      fromChatId: -1003672668721,
+      messageId: 420,
+    },
   },
   aksiya_04: {
     slug: 'aksiya_04',
     messageKey: 'promo_aksiya_04_part1',
     secondaryMessageKey: 'promo_aksiya_04_part2',
     ctaAction: 'none',
-    videoNotePath: 'src/uploads/test.mp4',
+    mediaPlacement: 'between_texts',
+    media: {
+      type: 'video_note_file',
+      path: 'src/uploads/test.mp4',
+    },
   },
 };
 

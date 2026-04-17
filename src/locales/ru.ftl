@@ -69,7 +69,13 @@ promo_aksiya_02 =
     Aytgancha, qo‘ng‘iroqdan keyin bizdan sotib olishga majbur bo‘lmaysiz ✅
     
 promo_aksiya_03 =
-    { $name }, посмотрите это видео! ✅
+    Здравствуйте, { $name } ✅
+
+    Меня зовут Одил. Я исполнительный директор компании Probox.
+
+    Хочу коротко рассказать вам, какая акция сейчас проходит у нас 🚀
+
+    Ниже мы отправили круговое видео с объяснением условий акции 👇
 
 promo_aksiya_04_part1 =
     { $name }, а вы знали?… ✅

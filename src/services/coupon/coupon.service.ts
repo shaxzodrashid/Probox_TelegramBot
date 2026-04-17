@@ -329,7 +329,7 @@ export class CouponService {
       'mapping.user_id',
       'users.first_name',
       'users.last_name',
-      'users.phone_number',
+      db.raw('COALESCE(users.phone_number, coupons.issued_phone_snapshot) as phone_number'),
       db.raw('CASE WHEN users.id IS NOT NULL THEN TRUE ELSE FALSE END as user_exists'),
     );
 
