@@ -9,6 +9,7 @@ test('SupportCurrencyService returns normalized latest exchange-rate data', asyn
   const originalGetLatestExchangeRateInfo =
     supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo;
 
+  SupportCurrencyService.resetCacheForTests();
   supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo = async (currency: string) => ({
     currency,
     rate: 12_650,
@@ -26,6 +27,7 @@ test('SupportCurrencyService returns normalized latest exchange-rate data', asyn
       base_currency: 'UZS',
     });
   } finally {
+    SupportCurrencyService.resetCacheForTests();
     supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo =
       originalGetLatestExchangeRateInfo;
   }
@@ -37,6 +39,7 @@ test('SupportCurrencyService returns null rate when SAP has no data', async () =
   const originalGetLatestExchangeRateInfo =
     supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo;
 
+  SupportCurrencyService.resetCacheForTests();
   supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo = async () => null;
 
   try {
@@ -50,6 +53,7 @@ test('SupportCurrencyService returns null rate when SAP has no data', async () =
       base_currency: 'UZS',
     });
   } finally {
+    SupportCurrencyService.resetCacheForTests();
     supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo =
       originalGetLatestExchangeRateInfo;
   }
@@ -62,6 +66,7 @@ test('SupportCurrencyService normalizes common currency aliases', async () => {
     supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo;
 
   let requestedCurrency = '';
+  SupportCurrencyService.resetCacheForTests();
   supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo = async (currency: string) => {
     requestedCurrency = currency;
     return {
@@ -78,6 +83,7 @@ test('SupportCurrencyService normalizes common currency aliases', async () => {
     assert.equal(result.currency, 'USD');
     assert.equal(result.rate, 12_500);
   } finally {
+    SupportCurrencyService.resetCacheForTests();
     supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo =
       originalGetLatestExchangeRateInfo;
   }
@@ -89,6 +95,7 @@ test('SupportCurrencyService converts UZS amounts to USD using the latest USD ra
   const originalGetLatestExchangeRateInfo =
     supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo;
 
+  SupportCurrencyService.resetCacheForTests();
   supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo = async () => ({
     currency: 'USD',
     rate: 12_500,
@@ -113,6 +120,46 @@ test('SupportCurrencyService converts UZS amounts to USD using the latest USD ra
       base_currency: 'UZS',
     });
   } finally {
+    SupportCurrencyService.resetCacheForTests();
+    supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo =
+      originalGetLatestExchangeRateInfo;
+  }
+});
+
+test('SupportCurrencyService reuses the cached USD rate across repeated conversions', async () => {
+  const supportCurrencyServiceClass = SupportCurrencyService as any;
+
+  const originalGetLatestExchangeRateInfo =
+    supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo;
+
+  let lookupCount = 0;
+  SupportCurrencyService.resetCacheForTests();
+  supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo = async () => {
+    lookupCount += 1;
+    return {
+      currency: 'USD',
+      rate: 12_500,
+      rateDate: '2026-04-12T00:00:00.000Z',
+    };
+  };
+
+  try {
+    const firstResult = await SupportCurrencyService.convertAmount({
+      amount: 12_500_000,
+      fromCurrency: 'UZS',
+      toCurrency: 'USD',
+    });
+    const secondResult = await SupportCurrencyService.convertAmount({
+      amount: 25_000_000,
+      fromCurrency: 'UZS',
+      toCurrency: 'USD',
+    });
+
+    assert.equal(lookupCount, 1);
+    assert.equal(firstResult.rate, 12_500);
+    assert.equal(secondResult.rate, 12_500);
+  } finally {
+    SupportCurrencyService.resetCacheForTests();
     supportCurrencyServiceClass.sapService.getLatestExchangeRateInfo =
       originalGetLatestExchangeRateInfo;
   }

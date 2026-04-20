@@ -36,6 +36,11 @@ export type MessageTemplateEditableField =
   | 'channel'
   | 'is_active';
 
+export type FaqEditableField =
+  | 'question_variants'
+  | 'answer_variants'
+  | 'agent_mode';
+
 export interface SessionData {
   user_phone?: string;
   pendingAction?: 'application';
@@ -83,4 +88,8 @@ export interface SessionData {
   adminFaqAnswerRegenerationInstructions?: string;
   adminFaqListPage?: number;
   adminFaqAgentToken?: string;
+  adminFaqEditTarget?: {
+    faqId: number;
+    field: FaqEditableField;
+  };
 }

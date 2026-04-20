@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { telegramMessageToHtml } from './telegram-rich-text.util';
+import { markdownToTelegramHtml, telegramMessageToHtml } from './telegram-rich-text.util';
 
 test('telegramMessageToHtml keeps plain text when there are no entities', () => {
   const result = telegramMessageToHtml({
@@ -33,4 +33,15 @@ test('telegramMessageToHtml supports caption entities and links', () => {
   });
 
   assert.equal(result, 'Visit <a href="https://example.com">site</a>');
+});
+
+test('markdownToTelegramHtml converts bold markdown for Telegram HTML parse mode', () => {
+  const result = markdownToTelegramHtml(
+    'Tushundim. **iPhone 16 Pro 128GB White (yangi)** modeli bo‘yicha aniqlab beraman.',
+  );
+
+  assert.equal(
+    result,
+    'Tushundim. <b>iPhone 16 Pro 128GB White (yangi)</b> modeli bo‘yicha aniqlab beraman.',
+  );
 });

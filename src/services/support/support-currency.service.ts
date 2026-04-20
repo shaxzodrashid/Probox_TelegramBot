@@ -1,5 +1,6 @@
 import { HanaService } from '../../sap/hana.service';
 import { SapService } from '../../sap/sap-hana.service';
+import { logger } from '../../utils/logger';
 
 const CURRENCY_ALIASES: Record<string, string> = {
   USD: 'USD',
@@ -58,8 +59,53 @@ const formatRateDate = (value: string | Date): string => {
   return parsed.toISOString().slice(0, 10);
 };
 
+interface CachedExchangeRateInfo {
+  ok: boolean;
+  currency: string;
+  rate: number | null;
+  rate_date: string | null;
+  base_currency: string;
+}
+
 export class SupportCurrencyService {
   private static readonly sapService = new SapService(new HanaService());
+  private static readonly exchangeRateCacheTtlMs = 30_000;
+  private static readonly exchangeRateCache = new Map<
+    string,
+    { expiresAt: number; value: CachedExchangeRateInfo }
+  >();
+  private static readonly exchangeRateInflight = new Map<string, Promise<CachedExchangeRateInfo>>();
+
+  private static getCachedExchangeRate(currency: string): CachedExchangeRateInfo | null {
+    const cachedEntry = this.exchangeRateCache.get(currency);
+    if (!cachedEntry) {
+      return null;
+    }
+
+    if (cachedEntry.expiresAt <= Date.now()) {
+      this.exchangeRateCache.delete(currency);
+      return null;
+    }
+
+    return cachedEntry.value;
+  }
+
+  private static setCachedExchangeRate(
+    currency: string,
+    value: CachedExchangeRateInfo,
+  ): CachedExchangeRateInfo {
+    this.exchangeRateCache.set(currency, {
+      expiresAt: Date.now() + this.exchangeRateCacheTtlMs,
+      value,
+    });
+
+    return value;
+  }
+
+  static resetCacheForTests(): void {
+    this.exchangeRateCache.clear();
+    this.exchangeRateInflight.clear();
+  }
 
   static async lookupExchangeRate(params: { currency: string }): Promise<{
     ok: boolean;
@@ -73,15 +119,40 @@ export class SupportCurrencyService {
       throw new Error('Currency is required');
     }
 
-    const result = await this.sapService.getLatestExchangeRateInfo(currency);
+    const cachedResult = this.getCachedExchangeRate(currency);
+    if (cachedResult) {
+      logger.debug('[SUPPORT_CURRENCY] Reusing cached exchange rate', {
+        currency,
+        rate: cachedResult.rate,
+        rateDate: cachedResult.rate_date,
+      });
+      return cachedResult;
+    }
 
-    return {
-      ok: true,
-      currency,
-      rate: result?.rate ?? null,
-      rate_date: result?.rateDate ? formatRateDate(result.rateDate) : null,
-      base_currency: 'UZS',
-    };
+    const inflightRequest = this.exchangeRateInflight.get(currency);
+    if (inflightRequest) {
+      return inflightRequest;
+    }
+
+    const request = (async () => {
+      const result = await this.sapService.getLatestExchangeRateInfo(currency);
+
+      return this.setCachedExchangeRate(currency, {
+        ok: true,
+        currency,
+        rate: result?.rate ?? null,
+        rate_date: result?.rateDate ? formatRateDate(result.rateDate) : null,
+        base_currency: 'UZS',
+      });
+    })();
+
+    this.exchangeRateInflight.set(currency, request);
+
+    try {
+      return await request;
+    } finally {
+      this.exchangeRateInflight.delete(currency);
+    }
   }
 
   static async convertAmount(params: {

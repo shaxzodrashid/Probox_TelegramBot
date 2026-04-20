@@ -7,7 +7,7 @@ import { UserService } from '../services/user.service';
 import { logger } from '../utils/logger';
 import { getLocaleFromConversation } from '../utils/locale';
 import { bot } from '../bot';
-import { processSupportRequest } from '../utils/support/support.util';
+import { enqueueSupportRequest } from '../utils/support/support.util';
 import {
     resolveUiTextAction,
     routeUiTextAction,
@@ -97,7 +97,7 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
             // Check for text message
             if (message?.text) {
                 try {
-                    await conversation.external(() => processSupportRequest(
+                    await conversation.external(() => enqueueSupportRequest(
                         bot.api,
                         messageContext,
                         user,
@@ -106,7 +106,7 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
                         undefined,
                         locale
                     ));
-                } catch (error) {
+                } catch {
                     // processSupportRequest already logs and notifies user
                 }
                 return;
@@ -118,7 +118,7 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
                 const caption = message.caption || `[${i18n.t(locale, 'admin_broadcast_enter_message')}]`;
 
                 try {
-                    await conversation.external(() => processSupportRequest(
+                    await conversation.external(() => enqueueSupportRequest(
                         bot.api,
                         messageContext,
                         user,
@@ -127,7 +127,7 @@ export async function supportConversation(conversation: BotConversation, ctx: Bo
                         photoFileId,
                         locale
                     ));
-                } catch (error) {
+                } catch {
                     // processSupportRequest already logs and notifies user
                 }
                 return;

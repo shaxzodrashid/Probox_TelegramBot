@@ -95,6 +95,25 @@ export function isMessageNotModifiedError(error: unknown): boolean {
 }
 
 /**
+ * Extract the migrated chat ID from Telegram's "group chat was upgraded to a supergroup chat" error.
+ */
+export function getMigratedChatId(error: unknown): string | null {
+    if (!(error instanceof GrammyError)) {
+        return null;
+    }
+
+    const migratedChatId = (error as GrammyError & {
+        parameters?: { migrate_to_chat_id?: string | number };
+    }).parameters?.migrate_to_chat_id;
+
+    if (migratedChatId === undefined || migratedChatId === null) {
+        return null;
+    }
+
+    return String(migratedChatId).trim() || null;
+}
+
+/**
  * Get retry-after seconds from rate limit error
  */
 export function getRetryAfterSeconds(error: unknown): number {

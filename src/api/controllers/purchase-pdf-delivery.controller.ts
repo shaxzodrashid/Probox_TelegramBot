@@ -1,11 +1,11 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { config } from '../../config';
 import {
   PurchasePdfDeliveryError,
   PurchasePdfDeliveryPayload,
   PurchasePdfDeliveryService,
 } from '../../services/purchase-pdf-delivery.service';
 import { ApiError } from '../errors/api-error';
+import { hasAdminGroupChatId } from '../../utils/telegram/admin-group-chat.util';
 
 type RawPurchasePdfDeliveryBody = Record<string, unknown>;
 
@@ -102,9 +102,9 @@ export const deliverPurchasePdf = async (
 
     if (!result.adminGroupDelivered) {
       throw new ApiError(
-        config.ADMIN_GROUP_ID ? 502 : 500,
+        hasAdminGroupChatId() ? 502 : 500,
         result.errors.adminGroup || 'Failed to send the PDF to the admin group.',
-        config.ADMIN_GROUP_ID ? 'ADMIN_GROUP_SEND_FAILED' : 'ADMIN_GROUP_NOT_CONFIGURED',
+        hasAdminGroupChatId() ? 'ADMIN_GROUP_SEND_FAILED' : 'ADMIN_GROUP_NOT_CONFIGURED',
         result,
       );
     }

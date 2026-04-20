@@ -67,6 +67,26 @@ export interface GeminiFunctionCallingConfig {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const sortRecordKeys = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sortRecordKeys(entry));
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.keys(value)
+    .sort((left, right) => left.localeCompare(right))
+    .reduce<Record<string, unknown>>((accumulator, key) => {
+      accumulator[key] = sortRecordKeys(value[key]);
+      return accumulator;
+    }, {});
+};
+
+const buildToolCallFingerprint = (name: string, args: Record<string, unknown>): string =>
+  `${name}:${JSON.stringify(sortRecordKeys(args))}`;
+
 const dedupeStrings = (values: string[]): string[] => {
   const seen = new Set<string>();
   const uniqueValues: string[] = [];
@@ -139,7 +159,9 @@ export class GeminiService {
     }
   }
 
-  private static extractFirstJsonValue(text: string): string | null {
+  private static extractJsonValues(text: string): string[] {
+    const candidates: string[] = [];
+
     for (let startIndex = 0; startIndex < text.length; startIndex += 1) {
       const startChar = text[startIndex];
       if (startChar !== '{' && startChar !== '[') {
@@ -147,13 +169,13 @@ export class GeminiService {
       }
 
       const stack = [startChar];
-      let inString = false;
+      let activeQuote: '"' | "'" | null = null;
       let isEscaped = false;
 
       for (let cursor = startIndex + 1; cursor < text.length; cursor += 1) {
         const currentChar = text[cursor];
 
-        if (inString) {
+        if (activeQuote) {
           if (isEscaped) {
             isEscaped = false;
             continue;
@@ -164,15 +186,19 @@ export class GeminiService {
             continue;
           }
 
-          if (currentChar === '"') {
-            inString = false;
+          if (currentChar === activeQuote) {
+            if (activeQuote === "'" && !this.shouldCloseSingleQuotedString(text, cursor)) {
+              continue;
+            }
+
+            activeQuote = null;
           }
 
           continue;
         }
 
-        if (currentChar === '"') {
-          inString = true;
+        if (currentChar === '"' || currentChar === "'") {
+          activeQuote = currentChar;
           continue;
         }
 
@@ -192,12 +218,13 @@ export class GeminiService {
 
         stack.pop();
         if (stack.length === 0) {
-          return text.slice(startIndex, cursor + 1).trim();
+          candidates.push(text.slice(startIndex, cursor + 1).trim());
+          break;
         }
       }
     }
 
-    return null;
+    return dedupeStrings(candidates);
   }
 
   private static buildJsonCandidates(text: string): string[] {
@@ -215,10 +242,7 @@ export class GeminiService {
       }
     }
 
-    const firstJsonValue = this.extractFirstJsonValue(normalized);
-    if (firstJsonValue) {
-      candidates.push(firstJsonValue);
-    }
+    candidates.push(...this.extractJsonValues(normalized));
 
     return dedupeStrings(candidates);
   }
@@ -562,8 +586,11 @@ export class GeminiService {
     model?: string;
     prompt: string;
     schemaName: string;
+    systemInstruction?: string | string[];
+    responseSchema?: Record<string, unknown>;
   }): Promise<T> {
     const model = params.model || config.GEMINI_TEXT_MODEL;
+    const systemInstruction = this.buildSystemInstruction(params.systemInstruction);
     const response = await this.withRetry(() =>
       this.client.post<GeminiGenerateResponse>(
         `/${model}:generateContent`,
@@ -575,7 +602,9 @@ export class GeminiService {
           ],
           generationConfig: {
             responseMimeType: 'application/json',
+            ...(params.responseSchema ? { responseJsonSchema: params.responseSchema } : {}),
           },
+          ...(systemInstruction ? { systemInstruction } : {}),
         },
         {
           params: {
@@ -597,6 +626,69 @@ export class GeminiService {
     return this.parseJsonPayload<T>(text, params.schemaName);
   }
 
+  private static async finalizeToolConversation<T>(params: {
+    model: string;
+    schemaName: string;
+    contents: Array<{
+      role: string;
+      parts: Array<Record<string, unknown>>;
+    }>;
+    responseSchema?: Record<string, unknown>;
+    systemInstruction?: string | string[];
+    reason: string;
+  }): Promise<T> {
+    const systemInstruction = this.buildSystemInstruction(params.systemInstruction);
+    const generationConfig = params.responseSchema
+      ? {
+          responseMimeType: 'application/json',
+          responseJsonSchema: params.responseSchema,
+        }
+      : undefined;
+
+    const response = await this.withRetry(() =>
+      this.client.post<GeminiGenerateResponse>(
+        `/${params.model}:generateContent`,
+        {
+          contents: [
+            ...params.contents,
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `Return the final ${params.schemaName} JSON now using only the grounded context already in this conversation. Do not call any more tools. Reason: ${params.reason}`,
+                },
+              ],
+            },
+          ],
+          ...(generationConfig ? { generationConfig } : {}),
+          ...(systemInstruction ? { systemInstruction } : {}),
+        },
+        {
+          params: {
+            key: this.getApiKey(),
+          },
+        },
+      ),
+    );
+
+    const candidate = response.data.candidates?.[0];
+    const text = candidate?.content?.parts
+      ?.map((part) => part.text || '')
+      .join('')
+      .trim();
+
+    if (!text) {
+      const finishReason = candidate?.finishReason
+        ? ` (finishReason=${candidate.finishReason})`
+        : '';
+      throw new Error(
+        `Gemini returned an empty ${params.schemaName} payload during finalization${finishReason}`,
+      );
+    }
+
+    return this.parseJsonPayload<T>(text, params.schemaName);
+  }
+
   static async generateJsonWithTools<T>(params: {
     model?: string;
     prompt: string;
@@ -612,16 +704,25 @@ export class GeminiService {
         model: params.model,
         prompt: params.prompt,
         schemaName: params.schemaName,
+        systemInstruction: params.systemInstruction,
+        responseSchema: params.responseSchema,
       });
     }
 
     const model = params.model || config.GEMINI_TEXT_MODEL;
     const maxToolIterations = Math.max(1, params.maxToolIterations || 3);
     const toolMap = new Map(params.tools.map((tool) => [tool.declaration.name, tool]));
+    const toolResultCache = new Map<string, unknown>();
     const systemInstruction = this.buildSystemInstruction(params.systemInstruction);
     const functionCallingConfig = params.functionCallingConfig;
-    // Gemini rejects combining function calling with JSON-mode response mime types.
-    // For tool-enabled requests we rely on prompt instructions and local JSON repair/parsing instead.
+    const generationConfig = params.responseSchema
+      ? {
+          responseMimeType: 'application/json',
+          responseJsonSchema: params.responseSchema,
+        }
+      : undefined;
+    // Structured outputs shape Gemini's final response payload.
+    // Function calling config independently controls whether Gemini should call our tools first.
     const contents: Array<{
       role: string;
       parts: Array<Record<string, unknown>>;
@@ -644,6 +745,7 @@ export class GeminiService {
               },
             ],
             ...(systemInstruction ? { systemInstruction } : {}),
+            ...(generationConfig ? { generationConfig } : {}),
             ...(functionCallingConfig
               ? {
                   toolConfig: {
@@ -695,6 +797,8 @@ export class GeminiService {
       });
 
       const functionResponseParts: Array<Record<string, unknown>> = [];
+      const duplicateToolCallNames: string[] = [];
+      let executedFreshToolCall = false;
 
       for (const functionCall of functionCalls) {
         const tool = toolMap.get(functionCall.name || '');
@@ -703,15 +807,24 @@ export class GeminiService {
         }
 
         const rawArgs = isRecord(functionCall.args) ? functionCall.args : {};
+        const fingerprint = buildToolCallFingerprint(functionCall.name || '', rawArgs);
 
         let toolResult: unknown;
-        try {
-          toolResult = await tool.execute(rawArgs);
-        } catch (error) {
-          toolResult = {
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          };
+        if (toolResultCache.has(fingerprint)) {
+          toolResult = toolResultCache.get(fingerprint);
+          duplicateToolCallNames.push(functionCall.name || 'unknown');
+        } else {
+          try {
+            toolResult = await tool.execute(rawArgs);
+          } catch (error) {
+            toolResult = {
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+
+          toolResultCache.set(fingerprint, toolResult);
+          executedFreshToolCall = true;
         }
 
         functionResponseParts.push({
@@ -723,13 +836,51 @@ export class GeminiService {
         });
       }
 
+      if (duplicateToolCallNames.length > 0) {
+        const uniqueDuplicateToolCallNames = dedupeStrings(duplicateToolCallNames);
+        const guidance =
+          uniqueDuplicateToolCallNames.length === 1
+            ? `Duplicate call to ${uniqueDuplicateToolCallNames[0]} was not re-executed because the same grounded result was already returned earlier in this conversation.`
+            : `Duplicate calls to ${uniqueDuplicateToolCallNames.join(', ')} were not re-executed because the same grounded results were already returned earlier in this conversation.`;
+
+        functionResponseParts.push({
+          text: `${guidance} Use the existing grounded tool results and finish the JSON reply unless you truly need a different tool call.`,
+        });
+      }
+
+      if (!executedFreshToolCall && duplicateToolCallNames.length === functionCalls.length) {
+        functionResponseParts.push({
+          text: 'No new tool executions were performed in this turn because every requested tool call duplicated an earlier one.',
+        });
+      }
+
       contents.push({
         role: 'user',
         parts: functionResponseParts,
       });
+
+      if (!executedFreshToolCall) {
+        return this.finalizeToolConversation<T>({
+          model,
+          schemaName: params.schemaName,
+          contents,
+          responseSchema: params.responseSchema,
+          systemInstruction: params.systemInstruction,
+          reason:
+            'The model only requested duplicate tool calls, so it must answer from the existing grounded results.',
+        });
+      }
     }
 
-    throw new Error(`Gemini ${params.schemaName} exceeded the tool iteration limit`);
+    return this.finalizeToolConversation<T>({
+      model,
+      schemaName: params.schemaName,
+      contents,
+      responseSchema: params.responseSchema,
+      systemInstruction: params.systemInstruction,
+      reason:
+        'The tool iteration budget is exhausted, so the final answer must be composed from the grounded tool results already collected.',
+    });
   }
 
   static async embedText(params: {

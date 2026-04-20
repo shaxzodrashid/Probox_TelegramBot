@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { InputFile } from 'grammy';
 import { bot } from '../bot';
-import { config } from '../config';
 import { logger } from '../utils/logger';
+import { hasAdminGroupChatId, withAdminGroupMigrationRetry } from '../utils/telegram/admin-group-chat.util';
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import { isUserBlockedError } from '../utils/telegram/telegram-errors';
 import { User, UserService } from './user.service';
@@ -255,21 +255,19 @@ export class PurchasePdfDeliveryService {
     fileName: string;
     caption: string;
   }): Promise<{ delivered: boolean; error?: string }> {
-    if (!config.ADMIN_GROUP_ID) {
+    if (!hasAdminGroupChatId()) {
       return {
         delivered: false,
-        error: 'ADMIN_GROUP_ID is not configured.',
+        error: 'SUPPORT_GROUP_ID is not configured.',
       };
     }
 
     try {
-      await bot.api.sendDocument(
-        config.ADMIN_GROUP_ID,
-        new InputFile(Buffer.from(params.pdfBuffer), params.fileName),
-        {
+      await withAdminGroupMigrationRetry((chatId) =>
+        bot.api.sendDocument(chatId, new InputFile(Buffer.from(params.pdfBuffer), params.fileName), {
           caption: params.caption,
           parse_mode: 'HTML',
-        },
+        }),
       );
 
       return { delivered: true };

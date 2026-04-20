@@ -7,6 +7,10 @@ export const ADMIN_FAQ_RESUME_CALLBACK = 'admin_faq_resume';
 export const ADMIN_FAQ_BACK_CALLBACK = 'admin_faq_back';
 export const ADMIN_FAQ_PAGE_CALLBACK_PREFIX = 'afp:';
 export const ADMIN_FAQ_DETAIL_CALLBACK_PREFIX = 'afd:';
+export const ADMIN_FAQ_EDIT_CALLBACK_PREFIX = 'afe:';
+export const ADMIN_FAQ_DELETE_CALLBACK_PREFIX = 'afdel:';
+export const ADMIN_FAQ_DELETE_CONFIRM_CALLBACK_PREFIX = 'afdelc:';
+export const ADMIN_FAQ_DELETE_CANCEL_CALLBACK_PREFIX = 'afdelx:';
 export const ADMIN_FAQ_BACK_TO_LIST_CALLBACK = 'admin_faqs_back';
 
 export const getAdminFaqSectionKeyboard = (
@@ -69,11 +73,28 @@ export const getAdminFaqListKeyboard = (
 };
 
 export const getAdminFaqDetailKeyboard = (
-  faqId: number,
+  faq: FaqRecord,
   locale: string,
   options: { hasDraft: boolean },
 ) => {
   const keyboard = new InlineKeyboard()
+    .text(
+      i18n.t(locale, 'admin_faq_edit_questions'),
+      `${ADMIN_FAQ_EDIT_CALLBACK_PREFIX}${faq.id}:question_variants`,
+    )
+    .text(
+      i18n.t(locale, 'admin_faq_edit_answers'),
+      `${ADMIN_FAQ_EDIT_CALLBACK_PREFIX}${faq.id}:answer_variants`,
+    )
+    .row()
+    .text(
+      faq.agent_enabled
+        ? i18n.t(locale, 'admin_faq_refresh_agent_mode')
+        : i18n.t(locale, 'admin_faq_mark_for_agent'),
+      `${ADMIN_FAQ_EDIT_CALLBACK_PREFIX}${faq.id}:agent_mode`,
+    )
+    .text(i18n.t(locale, 'admin_faq_delete'), `${ADMIN_FAQ_DELETE_CALLBACK_PREFIX}${faq.id}`)
+    .row()
     .text(i18n.t(locale, 'admin_faq_open_list'), ADMIN_FAQ_BACK_TO_LIST_CALLBACK)
     .row()
     .text(i18n.t(locale, 'admin_faq_create'), ADMIN_FAQ_CREATE_CALLBACK)
@@ -86,3 +107,8 @@ export const getAdminFaqDetailKeyboard = (
   keyboard.text(i18n.t(locale, 'admin_back_to_menu'), ADMIN_FAQ_BACK_CALLBACK);
   return keyboard;
 };
+
+export const getAdminFaqDeleteConfirmKeyboard = (faqId: number, locale: string) =>
+  new InlineKeyboard()
+    .text(i18n.t(locale, 'admin_confirm_yes'), `${ADMIN_FAQ_DELETE_CONFIRM_CALLBACK_PREFIX}${faqId}`)
+    .text(i18n.t(locale, 'admin_confirm_no'), `${ADMIN_FAQ_DELETE_CANCEL_CALLBACK_PREFIX}${faqId}`);

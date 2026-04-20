@@ -46,7 +46,10 @@ import {
   adminTemplateCreateConversation,
   adminTemplateEditConversation
 } from './conversations/admin-template.conversation';
-import { adminFaqCreateConversation } from './conversations/admin-faq.conversation';
+import {
+  adminFaqCreateConversation,
+  adminFaqEditConversation
+} from './conversations/admin-faq.conversation';
 import { branchesConversation } from './conversations/branches.conversation';
 import { supportHandler } from './handlers/support.handler';
 import {
@@ -109,7 +112,11 @@ import {
   adminFaqResumeHandler,
   adminFaqPageHandler,
   adminFaqDetailHandler,
-  adminFaqBackToListHandler
+  adminFaqBackToListHandler,
+  adminFaqEditHandler,
+  adminFaqDeleteHandler,
+  adminFaqDeleteConfirmHandler,
+  adminFaqDeleteCancelHandler
 } from './handlers/admin.handler';
 import {
   campaignBackToPromotionsHandler,
@@ -158,7 +165,11 @@ import {
   ADMIN_FAQ_BACK_CALLBACK,
   ADMIN_FAQ_BACK_TO_LIST_CALLBACK,
   ADMIN_FAQ_CREATE_CALLBACK,
+  ADMIN_FAQ_DELETE_CALLBACK_PREFIX,
+  ADMIN_FAQ_DELETE_CANCEL_CALLBACK_PREFIX,
+  ADMIN_FAQ_DELETE_CONFIRM_CALLBACK_PREFIX,
   ADMIN_FAQ_DETAIL_CALLBACK_PREFIX,
+  ADMIN_FAQ_EDIT_CALLBACK_PREFIX,
   ADMIN_FAQ_PAGE_CALLBACK_PREFIX,
   ADMIN_FAQ_RESUME_CALLBACK,
 } from './keyboards/faq.keyboards';
@@ -176,7 +187,7 @@ import { applicationConversation } from './conversations/application.conversatio
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
 import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from './utils/telegram/telegram-errors';
-import { processSupportRequest } from './utils/support/support.util';
+import { enqueueSupportRequest } from './utils/support/support.util';
 import { getMainKeyboardByLocale } from './keyboards';
 import { FaqService } from './services/faq/faq.service';
 import {
@@ -256,6 +267,7 @@ bot.use(createConversation(adminPromotionEditConversation));
 bot.use(createConversation(adminTemplateCreateConversation));
 bot.use(createConversation(adminTemplateEditConversation));
 bot.use(createConversation(adminFaqCreateConversation));
+bot.use(createConversation(adminFaqEditConversation));
 bot.use(createConversation(addPassportDataConversation));
 bot.use(createConversation(applicationConversation));
 bot.use(createConversation(branchesConversation));
@@ -584,6 +596,10 @@ bot.callbackQuery(ADMIN_FAQ_CREATE_CALLBACK, adminFaqCreateHandler);
 bot.callbackQuery(ADMIN_FAQ_RESUME_CALLBACK, adminFaqResumeHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_PAGE_CALLBACK_PREFIX}\\d+$`), adminFaqPageHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DETAIL_CALLBACK_PREFIX}\\d+$`), adminFaqDetailHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminFaqEditHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DELETE_CALLBACK_PREFIX}\\d+$`), adminFaqDeleteHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DELETE_CONFIRM_CALLBACK_PREFIX}\\d+$`), adminFaqDeleteConfirmHandler);
+bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DELETE_CANCEL_CALLBACK_PREFIX}\\d+$`), adminFaqDeleteCancelHandler);
 bot.callbackQuery(ADMIN_FAQ_BACK_TO_LIST_CALLBACK, adminFaqBackToListHandler);
 bot.callbackQuery(ADMIN_FAQ_BACK_CALLBACK, adminBackToMenuHandler);
 
@@ -689,7 +705,7 @@ bot.on(['message:text', 'message:photo'], async (ctx) => {
   const photoFileId = ctx.message.photo?.[ctx.message.photo.length - 1].file_id;
 
   try {
-    await processSupportRequest(
+    await enqueueSupportRequest(
         bot.api,
         ctx,
         user,
@@ -698,7 +714,7 @@ bot.on(['message:text', 'message:photo'], async (ctx) => {
         photoFileId,
         locale
     );
-  } catch (error) {
+  } catch {
     // Already logged in processSupportRequest
   }
 });

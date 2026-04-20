@@ -3,6 +3,7 @@ import { FaqRecord } from '../../types/faq.types';
 import {
   FAQ_ROUTING_MIN_MARGIN,
   FAQ_ROUTING_MIN_SCORE,
+  FAQ_STATIC_ROUTING_CONCEPT_LEAD_MIN_SCORE,
   FAQ_STATIC_ROUTING_MIN_SCORE,
   rankFaqCandidatesForRouting,
 } from '../../utils/faq/faq-routing-score.util';
@@ -69,6 +70,9 @@ export class FaqRoutingService {
     const scoreMargin = topCandidate && secondCandidate
       ? topCandidate.routingScore - secondCandidate.routingScore
       : topCandidate?.routingScore ?? 0;
+    const topMatchedConceptCount = topCandidate?.matchedConcepts.length ?? 0;
+    const secondMatchedConceptCount = secondCandidate?.matchedConcepts.length ?? 0;
+    const hasStaticConceptLead = topMatchedConceptCount > secondMatchedConceptCount;
     const aiCandidates = rankedCandidates
       .filter((candidate, index) => candidate.routingScore >= FAQ_ROUTING_MIN_SCORE || index === 0)
       .slice(0, 3);
@@ -104,15 +108,36 @@ export class FaqRoutingService {
       topCandidate &&
       !topCandidate.faq.agent_enabled &&
       topCandidate.routingScore >= FAQ_STATIC_ROUTING_MIN_SCORE &&
-      scoreMargin >= FAQ_ROUTING_MIN_MARGIN
+      (
+        scoreMargin >= FAQ_ROUTING_MIN_MARGIN ||
+        (topCandidate.routingScore >= FAQ_STATIC_ROUTING_CONCEPT_LEAD_MIN_SCORE && hasStaticConceptLead)
+      )
     ) {
       logger.info(
-        `[FAQ_ROUTING] Accepted static semantic FAQ auto-reply for question="${questionPreview}" using faq:${topCandidate.faq.id} distance=${topCandidate.distance.toFixed(4)} score=${topCandidate.routingScore.toFixed(4)} margin=${scoreMargin.toFixed(4)}`,
+        `[FAQ_ROUTING] Accepted static semantic FAQ auto-reply for question="${questionPreview}" using faq:${topCandidate.faq.id} distance=${topCandidate.distance.toFixed(4)} score=${topCandidate.routingScore.toFixed(4)} margin=${scoreMargin.toFixed(4)} conceptLead=${topMatchedConceptCount}-${secondMatchedConceptCount}`,
       );
       return this.toSemanticResolution(
         topCandidate,
         1,
-        'Top semantic FAQ candidate cleared the static auto-reply threshold.',
+        hasStaticConceptLead && scoreMargin < FAQ_ROUTING_MIN_MARGIN
+          ? 'Top semantic FAQ candidate covered more of the user intent than the runner-up.'
+          : 'Top semantic FAQ candidate cleared the static auto-reply threshold.',
+        'semantic',
+      );
+    }
+
+    if (
+      topCandidate &&
+      !topCandidate.faq.agent_enabled &&
+      topCandidate.routingScore >= FAQ_ROUTING_MIN_SCORE
+    ) {
+      logger.info(
+        `[FAQ_ROUTING] Accepted high-confidence static FAQ auto-reply for question="${questionPreview}" using faq:${topCandidate.faq.id} score=${topCandidate.routingScore.toFixed(4)} without agent gating.`,
+      );
+      return this.toSemanticResolution(
+        topCandidate,
+        1,
+        'Top semantic FAQ candidate cleared the high-confidence static threshold.',
         'semantic',
       );
     }

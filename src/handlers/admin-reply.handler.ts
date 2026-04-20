@@ -6,8 +6,8 @@ import { UserService } from '../services/user.service';
 import { redisService } from '../redis/redis.service';
 import { logger } from '../utils/logger';
 import { bot } from '../bot';
-import { config } from '../config';
 import { i18n } from '../i18n';
+import { getAdminGroupChatId, withAdminGroupMigrationRetry } from '../utils/telegram/admin-group-chat.util';
 import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from '../utils/telegram/telegram-errors';
 
 // Redis key prefix for admin reply session data
@@ -120,20 +120,22 @@ export async function handleCloseButton(ctx: BotContext): Promise<void> {
 
             // Update the message in admin group to show closed status
             try {
-                if (ticket.group_message_id && config.ADMIN_GROUP_ID) {
+                if (ticket.group_message_id && getAdminGroupChatId()) {
                     const closedMessage = `📩 Murojaat #${ticketNumber} ⚫ YOPILDI\n\n✅ Murojaat yopildi.`;
 
                     if (ticket.photo_file_id) {
-                        await bot.api
-                            .editMessageCaption(config.ADMIN_GROUP_ID, ticket.group_message_id, { caption: closedMessage })
+                        await withAdminGroupMigrationRetry((chatId) =>
+                            bot.api.editMessageCaption(chatId, ticket.group_message_id!, { caption: closedMessage })
+                        )
                             .catch((err) => {
                                 if (!isMessageToDeleteNotFoundError(err)) throw err;
                             });
                     } else {
-                        await bot.api
-                            .editMessageText(config.ADMIN_GROUP_ID, ticket.group_message_id, closedMessage, {
+                        await withAdminGroupMigrationRetry((chatId) =>
+                            bot.api.editMessageText(chatId, ticket.group_message_id!, closedMessage, {
                                 reply_markup: undefined,
                             })
+                        )
                             .catch((err) => {
                                 if (!isMessageToDeleteNotFoundError(err)) throw err;
                             });

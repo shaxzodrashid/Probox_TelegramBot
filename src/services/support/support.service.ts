@@ -226,6 +226,19 @@ export class SupportService {
         return this.normalizeTicket(ticket);
     }
 
+    static async getLatestOpenUnforwardedTicketByUserTelegramId(
+        userTelegramId: number
+    ): Promise<SupportTicket | null> {
+        const ticket = await db<SupportTicket>('support_tickets')
+            .where('user_telegram_id', userTelegramId)
+            .where('status', 'open')
+            .whereNull('group_message_id')
+            .orderBy('created_at', 'desc')
+            .first();
+
+        return this.normalizeTicket(ticket);
+    }
+
     static async appendMessage(params: {
         ticketId: number;
         senderType: SupportMessageSenderType;
@@ -268,6 +281,27 @@ export class SupportService {
                 photo_file_id: params.photoFileId || null,
                 updated_at: new Date(),
             });
+    }
+
+    static async updateTicketHandling(params: {
+        ticketId: number;
+        handlingMode: SupportHandlingMode;
+        matchedFaqId?: number | null;
+        agentToken?: string | null;
+        agentEscalationReason?: string | null;
+    }): Promise<SupportTicket | null> {
+        const [result] = await db<SupportTicket>('support_tickets')
+            .where('id', params.ticketId)
+            .update({
+                handling_mode: params.handlingMode,
+                matched_faq_id: params.matchedFaqId ?? null,
+                agent_token: params.agentToken ?? null,
+                agent_escalation_reason: params.agentEscalationReason ?? null,
+                updated_at: new Date(),
+            })
+            .returning('*');
+
+        return this.normalizeTicket(result);
     }
 
     static async getTicketMessages(ticketId: number): Promise<SupportTicketMessage[]> {

@@ -1,4 +1,9 @@
-import { BotContext, PromotionEditableField, PromotionPrizeEditableField } from '../types/context';
+import {
+    BotContext,
+    FaqEditableField,
+    PromotionEditableField,
+    PromotionPrizeEditableField,
+} from '../types/context';
 import { AdminService } from '../services/admin.service';
 import { ExportService } from '../services/export.service';
 import { SupportService } from '../services/support/support.service';
@@ -72,15 +77,20 @@ import {
     ADMIN_FAQ_BACK_CALLBACK,
     ADMIN_FAQ_BACK_TO_LIST_CALLBACK,
     ADMIN_FAQ_CREATE_CALLBACK,
+    ADMIN_FAQ_DELETE_CALLBACK_PREFIX,
+    ADMIN_FAQ_DELETE_CANCEL_CALLBACK_PREFIX,
+    ADMIN_FAQ_DELETE_CONFIRM_CALLBACK_PREFIX,
     ADMIN_FAQ_DETAIL_CALLBACK_PREFIX,
     ADMIN_FAQ_PAGE_CALLBACK_PREFIX,
     ADMIN_FAQ_RESUME_CALLBACK,
+    getAdminFaqDeleteConfirmKeyboard,
     getAdminFaqDetailKeyboard,
     getAdminFaqListKeyboard,
 } from '../keyboards/faq.keyboards';
 import { FaqService } from '../services/faq/faq.service';
 import { getFaqAgentToken } from '../utils/faq/faq-match.util';
 import { FaqRecord } from '../types/faq.types';
+import { formatDateTimeForLocale } from '../utils/time/tashkent-time.util';
 
 /**
  * Check if user is an admin
@@ -153,7 +163,8 @@ const buildAdminFaqListText = (
 
     faqs.forEach((faq, index) => {
         const itemNumber = start + index;
-        lines.push(`<b>${itemNumber}.</b> ${escapeHtml(getFaqQuestionByLocale(faq, locale))}`);
+        const markers = faq.agent_enabled ? '🤖' : '💬';
+        lines.push(`<b>${itemNumber}.</b> ${markers} ${escapeHtml(getFaqQuestionByLocale(faq, locale))}`);
 
         if (index !== faqs.length - 1) {
             lines.push('');
@@ -168,9 +179,15 @@ const buildAdminFaqDetailText = (locale: string, faq: FaqRecord) => {
     const agentStatus = agentToken
         ? i18n.t(locale, 'admin_faq_agent_status_enabled')
         : i18n.t(locale, 'admin_faq_agent_status_disabled');
+    const statusLabel = faq.status === 'published'
+        ? i18n.t(locale, 'admin_faq_status_published')
+        : i18n.t(locale, 'admin_faq_status_draft');
 
     return [
         `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_title'))}</b>`,
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_status'))}</b>`,
+        escapeHtml(statusLabel),
         '',
         `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_question_uz'))}</b>`,
         escapeHtml(faq.question_uz),
@@ -195,10 +212,13 @@ const buildAdminFaqDetailText = (locale: string, faq: FaqRecord) => {
         '',
         `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_agent_token'))}</b>`,
         escapeHtml(agentToken || i18n.t(locale, 'admin_faq_agent_token_empty')),
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_faq_detail_updated_at'))}</b>`,
+        escapeHtml(formatDateTimeForLocale(faq.updated_at, locale)),
     ].join('\n');
 };
 
-const showAdminFaqList = async (
+export const showAdminFaqList = async (
     ctx: BotContext,
     locale: string,
     page: number,
@@ -224,7 +244,7 @@ const showAdminFaqList = async (
     });
 };
 
-const showAdminFaqDetailCard = async (
+export const showAdminFaqDetailCard = async (
     ctx: BotContext,
     locale: string,
     faqId: number,
@@ -240,7 +260,7 @@ const showAdminFaqDetailCard = async (
 
     await ctx.reply(buildAdminFaqDetailText(locale, faq), {
         parse_mode: 'HTML',
-        reply_markup: getAdminFaqDetailKeyboard(faqId, locale, { hasDraft }),
+        reply_markup: getAdminFaqDetailKeyboard(faq, locale, { hasDraft }),
     });
 };
 
@@ -1381,6 +1401,99 @@ export const adminFaqResumeHandler = async (ctx: BotContext) => {
         await ctx.conversation.enter('adminFaqCreateConversation');
     } catch (error) {
         logger.error('Error in adminFaqResumeHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqEditHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const parts = ctx.callbackQuery?.data?.split(':') || [];
+        const faqId = Number(parts[1] || 0);
+        const field = parts[2];
+
+        if (!faqId || !field) {
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true }).catch(() => undefined);
+            return;
+        }
+
+        await cleanupCallbackMessage(ctx);
+        ctx.session.adminFaqEditTarget = {
+            faqId,
+            field: field as FaqEditableField,
+        };
+
+        await ctx.conversation.exitAll();
+        await ctx.conversation.enter('adminFaqEditConversation');
+    } catch (error) {
+        logger.error('Error in adminFaqEditHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqDeleteHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const faqId = Number(ctx.callbackQuery?.data?.slice(ADMIN_FAQ_DELETE_CALLBACK_PREFIX.length) || 0);
+        const faq = await FaqService.getPublishedFaqById(faqId);
+
+        if (!faq) {
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_faq_not_found'), show_alert: true }).catch(() => undefined);
+            return;
+        }
+
+        await cleanupCallbackMessage(ctx);
+        await ctx.reply(
+            i18n.t(locale, 'admin_faq_delete_confirm_text', {
+                question: escapeHtml(getFaqQuestionByLocale(faq, locale)),
+            }),
+            {
+                reply_markup: getAdminFaqDeleteConfirmKeyboard(faq.id, locale),
+            },
+        );
+    } catch (error) {
+        logger.error('Error in adminFaqDeleteHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqDeleteConfirmHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const faqId = Number(ctx.callbackQuery?.data?.slice(ADMIN_FAQ_DELETE_CONFIRM_CALLBACK_PREFIX.length) || 0);
+        const deleted = await FaqService.deletePublishedFaq(faqId);
+
+        await cleanupCallbackMessage(ctx);
+        await ctx.reply(deleted ? i18n.t(locale, 'admin_faq_deleted') : i18n.t(locale, 'admin_faq_not_found'));
+        await showAdminFaqList(ctx, locale, ctx.session.adminFaqListPage || 1);
+    } catch (error) {
+        logger.error('Error in adminFaqDeleteConfirmHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminFaqDeleteCancelHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const faqId = Number(ctx.callbackQuery?.data?.slice(ADMIN_FAQ_DELETE_CANCEL_CALLBACK_PREFIX.length) || 0);
+
+        await cleanupCallbackMessage(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_faq_delete_cancelled'));
+        await showAdminFaqDetailCard(ctx, locale, faqId);
+    } catch (error) {
+        logger.error('Error in adminFaqDeleteCancelHandler:', error);
         const locale = getLocale(ctx);
         await ctx.reply(i18n.t(locale, 'admin_error'));
     }

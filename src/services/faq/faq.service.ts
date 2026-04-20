@@ -20,6 +20,11 @@ interface UpdateDraftAgentSettingsInput {
   agentToken: string | null;
 }
 
+interface UpdatePublishedAgentSettingsInput {
+  agentEnabled: boolean;
+  agentToken: string | null;
+}
+
 export interface PaginatedFaqResult {
   items: FaqRecord[];
   page: number;
@@ -208,6 +213,14 @@ export class FaqService {
     return record ? normalizeFaqRecord(record) : null;
   }
 
+  static async getFaqById(faqId: number): Promise<FaqRecord | null> {
+    const record = await db<FaqRecord>('faqs')
+      .where({ id: faqId })
+      .first();
+
+    return record ? normalizeFaqRecord(record) : null;
+  }
+
   static async getPublishedFaqsByIds(faqIds: number[]): Promise<FaqRecord[]> {
     if (faqIds.length === 0) {
       return [];
@@ -389,6 +402,76 @@ export class FaqService {
       .returning('*');
 
     return record ? normalizeFaqRecord(record) : null;
+  }
+
+  static async updatePublishedQuestionVariants(
+    faqId: number,
+    questions: FaqQuestionVariants,
+    embedding: number[],
+  ): Promise<FaqRecord | null> {
+    const [record] = await db<FaqRecord>('faqs')
+      .where({
+        id: faqId,
+        status: 'published',
+      })
+      .update({
+        ...questions,
+        vector_embedding: this.toVectorLiteral(embedding),
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    return record ? normalizeFaqRecord(record) : null;
+  }
+
+  static async updatePublishedAnswerVariants(
+    faqId: number,
+    answers: FaqAnswerVariants,
+  ): Promise<FaqRecord | null> {
+    const [record] = await db<FaqRecord>('faqs')
+      .where({
+        id: faqId,
+        status: 'published',
+      })
+      .update({
+        ...answers,
+        agent_enabled: false,
+        agent_token: null,
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    return record ? normalizeFaqRecord(record) : null;
+  }
+
+  static async updatePublishedAgentSettings(
+    faqId: number,
+    input: UpdatePublishedAgentSettingsInput,
+  ): Promise<FaqRecord | null> {
+    const [record] = await db<FaqRecord>('faqs')
+      .where({
+        id: faqId,
+        status: 'published',
+      })
+      .update({
+        agent_enabled: input.agentEnabled,
+        agent_token: input.agentToken?.trim() || null,
+        updated_at: new Date(),
+      })
+      .returning('*');
+
+    return record ? normalizeFaqRecord(record) : null;
+  }
+
+  static async deletePublishedFaq(faqId: number): Promise<boolean> {
+    const deletedCount = await db<FaqRecord>('faqs')
+      .where({
+        id: faqId,
+        status: 'published',
+      })
+      .delete();
+
+    return deletedCount > 0;
   }
 
   static async publishFaq(

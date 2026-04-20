@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="uz" data-locale="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Murojaat transkripti #CZS950</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --page-bg: #eff4f8;
+        --panel-bg: rgba(255, 255, 255, 0.92);
+        --panel-border: rgba(120, 144, 156, 0.22);
+        --panel-muted: #f7fafc;
+        --text: #142331;
+        --muted: #607080;
+        --line: rgba(20, 35, 49, 0.1);
+        --shadow: 0 22px 60px rgba(16, 36, 54, 0.12);
+        --hero-start: #11344d;
+        --hero-end: #1d6a67;
+        --user-bg: #e8f1ff;
+        --user-border: #bfd5fb;
+        --agent-bg: #effbea;
+        --agent-border: #cdeac7;
+        --admin-bg: #fff3df;
+        --admin-border: #f2d7a4;
+        --system-bg: #f3f5f8;
+        --system-border: #d5dde5;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 28px 18px 40px;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(17, 52, 77, 0.12), transparent 30%),
+          radial-gradient(circle at right 10%, rgba(29, 106, 103, 0.12), transparent 24%),
+          linear-gradient(180deg, #f7fafc 0%, var(--page-bg) 100%);
+      }
+
+      .page {
+        max-width: 1180px;
+        margin: 0 auto;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        padding: 28px 30px;
+        border-radius: 30px;
+        background: linear-gradient(135deg, var(--hero-start) 0%, var(--hero-end) 100%);
+        color: #fff;
+        box-shadow: var(--shadow);
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -80px -120px auto;
+        width: 240px;
+        height: 240px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.08);
+        filter: blur(6px);
+      }
+
+      .hero-top {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .hero-copy {
+        max-width: 760px;
+      }
+
+      .hero h1 {
+        margin: 0 0 10px;
+        font-size: 32px;
+        line-height: 1.08;
+      }
+
+      .hero p {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.65;
+        color: rgba(255, 255, 255, 0.88);
+      }
+
+      .locale-switcher {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 210px;
+        padding: 16px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        backdrop-filter: blur(10px);
+      }
+
+      .locale-switcher-label {
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.72);
+      }
+
+      .locale-buttons {
+        display: flex;
+        gap: 8px;
+      }
+
+      .locale-button {
+        flex: 1;
+        border: 0;
+        border-radius: 999px;
+        padding: 10px 14px;
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.12);
+        transition: transform 140ms ease, background 140ms ease, box-shadow 140ms ease;
+      }
+
+      .locale-button:hover {
+        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 0.18);
+      }
+
+      .locale-button.is-active {
+        background: #ffffff;
+        color: #163247;
+        box-shadow: 0 8px 18px rgba(16, 36, 54, 0.16);
+      }
+
+      .hero-badges {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .hero-badge {
+        padding: 14px 16px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+
+      .hero-badge-label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.68);
+      }
+
+      .hero-badge-value {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .hero-note {
+        margin-top: 16px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.88);
+      }
+
+      .section {
+        margin-top: 22px;
+        border-radius: 28px;
+        background: var(--panel-bg);
+        border: 1px solid var(--panel-border);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        backdrop-filter: blur(10px);
+      }
+
+      .section-header {
+        padding: 24px 26px 12px;
+      }
+
+      .section-header h2 {
+        margin: 0;
+        font-size: 22px;
+      }
+
+      .section-header p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .metadata-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        padding: 0 26px 26px;
+      }
+
+      .meta-card {
+        padding: 16px 18px;
+        border-radius: 20px;
+        background: var(--panel-muted);
+        border: 1px solid rgba(120, 144, 156, 0.16);
+      }
+
+      .meta-card .label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .meta-card .value {
+        font-size: 15px;
+        line-height: 1.6;
+        word-break: break-word;
+      }
+
+      .chat-shell {
+        position: relative;
+        padding: 8px 26px 28px;
+        background:
+          linear-gradient(180deg, rgba(247, 250, 252, 0.8) 0%, rgba(255, 255, 255, 0.65) 100%);
+      }
+
+      .chat-shell::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 8px;
+        bottom: 28px;
+        width: 1px;
+        background: linear-gradient(180deg, transparent 0%, var(--line) 12%, var(--line) 88%, transparent 100%);
+        transform: translateX(-50%);
+      }
+
+      .alignment-guide {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin: 0 0 18px;
+      }
+
+      .guide-pill {
+        padding: 10px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        text-align: center;
+        border: 1px solid transparent;
+      }
+
+      .guide-pill.user {
+        background: var(--user-bg);
+        border-color: var(--user-border);
+      }
+
+      .guide-pill.agent {
+        background: var(--agent-bg);
+        border-color: var(--agent-border);
+      }
+
+      .guide-pill.system {
+        background: var(--system-bg);
+        border-color: var(--system-border);
+      }
+
+      .message {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        width: fit-content;
+        max-width: min(72%, 820px);
+        margin: 16px 0;
+        gap: 8px;
+      }
+
+      .message.user {
+        margin-left: auto;
+        align-items: flex-end;
+      }
+
+      .message.agent,
+      .message.admin {
+        margin-right: auto;
+        align-items: flex-start;
+      }
+
+      .message.system {
+        margin-left: auto;
+        margin-right: auto;
+        max-width: min(58%, 720px);
+        align-items: center;
+      }
+
+      .message-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .message.system .message-meta {
+        justify-content: center;
+      }
+
+      .sender {
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .sequence {
+        opacity: 0.82;
+      }
+
+      .bubble {
+        border-radius: 24px;
+        padding: 16px 18px;
+        border: 1px solid transparent;
+        line-height: 1.7;
+        word-break: break-word;
+        box-shadow: 0 10px 24px rgba(16, 36, 54, 0.05);
+      }
+
+      .message.user .bubble {
+        background: var(--user-bg);
+        border-color: var(--user-border);
+        border-bottom-right-radius: 10px;
+      }
+
+      .message.agent .bubble {
+        background: var(--agent-bg);
+        border-color: var(--agent-border);
+        border-bottom-left-radius: 10px;
+      }
+
+      .message.admin .bubble {
+        background: var(--admin-bg);
+        border-color: var(--admin-border);
+        border-bottom-left-radius: 10px;
+      }
+
+      .message.system .bubble {
+        background: var(--system-bg);
+        border-color: var(--system-border);
+        border-radius: 18px;
+        text-align: center;
+      }
+
+      .body {
+        font-size: 15px;
+      }
+
+      .attachment {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px dashed rgba(20, 35, 49, 0.16);
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      code {
+        font-family: "Cascadia Code", Consolas, monospace;
+        font-size: 12px;
+        background: rgba(20, 35, 49, 0.06);
+        padding: 2px 6px;
+        border-radius: 8px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .empty-state {
+        padding: 22px;
+        border-radius: 20px;
+        border: 1px dashed rgba(120, 144, 156, 0.34);
+        background: #f8fbfd;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      @media (max-width: 860px) {
+        .hero-top {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .locale-switcher {
+          min-width: 0;
+        }
+
+        .chat-shell::before {
+          display: none;
+        }
+
+        .alignment-guide {
+          grid-template-columns: 1fr;
+        }
+
+        .message,
+        .message.system {
+          max-width: 100%;
+        }
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 18px 12px 28px;
+        }
+
+        .hero,
+        .section {
+          border-radius: 22px;
+        }
+
+        .hero {
+          padding: 22px 18px;
+        }
+
+        .hero h1 {
+          font-size: 26px;
+        }
+
+        .section-header,
+        .metadata-grid,
+        .chat-shell {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .hero-badges {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .message.user,
+        .message.agent,
+        .message.admin,
+        .message.system {
+          max-width: 100%;
+        }
+
+        .message.user {
+          align-items: flex-end;
+        }
+
+        .message.agent,
+        .message.admin {
+          align-items: flex-start;
+        }
+
+        .message.system {
+          align-items: center;
+        }
+
+        .message-meta {
+          gap: 8px;
+        }
+
+        .message.user .message-meta {
+          justify-content: flex-end;
+        }
+
+        .message.agent .message-meta,
+        .message.admin .message-meta,
+        .message.system .message-meta {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body data-i18n-uz="Murojaat transkripti #CZS950" data-i18n-ru="Транскрипт обращения #CZS950">
+    <main class="page">
+      <section class="hero">
+        <div class="hero-top">
+          <div class="hero-copy">
+            <h1 data-i18n-uz="Qo‘llab-quvvatlash murojaati transkripti #CZS950" data-i18n-ru="Транскрипт обращения в поддержку #CZS950">Qo‘llab-quvvatlash murojaati transkripti #CZS950</h1>
+            <p data-i18n-uz="Adminlar uchun to‘liq chat tarixi. Sahifada foydalanuvchi xabarlari o‘ngda, agent chapda, tizim xabarlari esa markazda ko‘rsatiladi." data-i18n-ru="Полная история чата для администраторов. Сообщения пользователя показаны справа, агента слева, а системные сообщения по центру.">Adminlar uchun to‘liq chat tarixi. Sahifada foydalanuvchi xabarlari o‘ngda, agent chapda, tizim xabarlari esa markazda ko‘rsatiladi.</p>
+          </div>
+
+          <div class="locale-switcher">
+            <span class="locale-switcher-label" data-i18n-uz="Sahifa tili" data-i18n-ru="Язык страницы">Sahifa tili</span>
+            <div class="locale-buttons">
+              <button type="button" class="locale-button is-active" data-locale-switch="uz">O'zbekcha</button>
+              <button type="button" class="locale-button" data-locale-switch="ru">Русский</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-badges">
+          <div class="hero-badge">
+            <span class="hero-badge-label" data-i18n-uz="Xabarlar" data-i18n-ru="Сообщения">Xabarlar</span>
+            <span class="hero-badge-value">3</span>
+          </div>
+          <div class="hero-badge">
+            <span class="hero-badge-label" data-i18n-uz="Ishlash rejimi" data-i18n-ru="Режим обработки">Ishlash rejimi</span>
+            <span class="hero-badge-value" data-i18n-uz="AI agent" data-i18n-ru="AI агент">AI agent</span>
+          </div>
+          <div class="hero-badge">
+            <span class="hero-badge-label" data-i18n-uz="Holat" data-i18n-ru="Статус">Holat</span>
+            <span class="hero-badge-value" data-i18n-uz="Ochiq" data-i18n-ru="Открыт">Ochiq</span>
+          </div>
+          <div class="hero-badge">
+            <span class="hero-badge-label" data-i18n-uz="Yaratilgan vaqti" data-i18n-ru="Сформировано">Yaratilgan vaqti</span>
+            <span class="hero-badge-value">20/04/2026, 14:20:00</span>
+          </div>
+        </div>
+
+        <p class="hero-note" data-i18n-uz="Tildagi yorliqlarni shu yerning o‘zida almashtirishingiz mumkin. Xabar matnlari esa asl ko‘rinishida saqlanadi." data-i18n-ru="Язык подписей можно переключать прямо на странице. Текст самих сообщений сохраняется в исходном виде.">Tildagi yorliqlarni shu yerning o‘zida almashtirishingiz mumkin. Xabar matnlari esa asl ko‘rinishida saqlanadi.</p>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2 data-i18n-uz="Murojaat haqida" data-i18n-ru="Сводка по обращению">Murojaat haqida</h2>
+          <p data-i18n-uz="Batafsil yozishmaga o‘tishdan oldin operator uchun eng kerakli ma’lumotlar." data-i18n-ru="Самая важная информация для оператора перед просмотром полной переписки.">Batafsil yozishmaga o‘tishdan oldin operator uchun eng kerakli ma’lumotlar.</p>
+        </div>
+
+        <div class="metadata-grid">
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Foydalanuvchi" data-i18n-ru="Пользователь">Foydalanuvchi</span>
+            <div class="value">Ali Valiyev</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Telefon" data-i18n-ru="Телефон">Telefon</span>
+            <div class="value">+998901234567</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Telegram" data-i18n-ru="Telegram">Telegram</span>
+            <div class="value">@aliyev (ID: 777)</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="SAP kodi" data-i18n-ru="SAP код">SAP kodi</span>
+            <div class="value">C001</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Til" data-i18n-ru="Язык">Til</span>
+            <div class="value" data-i18n-uz="O'zbekcha" data-i18n-ru="O'zbekcha">O'zbekcha</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Murojaat yaratilgan" data-i18n-ru="Создано">Murojaat yaratilgan</span>
+            <div class="value">20/04/2026, 14:10:00</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Oxirgi yangilanish" data-i18n-ru="Последнее обновление">Oxirgi yangilanish</span>
+            <div class="value">20/04/2026, 14:15:00</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Mos FAQ" data-i18n-ru="Связанный FAQ">Mos FAQ</span>
+            <div class="value">8</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Agent token" data-i18n-ru="Токен агента">Agent token</span>
+            <div class="value">__AGENT_FAQ_8__</div>
+          </div>
+          <div class="meta-card">
+            <span class="label" data-i18n-uz="Operatorga yo‘naltirish sababi" data-i18n-ru="Причина передачи оператору">Operatorga yo‘naltirish sababi</span>
+            <div class="value">Needs human confirmation.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h2 data-i18n-uz="Yozishma tarixi" data-i18n-ru="История переписки">Yozishma tarixi</h2>
+          <p data-i18n-uz="Mazkur ticket bo‘yicha saqlangan barcha xabarlarning ketma-ket ko‘rinishi." data-i18n-ru="Хронологический вид всех сохранённых сообщений по этому обращению.">Mazkur ticket bo‘yicha saqlangan barcha xabarlarning ketma-ket ko‘rinishi.</p>
+        </div>
+
+        <div class="chat-shell">
+          <div class="alignment-guide">
+            <div class="guide-pill agent" data-i18n-uz="Agent javobi" data-i18n-ru="Ответ агента">Agent javobi</div>
+            <div class="guide-pill system" data-i18n-uz="Tizim hodisasi" data-i18n-ru="Системное событие">Tizim hodisasi</div>
+            <div class="guide-pill user" data-i18n-uz="Foydalanuvchi xabari" data-i18n-ru="Сообщение пользователя">Foydalanuvchi xabari</div>
+          </div>
+
+          <article class="message user">
+    <div class="message-meta">
+      <span class="sender" data-i18n-uz="Foydalanuvchi" data-i18n-ru="Пользователь">Foydalanuvchi</span>
+      <span class="timestamp">20/04/2026, 14:10:10</span>
+      <span class="sequence">#1</span>
+    </div>
+    <div class="bubble">
+      <div class="body">Assalomu alaykum</div>
+      
+    </div>
+  </article>
+<article class="message agent">
+    <div class="message-meta">
+      <span class="sender" data-i18n-uz="AI agent" data-i18n-ru="AI агент">AI agent</span>
+      <span class="timestamp">20/04/2026, 14:10:20</span>
+      <span class="sequence">#2</span>
+    </div>
+    <div class="bubble">
+      <div class="body">Salom! Yordam beraman.</div>
+      
+    </div>
+  </article>
+<article class="message system">
+    <div class="message-meta">
+      <span class="sender" data-i18n-uz="Tizim" data-i18n-ru="Система">Tizim</span>
+      <span class="timestamp">20/04/2026, 14:10:30</span>
+      <span class="sequence">#3</span>
+    </div>
+    <div class="bubble">
+      <div class="body">AI yordamchi murojaatni operatorga yo'naltirdi.</div>
+      
+    </div>
+  </article>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        const root = document.documentElement;
+        const body = document.body;
+        const buttons = Array.from(document.querySelectorAll('[data-locale-switch]'));
+        const localizedNodes = Array.from(document.querySelectorAll('[data-i18n-uz][data-i18n-ru]'));
+
+        const applyLocale = (locale) => {
+          root.setAttribute('lang', locale);
+          root.setAttribute('data-locale', locale);
+
+          localizedNodes.forEach((node) => {
+            const value = node.getAttribute('data-i18n-' + locale);
+            if (value !== null) {
+              node.textContent = value;
+            }
+          });
+
+          const pageTitle = body.getAttribute('data-i18n-' + locale);
+          if (pageTitle) {
+            document.title = pageTitle;
+          }
+
+          buttons.forEach((button) => {
+            button.classList.toggle('is-active', button.getAttribute('data-locale-switch') === locale);
+          });
+        };
+
+        buttons.forEach((button) => {
+          button.addEventListener('click', () => applyLocale(button.getAttribute('data-locale-switch') || 'uz'));
+        });
+
+        applyLocale(root.getAttribute('data-locale') || 'uz');
+      })();
+    </script>
+  </body>
+</html>

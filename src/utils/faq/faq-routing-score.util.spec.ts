@@ -6,6 +6,7 @@ import { FaqRecord } from '../../types/faq.types';
 import {
   FAQ_ROUTING_MIN_MARGIN,
   FAQ_ROUTING_MIN_SCORE,
+  FAQ_STATIC_ROUTING_CONCEPT_LEAD_MIN_SCORE,
   FAQ_STATIC_ROUTING_MIN_SCORE,
   rankFaqCandidatesForRouting,
 } from './faq-routing-score.util';
@@ -130,4 +131,35 @@ test('rankFaqCandidatesForRouting no longer over-penalizes branch count question
 
   assert.equal(ranked[0]?.faq.id, 1);
   assert.ok((ranked[0]?.routingScore || 0) >= FAQ_STATIC_ROUTING_MIN_SCORE);
+});
+
+test('rankFaqCandidatesForRouting ignores greetings and keeps branch count ahead of generic branch coverage', () => {
+  const candidates: FaqCandidateRecord[] = [
+    {
+      faq: makeFaq(
+        1,
+        "Probox kompaniyasining umumiy filiallari soni qancha?",
+        "Hozirda kompaniyamizning umumiy filiallari soni maʼlum tartibda ko‘rsatiladi.",
+      ),
+      distance: 0.2254,
+    },
+    {
+      faq: makeFaq(
+        2,
+        "Respublika bo'ylab boshqa hududlarda ham xizmat ko'rsatish shoxobchalaringiz joylashganmi?",
+        "Hozircha faqat Toshkent shahrida filiallarimiz mavjud.",
+      ),
+      distance: 0.1589,
+    },
+  ];
+
+  const ranked = rankFaqCandidatesForRouting(
+    'Assalomu alaykum, sizlarda nechta filial bor',
+    candidates,
+    0.4,
+  );
+
+  assert.equal(ranked[0]?.faq.id, 1);
+  assert.ok((ranked[0]?.routingScore || 0) >= FAQ_STATIC_ROUTING_CONCEPT_LEAD_MIN_SCORE);
+  assert.ok((ranked[0]?.matchedConcepts.length || 0) > (ranked[1]?.matchedConcepts.length || 0));
 });

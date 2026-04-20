@@ -14,6 +14,8 @@ const STOP_WORDS = new Set([
   'a',
   'an',
   'and',
+  'assalomu',
+  'alaykum',
   'are',
   'as',
   'at',
@@ -33,10 +35,16 @@ const STOP_WORDS = new Set([
   'for',
   'ga',
   'ham',
+  'hello',
+  'hi',
   'i',
   'if',
   'in',
   'is',
+  'iltimos',
+  'kompaniya',
+  'kompaniyasi',
+  'kompaniyasining',
   'li',
   'me',
   'men',
@@ -48,6 +56,12 @@ const STOP_WORDS = new Set([
   'the',
   'there',
   'to',
+  'salom',
+  'salomlar',
+  'siz',
+  'sizda',
+  'sizlar',
+  'sizlarda',
   'va',
   'with',
   'yerda',
@@ -378,11 +392,24 @@ const computeIntentAdjustments = (
     adjustment -= 0.12;
   }
 
+  if (queryConcepts.has('count') && candidateConcepts.has('count')) {
+    adjustment += 0.14;
+  }
+
+  if (
+    queryConcepts.has('count') &&
+    candidateConcepts.has('branch') &&
+    !candidateConcepts.has('count')
+  ) {
+    adjustment -= 0.12;
+  }
+
   return adjustment;
 };
 
 export const FAQ_ROUTING_MIN_SCORE = 0.5;
 export const FAQ_STATIC_ROUTING_MIN_SCORE = 0.2;
+export const FAQ_STATIC_ROUTING_CONCEPT_LEAD_MIN_SCORE = 0.4;
 export const FAQ_ROUTING_MIN_MARGIN = 0.08;
 
 export function rankFaqCandidatesForRouting(

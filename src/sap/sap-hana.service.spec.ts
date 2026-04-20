@@ -222,3 +222,35 @@ test('SapService getLatestExchangeRateInfo wraps SAP failures', async () => {
     /SAP query failed \(getLatestExchangeRateInfo\)/,
   );
 });
+
+test('SapService getAvailableDeviceNames groups full device names by new and used conditions', async () => {
+  const { hana, service } = createService(async () => [
+    { full_name: 'iPhone 16 Pro', condition: 'Yangi' },
+    { full_name: 'iPhone 16 Pro', condition: 'new' },
+    { full_name: 'iPhone 15 Pro Max', condition: 'B/U' },
+    { full_name: 'iPhone 15', condition: 'used' },
+    { full_name: 'iPhone 14', condition: 'unknown' },
+    { full_name: '   ', condition: 'Yangi' },
+  ]);
+
+  const result = await service.getAvailableDeviceNames();
+
+  assert.equal(hana.calls.length, 1);
+  assert.match(hana.calls[0].query, /T0\."OnHand" > 0/);
+  assert.match(hana.calls[0].query, /U_DeviceType/);
+  assert.deepEqual(result, {
+    newDevices: ['iPhone 16 Pro'],
+    usedDevices: ['iPhone 15', 'iPhone 15 Pro Max'],
+  });
+});
+
+test('SapService getAvailableDeviceNames wraps SAP failures', async () => {
+  const { service } = createService(async () => {
+    throw new Error('device lookup failed');
+  });
+
+  await assert.rejects(
+    () => service.getAvailableDeviceNames(),
+    /SAP query failed \(getAvailableDeviceNames\)/,
+  );
+});

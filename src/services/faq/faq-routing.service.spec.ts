@@ -216,6 +216,55 @@ test('resolveSupportFaq accepts colloquial branch coverage query as a static sem
   }
 });
 
+test('resolveSupportFaq accepts paraphrased branch count query as a static semantic FAQ', async () => {
+  const originalFindExact = FaqService.findExactPublishedFaqByQuestion;
+  const originalFindCandidates = FaqService.findSemanticFaqCandidatesByQuestion;
+  const originalChooseCandidate = FaqAiService.chooseSupportFaqCandidate;
+  const originalSemanticEnabled = config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED;
+
+  const branchCountFaq = makeFaq(
+    1,
+    "Probox kompaniyasining umumiy filiallari soni qancha?",
+    "Hozirda kompaniyamizning umumiy filiallari soni maʼlum tartibda ko‘rsatiladi.",
+  );
+  const branchCoverageFaq = makeFaq(
+    2,
+    "Respublika bo'ylab boshqa hududlarda ham xizmat ko'rsatish shoxobchalaringiz joylashganmi?",
+    "Hozircha faqat Toshkent shahrida filiallarimiz mavjud.",
+  );
+  const futurePlanFaq = makeFaq(
+    3,
+    'Kelajakda viloyatlarda ham alohida ofislar ochish rejangiz bormi?',
+    'Kelajak rejalari haqida alohida xabar beramiz.',
+  );
+
+  FaqService.findExactPublishedFaqByQuestion = async () => null;
+  FaqService.findSemanticFaqCandidatesByQuestion = async () => [
+    { faq: branchCountFaq, distance: 0.2254 },
+    { faq: branchCoverageFaq, distance: 0.1589 },
+    { faq: futurePlanFaq, distance: 0.2025 },
+  ];
+  FaqAiService.chooseSupportFaqCandidate = async () => {
+    throw new Error('Agent-only Gemini routing should not run for a clear static branch count FAQ match');
+  };
+  config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = true;
+
+  try {
+    const result = await FaqRoutingService.resolveSupportFaq(
+      'Assalomu alaykum, sizlarda nechta filial bor',
+    );
+    assert.equal(result?.resolutionType, 'semantic');
+    assert.equal(result?.faq.id, 1);
+    assert.equal(result?.distance, 0.2254);
+    assert.equal(result?.confidence, 1);
+  } finally {
+    FaqService.findExactPublishedFaqByQuestion = originalFindExact;
+    FaqService.findSemanticFaqCandidatesByQuestion = originalFindCandidates;
+    FaqAiService.chooseSupportFaqCandidate = originalChooseCandidate;
+    config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = originalSemanticEnabled;
+  }
+});
+
 test('resolveSupportFaq deterministically routes stock-check questions to the dedicated agent FAQ', async () => {
   const originalFindExact = FaqService.findExactPublishedFaqByQuestion;
   const originalFindCandidates = FaqService.findSemanticFaqCandidatesByQuestion;
@@ -251,6 +300,46 @@ test('resolveSupportFaq deterministically routes stock-check questions to the de
     const result = await FaqRoutingService.resolveSupportFaq('Silada iPhone 17 Pro modeli bormi ?');
     assert.equal(result?.resolutionType, 'semantic_ai');
     assert.equal(result?.faq.id, 7);
+    assert.equal(result?.confidence, 1);
+  } finally {
+    FaqService.findExactPublishedFaqByQuestion = originalFindExact;
+    FaqService.findSemanticFaqCandidatesByQuestion = originalFindCandidates;
+    FaqAiService.chooseSupportFaqCandidate = originalChooseCandidate;
+    config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = originalSemanticEnabled;
+  }
+});
+
+test('resolveSupportFaq accepts a high-confidence static FAQ when no agent candidate applies', async () => {
+  const originalFindExact = FaqService.findExactPublishedFaqByQuestion;
+  const originalFindCandidates = FaqService.findSemanticFaqCandidatesByQuestion;
+  const originalChooseCandidate = FaqAiService.chooseSupportFaqCandidate;
+  const originalSemanticEnabled = config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED;
+
+  const branchCountFaq = makeFaq(
+    1,
+    "Probox kompaniyasining umumiy filiallari soni qancha?",
+    'Bizning filiallarimiz haqida maʼlumot shu yerda.',
+  );
+  const branchCoverageFaq = makeFaq(
+    2,
+    "Respublika bo'ylab boshqa hududlarda ham xizmat ko'rsatish shoxobchalaringiz joylashganmi?",
+    "Hozircha faqat Toshkent shahrida filiallarimiz mavjud.",
+  );
+
+  FaqService.findExactPublishedFaqByQuestion = async () => null;
+  FaqService.findSemanticFaqCandidatesByQuestion = async () => [
+    { faq: branchCountFaq, distance: 0.2101 },
+    { faq: branchCoverageFaq, distance: 0.2628 },
+  ];
+  FaqAiService.chooseSupportFaqCandidate = async () => {
+    throw new Error('Agent-only Gemini routing should not run when a high-confidence static FAQ is enough');
+  };
+  config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = true;
+
+  try {
+    const result = await FaqRoutingService.resolveSupportFaq('Filiallar qatta ozi');
+    assert.equal(result?.resolutionType, 'semantic');
+    assert.equal(result?.faq.id, 1);
     assert.equal(result?.confidence, 1);
   } finally {
     FaqService.findExactPublishedFaqByQuestion = originalFindExact;

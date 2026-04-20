@@ -1,6 +1,7 @@
 import { ISapItem } from '../../interfaces/item.interface';
 import { HanaService } from '../../sap/hana.service';
 import { SapService } from '../../sap/sap-hana.service';
+import { normalizeInventoryText } from '../../utils/faq/inventory-intent.util';
 
 const DEFAULT_RESULT_LIMIT = 5;
 const MAX_RESULT_LIMIT = 10;
@@ -41,6 +42,16 @@ const normalizeItem = (item: ISapItem) => ({
   sim_type: item.U_Sim_type || null,
 });
 
+const hasSettledSalePrice = (
+  item: ReturnType<typeof normalizeItem>,
+): item is ReturnType<typeof normalizeItem> & { sale_price: number } =>
+  typeof item.sale_price === 'number' && Number.isFinite(item.sale_price) && item.sale_price > 0;
+
+const sortDeviceNames = (deviceNames: Iterable<string>): string[] =>
+  Array.from(new Set(Array.from(deviceNames).map((value) => value.trim()).filter(Boolean))).sort(
+    (left, right) => left.localeCompare(right),
+  );
+
 export class SupportItemAvailabilityService {
   private static readonly sapService = new SapService(new HanaService());
 
@@ -56,7 +67,7 @@ export class SupportItemAvailabilityService {
     returned_matches: number;
     items: ReturnType<typeof normalizeItem>[];
   }> {
-    const query = params.query.trim();
+    const query = normalizeInventoryText(params.query);
     if (!query) {
       throw new Error('Item search query is required');
     }
@@ -75,6 +86,7 @@ export class SupportItemAvailabilityService {
     const items = result.data
       .slice(0, limit)
       .map(normalizeItem)
+      .filter(hasSettledSalePrice)
       .sort((left, right) => right.on_hand - left.on_hand);
 
     return {
@@ -84,6 +96,20 @@ export class SupportItemAvailabilityService {
       total_matches: result.total,
       returned_matches: items.length,
       items,
+    };
+  }
+
+  static async lookupAvailableDevices(): Promise<{
+    ok: boolean;
+    new_devices: string[];
+    used_devices: string[];
+  }> {
+    const result = await this.sapService.getAvailableDeviceNames();
+
+    return {
+      ok: true,
+      new_devices: sortDeviceNames(result.newDevices),
+      used_devices: sortDeviceNames(result.usedDevices),
     };
   }
 }

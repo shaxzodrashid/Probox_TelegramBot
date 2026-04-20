@@ -84,6 +84,67 @@ const makeInventoryResult = (query: string) => ({
   ],
 });
 
+const makeEmptyInventoryResult = (query: string) => ({
+  ok: true,
+  query,
+  store: null,
+  total_matches: 0,
+  returned_matches: 0,
+  items: [],
+});
+
+const makeAlternativeInventoryResult = (query: string) => ({
+  ok: true,
+  query,
+  store: null,
+  total_matches: 3,
+  returned_matches: 3,
+  items: [
+    {
+      item_code: 'IP16',
+      item_name: 'iPhone 16',
+      store_code: 'W01',
+      store_name: 'Nurafshon',
+      on_hand: 4,
+      sale_price: 12000000,
+      item_group_name: 'Phones',
+      model: 'iPhone 16',
+      color: 'Black',
+      memory: '128GB',
+      condition: 'Yangi',
+      sim_type: 'eSIM',
+    },
+    {
+      item_code: 'IP16P',
+      item_name: 'iPhone 16 Pro',
+      store_code: 'W02',
+      store_name: 'Samarqand Darvoza',
+      on_hand: 2,
+      sale_price: 16500000,
+      item_group_name: 'Phones',
+      model: 'iPhone 16',
+      color: 'Natural',
+      memory: '256GB',
+      condition: 'Yangi',
+      sim_type: 'eSIM',
+    },
+    {
+      item_code: 'IP15PM',
+      item_name: 'iPhone 15 Pro Max',
+      store_code: 'W03',
+      store_name: 'Compass',
+      on_hand: 1,
+      sale_price: 17000000,
+      item_group_name: 'Phones',
+      model: 'iPhone 15',
+      color: 'Blue',
+      memory: '256GB',
+      condition: 'Yangi',
+      sim_type: 'eSIM',
+    },
+  ],
+});
+
 test('SupportAgentService returns parsed Gemini reply payload', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
 
@@ -174,7 +235,57 @@ test('SupportAgentService rejects empty non-escalation replies', async () => {
   }
 });
 
-test('SupportAgentService passes system instructions, strict function config, and schema to Gemini', async () => {
+test('SupportAgentService preserves an AI handoff note when escalation is requested', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+
+  GeminiService.generateJsonWithTools = (async () => ({
+    reply_text: 'Murojaatingizni qo‘llab-quvvatlash jamoasiga yo‘naltirdim.',
+    should_escalate: true,
+    escalation_reason: 'Needs human review.',
+  })) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    const result = await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'Buyurtmam qayerda?',
+    });
+
+    assert.equal(result.shouldEscalate, true);
+    assert.equal(result.replyText, 'Murojaatingizni qo‘llab-quvvatlash jamoasiga yo‘naltirdim.');
+    assert.equal(result.escalationReason, 'Needs human review.');
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+  }
+});
+
+test('SupportAgentService accepts an empty reply when escalation is requested', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+
+  GeminiService.generateJsonWithTools = (async () => ({
+    reply_text: '',
+    should_escalate: true,
+    escalation_reason: 'Needs manual review.',
+  })) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    const result = await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'Buyurtmam qayerda?',
+    });
+
+    assert.equal(result.shouldEscalate, true);
+    assert.equal(result.replyText, '');
+    assert.equal(result.escalationReason, 'Needs manual review.');
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+  }
+});
+
+test('SupportAgentService passes system instructions, focused tool config, and schema to Gemini', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
 
   let capturedPrompt = '';
@@ -182,6 +293,7 @@ test('SupportAgentService passes system instructions, strict function config, an
   let capturedToolNames: string[] = [];
   let capturedResponseSchema: Record<string, unknown> | undefined;
   let capturedFunctionCallingMode = '';
+  let capturedMaxToolIterations: number | undefined;
 
   GeminiService.generateJsonWithTools = (async (params) => {
     capturedPrompt = params.prompt;
@@ -189,6 +301,7 @@ test('SupportAgentService passes system instructions, strict function config, an
     capturedToolNames = params.tools.map((tool) => tool.declaration.name);
     capturedResponseSchema = params.responseSchema;
     capturedFunctionCallingMode = params.functionCallingConfig?.mode || '';
+    capturedMaxToolIterations = params.maxToolIterations;
 
     return {
       reply_text: 'Taxminan 1 477 USD bo‘ladi.',
@@ -201,17 +314,75 @@ test('SupportAgentService passes system instructions, strict function config, an
     await SupportAgentService.generateReply({
       faq: makeFaq(),
       user: makeUser(),
-      history: makeHistory(),
+      history: [
+        ...makeHistory(),
+        {
+          id: 2,
+          ticket_id: 99,
+          sender_type: 'agent',
+          message_text: "Narxi 18 467 000 so'm bo'ladi.",
+          photo_file_id: null,
+          telegram_message_id: 112,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+      ],
       latestUserMessage: 'Bu dollarda qancha bo‘ladi?',
     });
 
     assert.ok(Array.isArray(capturedSystemInstruction));
-    assert.match(capturedSystemInstruction.join('\n'), /Do not repeat the customer name in every message/i);
-    assert.match(capturedSystemInstruction.join('\n'), /convert_currency_amount/i);
-    assert.match(capturedSystemInstruction.join('\n'), /Do not wrap the JSON in markdown code fences/i);
-    assert.match(capturedSystemInstruction.join('\n'), /structured examples of valid inventory query strings/i);
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Return raw JSON only with exactly: reply_text, should_escalate, escalation_reason/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Format reply_text for Telegram: short readable blocks, compact bullets when useful, no tables or code fences/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Do not repeat greetings or the customer name unnecessarily/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Tools available in some turns: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Use at most 3 tool iterations total\. Prefer 0-1 if grounded context already answers\.|Use at most 3 tool iterations total\. Prefer 0–1 if grounded context already answers\./i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Never repeat the same tool call just to confirm the same fact/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Normalize slang\/transliterated product names into official SAP-style naming before inventory lookups/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /For price conversion use convert_currency_amount unless the exact conversion is already grounded here/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Set should_escalate=true only for unsupported actions, risky assumptions, missing grounding, or required manual confirmation/i,
+    );
+    assert.match(capturedPrompt, /<context>/i);
+    assert.match(capturedPrompt, /Tools enabled for this turn: convert_currency_amount/i);
     assert.match(capturedPrompt, /Use the system instructions as the primary policy/i);
-    assert.equal(capturedFunctionCallingMode, 'VALIDATED');
+    assert.match(
+      capturedPrompt,
+      /If the customer names a specific phone or model series, prefer detailed inventory grounding over broad catalog behavior/i,
+    );
+    assert.match(
+      capturedPrompt,
+      /When the customer asks vaguely what devices exist overall, prefer the device catalog tool/i,
+    );
+    assert.match(
+      capturedPrompt,
+      /If a grounded device catalog pre-check is already present for the current message, answer from that grounded catalog instead of improvising a list/i,
+    );
+    assert.equal(capturedFunctionCallingMode, 'AUTO');
     assert.deepEqual(capturedResponseSchema, {
       type: 'object',
       properties: {
@@ -226,19 +397,90 @@ test('SupportAgentService passes system instructions, strict function config, an
         },
         escalation_reason: {
           type: 'string',
-          description: 'Short internal reason for escalation. Keep empty when no escalation is needed.',
+          description:
+            'Short internal reason for escalation. Keep empty when no escalation is needed.',
         },
       },
       required: ['reply_text', 'should_escalate', 'escalation_reason'],
       propertyOrdering: ['reply_text', 'should_escalate', 'escalation_reason'],
     });
-    assert.deepEqual(capturedToolNames, [
-      'lookup_store_items',
-      'lookup_currency_rate',
-      'convert_currency_amount',
-    ]);
+    assert.deepEqual(capturedToolNames, ['convert_currency_amount']);
+    assert.equal(capturedMaxToolIterations, 3);
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+  }
+});
+
+test('SupportAgentService enables only the inventory tool for specific stock questions', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+
+  let capturedToolNames: string[] = [];
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) =>
+    makeInventoryResult(
+      params.query,
+    )) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    capturedToolNames = params.tools.map((tool) => tool.declaration.name);
+
+    return {
+      reply_text: 'Ha, mavjud variantlarni tekshirdim.',
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'silada 15 pro bomi',
+    });
+
+    assert.deepEqual(capturedToolNames, ['lookup_store_items']);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+  }
+});
+
+test('SupportAgentService enables only the catalog tool for broad assortment questions', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableDevices = SupportItemAvailabilityService.lookupAvailableDevices;
+
+  let capturedToolNames: string[] = [];
+
+  SupportItemAvailabilityService.lookupAvailableDevices = (async () => ({
+    ok: true,
+    new_devices: ['iPhone 15', 'iPhone 16 Pro'],
+    used_devices: ['iPhone 14 Pro Max'],
+  })) as typeof SupportItemAvailabilityService.lookupAvailableDevices;
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    capturedToolNames = params.tools.map((tool) => tool.declaration.name);
+
+    return {
+      reply_text: 'Hozir mavjud modellarning umumiy ro‘yxatini yuboraman.',
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'Silada qanaqa telefonla bor',
+    });
+
+    assert.deepEqual(capturedToolNames, ['lookup_available_devices']);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableDevices = originalLookupAvailableDevices;
   }
 });
 
@@ -330,6 +572,54 @@ test('SupportAgentService exposes the Gemini inventory tool that delegates to it
   }
 });
 
+test('SupportAgentService exposes the Gemini device catalog tool that delegates to available device lookup', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableDevices = SupportItemAvailabilityService.lookupAvailableDevices;
+
+  let executedToolResult: unknown = null;
+
+  SupportItemAvailabilityService.lookupAvailableDevices = (async () => ({
+    ok: true,
+    new_devices: ['iPhone 15', 'iPhone 16 Pro'],
+    used_devices: ['iPhone 14 Pro Max'],
+  })) as typeof SupportItemAvailabilityService.lookupAvailableDevices;
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    const deviceCatalogTool = params.tools.find(
+      (tool) => tool.declaration.name === 'lookup_available_devices',
+    );
+
+    assert.ok(deviceCatalogTool);
+
+    executedToolResult = await deviceCatalogTool.execute({});
+
+    return {
+      reply_text: 'Hozir mavjud modellarning umumiy ro‘yxatini yubordim.',
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    const result = await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'Mavjud telefonlar ro‘yxatini yuboring',
+    });
+
+    assert.equal(result.replyText, 'Hozir mavjud modellarning umumiy ro‘yxatini yubordim.');
+    assert.deepEqual(executedToolResult, {
+      ok: true,
+      new_devices: ['iPhone 15', 'iPhone 16 Pro'],
+      used_devices: ['iPhone 14 Pro Max'],
+    });
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableDevices = originalLookupAvailableDevices;
+  }
+});
+
 test('SupportAgentService preloads live inventory context for direct availability questions', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
   const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
@@ -364,6 +654,121 @@ test('SupportAgentService preloads live inventory context for direct availabilit
     assert.match(capturedPrompt, /Inventory pre-check:/);
     assert.match(capturedPrompt, /"query": "iphone 17"/);
     assert.match(capturedPrompt, /"returned_matches": 1/);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+  }
+});
+
+test('SupportAgentService normalizes shorthand model slang like "silada 15 pro bomi" into an iPhone lookup', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+
+  let preloadedQuery = '';
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => {
+    preloadedQuery = params.query;
+    return makeInventoryResult(params.query);
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  GeminiService.generateJsonWithTools = (async () => ({
+    reply_text: 'Ha, iPhone 15 Pro bo‘yicha variantlarni tekshirib beraman.',
+    should_escalate: false,
+    escalation_reason: '',
+  })) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'silada 15 pro bomi',
+    });
+
+    assert.equal(preloadedQuery, 'iphone 15 pro');
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+  }
+});
+
+test('SupportAgentService treats shorthand price questions like "17 lani narxi qancha bo\'votti" as iPhone 17 queries', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+
+  let preloadedQuery = '';
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => {
+    preloadedQuery = params.query;
+    return makeInventoryResult(params.query);
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  GeminiService.generateJsonWithTools = (async () => ({
+    reply_text: 'iPhone 17 bo‘yicha narxlarni tekshirib beraman.',
+    should_escalate: false,
+    escalation_reason: '',
+  })) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: "17 lani narxi qancha bo'votti",
+    });
+
+    assert.equal(preloadedQuery, 'iphone 17');
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+  }
+});
+
+test('SupportAgentService preloads grounded alternative inventory suggestions when exact stock is unavailable', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+
+  const lookupQueries: string[] = [];
+  let capturedPrompt = '';
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => {
+    lookupQueries.push(params.query);
+
+    if (params.query === 'iphone 17') {
+      return makeEmptyInventoryResult(params.query);
+    }
+
+    if (params.query === 'iphone') {
+      return makeAlternativeInventoryResult(params.query);
+    }
+
+    return makeEmptyInventoryResult(params.query);
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    capturedPrompt = params.prompt;
+
+    return {
+      reply_text: 'Hozircha iPhone 17 yo‘q, lekin boshqa variantlarni taklif qilaman.',
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'Ulardan iphone 17 topamanmi',
+    });
+
+    assert.deepEqual(lookupQueries, ['iphone 17', 'iphone']);
+    assert.match(capturedPrompt, /Alternative inventory suggestions:/);
+    assert.match(capturedPrompt, /"strategy": "product_family"/);
+    assert.match(capturedPrompt, /"query": "iphone"/);
+    assert.match(capturedPrompt, /"item_name": "iPhone 16"/);
+    assert.match(capturedPrompt, /"item_name": "iPhone 16 Pro"/);
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
     SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
@@ -420,6 +825,90 @@ test('SupportAgentService derives a generic iphone inventory query for catalog-s
   }
 });
 
+test('SupportAgentService preloads grounded device catalog context for broad assortment questions', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableDevices = SupportItemAvailabilityService.lookupAvailableDevices;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+
+  let capturedPrompt = '';
+  let catalogLookupCount = 0;
+  let itemLookupCount = 0;
+
+  SupportItemAvailabilityService.lookupAvailableDevices = (async () => {
+    catalogLookupCount += 1;
+    return {
+      ok: true,
+      new_devices: ['iPhone 15', 'iPhone 16 Pro'],
+      used_devices: ['iPhone 14 Pro Max'],
+    };
+  }) as typeof SupportItemAvailabilityService.lookupAvailableDevices;
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async () => {
+    itemLookupCount += 1;
+    return makeInventoryResult('iphone');
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    capturedPrompt = params.prompt;
+
+    return {
+      reply_text: 'Hozir mavjud modellarning umumiy ro‘yxatini yuboraman.',
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    const result = await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'Silada qanaqa telefonla bor',
+    });
+
+    assert.equal(result.replyText, 'Hozir mavjud modellarning umumiy ro‘yxatini yuboraman.');
+    assert.equal(catalogLookupCount, 1);
+    assert.equal(itemLookupCount, 0);
+    assert.match(capturedPrompt, /Device catalog pre-check:/);
+    assert.match(capturedPrompt, /"new_devices": \[/);
+    assert.match(capturedPrompt, /"iPhone 16 Pro"/);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableDevices = originalLookupAvailableDevices;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+  }
+});
+
+test('SupportAgentService asks a deterministic clarification when grounding is missing for an inventory-style request', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+
+  let geminiCallCount = 0;
+
+  GeminiService.generateJsonWithTools = (async () => {
+    geminiCallCount += 1;
+    return {
+      reply_text: 'Should not be used',
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    const result = await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'Bironta telefon bormi?',
+    });
+
+    assert.equal(geminiCallCount, 0);
+    assert.match(result.replyText, /Qaysi marka yoki modelni tekshirib berishimni yozib yuboring/i);
+    assert.equal(result.shouldEscalate, false);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+  }
+});
+
 test('SupportAgentService derives follow-up inventory queries from prior context for model-only questions', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
   const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
@@ -467,6 +956,49 @@ test('SupportAgentService derives follow-up inventory queries from prior context
     });
 
     assert.equal(preloadedQuery, 'iphone 16');
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+  }
+});
+
+test('SupportAgentService broadens "other series" follow-ups to the product family query', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+
+  const lookupQueries: string[] = [];
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => {
+    lookupQueries.push(params.query);
+    return makeAlternativeInventoryResult(params.query);
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  GeminiService.generateJsonWithTools = (async () => ({
+    reply_text: 'Hozirgi mavjud iPhone variantlarini aytib beraman.',
+    should_escalate: false,
+    escalation_reason: '',
+  })) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      faq: makeFaq(),
+      user: makeUser(),
+      history: [
+        {
+          id: 1,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text: 'Ulardan iphone 17 topamanmi',
+          photo_file_id: null,
+          telegram_message_id: 111,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+      ],
+      latestUserMessage: "iphone 17'ning boshqa seriyalarichi ?",
+    });
+
+    assert.deepEqual(lookupQueries, ['iphone']);
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
     SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;

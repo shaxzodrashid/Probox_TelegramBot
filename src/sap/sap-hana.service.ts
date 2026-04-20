@@ -20,6 +20,11 @@ interface ParsedItemSearch {
   condition?: string;
 }
 
+interface SapAvailableDeviceRow {
+  full_name: string;
+  condition: string | null;
+}
+
 export class SapService {
   private readonly logger = logger;
   private readonly schema: string = process.env.SAP_SCHEMA || 'PROBOX_PROD_3';
@@ -435,6 +440,75 @@ export class SapService {
     }
   }
 
+  async getAvailableDeviceNames(): Promise<{ newDevices: string[]; usedDevices: string[] }> {
+    const db = this.schema;
+    const fullNameExpression = `
+      TRIM(
+        CASE
+          WHEN T1."U_DeviceType" IS NULL
+            OR TRIM(T1."U_DeviceType") = ''
+            OR TRIM(T1."U_DeviceType") = '-'
+            OR LOWER(TRIM(T1."U_DeviceType")) = 'null'
+          THEN COALESCE(T1."U_Model", '')
+          ELSE COALESCE(T1."U_Model", '') || ' ' || TRIM(T1."U_DeviceType")
+        END
+      )
+    `;
+
+    const sql = `
+    SELECT
+      ${fullNameExpression} AS "full_name",
+      T1."U_PROD_CONDITION" AS "condition"
+    FROM ${db}."OITW" T0
+      INNER JOIN ${db}."OITM" T1 ON T0."ItemCode" = T1."ItemCode"
+    WHERE
+      T0."OnHand" > 0
+      AND T1."U_Model" IS NOT NULL
+      AND TRIM(T1."U_Model") <> ''
+    GROUP BY
+      ${fullNameExpression},
+      LOWER(TRIM(COALESCE(T1."U_PROD_CONDITION", ''))),
+      T1."U_PROD_CONDITION"
+    ORDER BY "full_name" ASC
+`;
+
+    try {
+      this.logger.info('📦 [SAP] Fetching available device names');
+      const rows = await this.hana.executeOnce<SapAvailableDeviceRow>(sql);
+
+      const grouped = rows.reduce(
+        (accumulator, row) => {
+          const fullName = row.full_name?.trim();
+          if (!fullName) {
+            return accumulator;
+          }
+
+          const condition = this.canonicalizeCondition(row.condition);
+          if (condition === 'Yangi') {
+            accumulator.newDevices.add(fullName);
+          } else if (condition === 'B/U') {
+            accumulator.usedDevices.add(fullName);
+          }
+
+          return accumulator;
+        },
+        {
+          newDevices: new Set<string>(),
+          usedDevices: new Set<string>(),
+        },
+      );
+
+      return {
+        newDevices: Array.from(grouped.newDevices).sort((left, right) => left.localeCompare(right)),
+        usedDevices: Array.from(grouped.usedDevices).sort((left, right) => left.localeCompare(right)),
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error('❌ [SAP] getAvailableDeviceNames failed', message);
+      throw new Error('SAP query failed (getAvailableDeviceNames)');
+    }
+  }
+
   async getItems({
     search,
     filters = {},
@@ -461,6 +535,8 @@ export class SapService {
     if (!includeZeroOnHand) {
       whereClauses.push(`T0."OnHand" > 0`);
     }
+
+    whereClauses.push(`COALESCE(PR."Price", 0) > 0`);
 
     let imeiJoin = '';
     let imeiWhere = '';

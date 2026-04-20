@@ -13,10 +13,12 @@ const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean
 
 const isLoopbackHost = (host: string): boolean => {
   const normalized = host.trim().toLowerCase();
-  return normalized === '127.0.0.1'
-    || normalized === 'localhost'
-    || normalized === '::1'
-    || normalized === '[::1]';
+  return (
+    normalized === '127.0.0.1' ||
+    normalized === 'localhost' ||
+    normalized === '::1' ||
+    normalized === '[::1]'
+  );
 };
 
 export const config = {
@@ -50,29 +52,34 @@ export const config = {
   MINIO_USE_SSL: process.env.MINIO_USE_SSL === 'true',
 
   // Admin Support Configuration
-  ADMIN_GROUP_ID: process.env.ADMIN_GROUP_ID || '',
+  SUPPORT_GROUP_ID: process.env.SUPPORT_GROUP_ID || process.env.ADMIN_GROUP_ID || '',
+  ADMIN_GROUP_ID: process.env.SUPPORT_GROUP_ID || process.env.ADMIN_GROUP_ID || '',
 
   // Rate Limits
-  EXPORT_RATE_LIMIT: parseInt(process.env.EXPORT_RATE_LIMIT || '5', 10),      // Max exports per hour
+  EXPORT_RATE_LIMIT: parseInt(process.env.EXPORT_RATE_LIMIT || '5', 10), // Max exports per hour
   BROADCAST_BATCH_SIZE: parseInt(process.env.BROADCAST_BATCH_SIZE || '25', 10),
   BROADCAST_DELAY_MS: parseInt(process.env.BROADCAST_DELAY_MS || '1000', 10),
-  LOG_LEVEL: process.env.LOG_LEVEL || 'info', 
+  LOG_LEVEL: process.env.LOG_LEVEL || 'info',
 
   // CRM Configuration
   CRM_URL: process.env.CRM_URL || '',
   CRM_LOGIN: process.env.CRM_LOGIN || '',
   CRM_PASS: process.env.CRM_PASS || '',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-  GEMINI_REQUEST_TIMEOUT_MS: Math.max(1000, parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS || '60000', 10) || 60000),
-  GEMINI_TEXT_MODEL: process.env.GEMINI_TEXT_MODEL || 'gemma-4-26b-a4b-it',
-  GEMINI_SUPPORT_AGENT_MODEL: process.env.GEMINI_SUPPORT_AGENT_MODEL || 'gemma-4-26b-a4b-it',
+  GEMINI_REQUEST_TIMEOUT_MS: Math.max(
+    1000,
+    parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS || '60000', 10) || 60000,
+  ),
+  GEMINI_TEXT_MODEL: process.env.GEMINI_TEXT_MODEL || 'gemini-3.1-flash-lite-preview',
+  GEMINI_SUPPORT_AGENT_MODEL: process.env.GEMINI_SUPPORT_AGENT_MODEL || 'gemini-2.5-flash',
   GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2-preview',
   FAQ_EMBEDDING_DIM: parseInt(process.env.FAQ_EMBEDDING_DIM || '1536', 10),
   FAQ_SIMILAR_LIMIT: parseInt(process.env.FAQ_SIMILAR_LIMIT || '5', 10),
   FAQ_SEMANTIC_AUTO_REPLY_ENABLED: parseBoolean(process.env.FAQ_SEMANTIC_AUTO_REPLY_ENABLED, true),
   FAQ_AUTO_REPLY_MAX_DISTANCE: parseFloat(process.env.FAQ_AUTO_REPLY_MAX_DISTANCE || '0.40'),
   FAQ_AUTO_REPLY_MIN_CONFIDENCE: parseFloat(process.env.FAQ_AUTO_REPLY_MIN_CONFIDENCE || '0.85'),
-  PURCHASE_PDF_API_BASE_URL: process.env.PURCHASE_PDF_API_BASE_URL || 'https://work-api.probox.uz/api/basic/purchases/pdfs',
+  PURCHASE_PDF_API_BASE_URL:
+    process.env.PURCHASE_PDF_API_BASE_URL || 'https://work-api.probox.uz/api/basic/purchases/pdfs',
   PURCHASE_PDF_API_USER: process.env.PURCHASE_PDF_API_USER || '',
   PURCHASE_PDF_API_PASS: process.env.PURCHASE_PDF_API_PASS || '',
 };

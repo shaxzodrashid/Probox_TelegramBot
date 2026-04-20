@@ -245,10 +245,12 @@ test('SapService getItems excludes zero stock by default and can include it when
   const defaultRun = createService();
   await defaultRun.service.getItems({});
   assert.match(getItemQueries(defaultRun.hana).dataQuery, /T0\."OnHand" > 0/);
+  assert.match(getItemQueries(defaultRun.hana).dataQuery, /COALESCE\(PR\."Price", 0\) > 0/);
 
   const includeZeroRun = createService();
   await includeZeroRun.service.getItems({ includeZeroOnHand: true });
   assert.doesNotMatch(getItemQueries(includeZeroRun.hana).dataQuery, /T0\."OnHand" > 0/);
+  assert.match(getItemQueries(includeZeroRun.hana).dataQuery, /COALESCE\(PR\."Price", 0\) > 0/);
 });
 
 test('SapService getItems filters by warehouse code and normalized store name', async () => {
