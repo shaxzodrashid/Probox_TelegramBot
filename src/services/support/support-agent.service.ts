@@ -1,6 +1,5 @@
 import { config } from '../../config';
 import { SupportTicketMessage } from '../../types/support.types';
-import { FaqRecord } from '../../types/faq.types';
 import { User } from '../user.service';
 import { GeminiService, GeminiTool } from '../gemini.service';
 import { SupportCurrencyService } from './support-currency.service';
@@ -805,13 +804,11 @@ const convertCurrencyAmountTool: GeminiTool = {
 
 export class SupportAgentService {
   static async generateReply(params: {
-    faq?: FaqRecord | null;
     user: User;
     history: SupportTicketMessage[];
     latestUserMessage: string;
   }): Promise<SupportAgentReply> {
     logger.info('[SUPPORT_AGENT] Generating support reply', {
-      faqId: params.faq?.id ?? null,
       userTelegramId: params.user.telegram_id,
       latestUserMessage: previewSupportMessage(params.latestUserMessage),
       historySize: params.history.length,
@@ -833,8 +830,6 @@ export class SupportAgentService {
       logger.info(
         '[SUPPORT_AGENT] Returning deterministic clarification because grounding context is missing',
         {
-          faqId: params.faq?.id ?? null,
-          fallbackMode: params.faq ? false : true,
           userTelegramId: params.user.telegram_id,
           latestUserMessage: previewSupportMessage(params.latestUserMessage),
         },
@@ -853,32 +848,6 @@ export class SupportAgentService {
       '<context>',
       `Preferred language: ${params.user.language_code || 'uz'}`,
       `Latest user message:\n${params.latestUserMessage}`,
-      '',
-      `Matched FAQ metadata:\n${JSON.stringify(
-        params.faq
-          ? {
-              id: params.faq.id,
-              agent_token: params.faq.agent_token,
-              question_uz: params.faq.question_uz,
-              question_ru: params.faq.question_ru,
-              question_en: params.faq.question_en,
-              answer_uz: params.faq.answer_uz,
-              answer_ru: params.faq.answer_ru,
-              answer_en: params.faq.answer_en,
-            }
-          : {
-              id: null,
-              agent_token: '__FALLBACK_AI_SUPPORT__',
-              question_uz: null,
-              question_ru: null,
-              question_en: null,
-              answer_uz: null,
-              answer_ru: null,
-              answer_en: null,
-            },
-        null,
-        2,
-      )}`,
       '',
       `User profile:\n${JSON.stringify(serializeUserContext(params.user), null, 2)}`,
       '',
@@ -927,6 +896,22 @@ export class SupportAgentService {
       '</task>',
     ].join('\n');
 
+    logger.info('[SUPPORT_AGENT] Calling Gemini support agent', {
+      userTelegramId: params.user.telegram_id,
+      model: config.GEMINI_SUPPORT_AGENT_MODEL,
+      schemaName: 'support agent reply',
+      functionCallingMode: 'AUTO',
+      structuredOutput: true,
+      selectedTools: selectedToolNames,
+      promptChars: prompt.length,
+      systemInstructionParts: SUPPORT_AGENT_SYSTEM_INSTRUCTIONS.length,
+      hasInventoryPrecheck: Boolean(inventoryPrecheck?.result),
+      inventoryPrecheckQuery: inventoryPrecheck?.query || null,
+      inventoryPrecheckError: inventoryPrecheck?.error || null,
+      hasAlternativeInventory: Boolean(inventoryPrecheck?.alternativeInventory),
+      hasDeviceCatalogPrecheck: Boolean(catalogPrecheck?.result),
+    });
+
     // Function calling is for live inventory/currency lookups; structured output is for the final reply payload.
     const payload = await GeminiService.generateJsonWithTools<SupportAgentPayload>({
       model: config.GEMINI_SUPPORT_AGENT_MODEL,
@@ -944,7 +929,6 @@ export class SupportAgentService {
     const reply = assertAgentPayload(payload);
 
     logger.info('[SUPPORT_AGENT] Gemini support reply decision', {
-      faqId: params.faq?.id ?? null,
       userTelegramId: params.user.telegram_id,
       shouldEscalate: reply.shouldEscalate,
       escalationReason: reply.escalationReason || null,

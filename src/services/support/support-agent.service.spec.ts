@@ -1,33 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { FaqRecord } from '../../types/faq.types';
 import { SupportTicketMessage } from '../../types/support.types';
 import { GeminiService } from '../gemini.service';
 import { SupportAgentService } from './support-agent.service';
 import { SupportItemAvailabilityService } from './support-item-availability.service';
 import { User } from '../user.service';
-
-const AGENT_TOKEN = '__AGENT_FAQ_12__';
-
-const makeFaq = (): FaqRecord => ({
-  id: 12,
-  question_uz: 'Savol',
-  question_ru: 'Вопрос',
-  question_en: 'Question',
-  answer_uz: AGENT_TOKEN,
-  answer_ru: AGENT_TOKEN,
-  answer_en: AGENT_TOKEN,
-  status: 'published',
-  vector_embedding: '[]',
-  agent_enabled: true,
-  agent_token: AGENT_TOKEN,
-  created_by_admin_telegram_id: 1,
-  locked_by_admin_telegram_id: null,
-  workflow_stage: 'completed',
-  created_at: new Date(),
-  updated_at: new Date(),
-});
 
 const makeUser = (): User => ({
   id: 1,
@@ -156,7 +134,6 @@ test('SupportAgentService returns parsed Gemini reply payload', async () => {
 
   try {
     const result = await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'To‘lovni qanday tekshiraman?',
@@ -194,7 +171,6 @@ test('SupportAgentService does not preload inventory for unrelated non-stock che
 
   try {
     const result = await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'To‘lovni qanday tekshiraman?',
@@ -204,6 +180,13 @@ test('SupportAgentService does not preload inventory for unrelated non-stock che
     assert.equal(inventoryLookupCallCount, 0);
     assert.match(capturedPrompt, /"query": null/);
     assert.match(capturedPrompt, /"result": null/);
+    assert.match(capturedPrompt, /User profile:/);
+    assert.match(capturedPrompt, /Conversation transcript:/);
+    assert.doesNotMatch(capturedPrompt, /Matched FAQ metadata/i);
+    assert.doesNotMatch(
+      capturedPrompt,
+      /question_uz|question_ru|question_en|answer_uz|answer_ru|answer_en/,
+    );
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
     SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
@@ -223,7 +206,6 @@ test('SupportAgentService rejects empty non-escalation replies', async () => {
     await assert.rejects(
       () =>
         SupportAgentService.generateReply({
-          faq: makeFaq(),
           user: makeUser(),
           history: makeHistory(),
           latestUserMessage: 'To‘lovni qanday tekshiraman?',
@@ -246,7 +228,6 @@ test('SupportAgentService preserves an AI handoff note when escalation is reques
 
   try {
     const result = await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'Buyurtmam qayerda?',
@@ -271,7 +252,6 @@ test('SupportAgentService accepts an empty reply when escalation is requested', 
 
   try {
     const result = await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'Buyurtmam qayerda?',
@@ -312,7 +292,6 @@ test('SupportAgentService passes system instructions, focused tool config, and s
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: [
         ...makeHistory(),
@@ -369,6 +348,14 @@ test('SupportAgentService passes system instructions, focused tool config, and s
     );
     assert.match(capturedPrompt, /<context>/i);
     assert.match(capturedPrompt, /Tools enabled for this turn: convert_currency_amount/i);
+    assert.match(capturedPrompt, /User profile:/);
+    assert.match(capturedPrompt, /Conversation transcript:/);
+    assert.match(capturedPrompt, /Narxi 18 467 000 so'm bo'ladi\./);
+    assert.doesNotMatch(capturedPrompt, /Matched FAQ metadata/i);
+    assert.doesNotMatch(
+      capturedPrompt,
+      /question_uz|question_ru|question_en|answer_uz|answer_ru|answer_en/,
+    );
     assert.match(capturedPrompt, /Use the system instructions as the primary policy/i);
     assert.match(
       capturedPrompt,
@@ -434,7 +421,6 @@ test('SupportAgentService enables only the inventory tool for specific stock que
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'silada 15 pro bomi',
@@ -471,7 +457,6 @@ test('SupportAgentService enables only the catalog tool for broad assortment que
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'Silada qanaqa telefonla bor',
@@ -536,7 +521,6 @@ test('SupportAgentService exposes the Gemini inventory tool that delegates to it
 
   try {
     const result = await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'Nurafshonda iPhone 16 bormi?',
@@ -602,7 +586,6 @@ test('SupportAgentService exposes the Gemini device catalog tool that delegates 
 
   try {
     const result = await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'Mavjud telefonlar ro‘yxatini yuboring',
@@ -644,7 +627,6 @@ test('SupportAgentService preloads live inventory context for direct availabilit
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'iPhone 17 olmoqchiman, sizlarda bormi?',
@@ -679,7 +661,6 @@ test('SupportAgentService normalizes shorthand model slang like "silada 15 pro b
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'silada 15 pro bomi',
@@ -711,7 +692,6 @@ test('SupportAgentService treats shorthand price questions like "17 lani narxi q
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: "17 lani narxi qancha bo'votti",
@@ -757,7 +737,6 @@ test('SupportAgentService preloads grounded alternative inventory suggestions wh
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'Ulardan iphone 17 topamanmi',
@@ -799,7 +778,6 @@ test('SupportAgentService derives a generic iphone inventory query for catalog-s
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: [
         {
@@ -860,7 +838,6 @@ test('SupportAgentService preloads grounded device catalog context for broad ass
 
   try {
     const result = await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'Silada qanaqa telefonla bor',
@@ -895,7 +872,6 @@ test('SupportAgentService asks a deterministic clarification when grounding is m
 
   try {
     const result = await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: makeHistory(),
       latestUserMessage: 'Bironta telefon bormi?',
@@ -928,7 +904,6 @@ test('SupportAgentService derives follow-up inventory queries from prior context
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: [
         {
@@ -981,7 +956,6 @@ test('SupportAgentService broadens "other series" follow-ups to the product fami
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: [
         {
@@ -1024,7 +998,6 @@ test('SupportAgentService reuses the previous product query for warehouse-check 
 
   try {
     await SupportAgentService.generateReply({
-      faq: makeFaq(),
       user: makeUser(),
       history: [
         {

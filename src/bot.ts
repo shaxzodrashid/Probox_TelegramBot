@@ -190,6 +190,7 @@ import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from './u
 import { enqueueSupportRequest } from './utils/support/support.util';
 import { getMainKeyboardByLocale } from './keyboards';
 import { FaqService } from './services/faq/faq.service';
+import { ErrorNotificationService } from './services/error-notification.service';
 import {
   resolveUiTextAction,
   routeUiTextAction,
@@ -391,6 +392,12 @@ bot.catch((err) => {
   } else {
     console.error(e);
   }
+
+  void ErrorNotificationService.notifyBotError({
+    api: bot.api,
+    ctx,
+    error: e,
+  });
 });
 
 // Commands

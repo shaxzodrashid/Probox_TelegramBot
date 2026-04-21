@@ -4,6 +4,7 @@ import { FaqService } from '../../services/faq/faq.service';
 import { SupportAgentService } from '../../services/support/support-agent.service';
 import { SupportDispatcherService } from '../../services/support/support-dispatcher.service';
 import { SupportService } from '../../services/support/support.service';
+import { ErrorNotificationService } from '../../services/error-notification.service';
 import { i18n } from '../../i18n';
 import { logger } from '../logger';
 import { formatGeminiRequestFailure } from '../gemini-error.util';
@@ -130,10 +131,6 @@ const localizeEscalationReason = (locale: SupportLocale, reason: string): string
       return locale === 'ru'
         ? 'К обращению прикреплено фото, поэтому требуется проверка оператором.'
         : 'Murojaatga rasm biriktirilgan, shu sabab operator tekshiruvi kerak.';
-    case 'Matched FAQ metadata is missing for this AI support thread.':
-      return locale === 'ru'
-        ? 'Для этой AI-переписки не найдены нужные FAQ-данные, поэтому обращение передано оператору.'
-        : "Ushbu AI yozishmasi uchun kerakli FAQ ma'lumotlari topilmadi, shu sabab murojaat operatorga yuborildi.";
     case 'The FAQ assigned to this AI support thread is no longer configured for agent mode.':
       return locale === 'ru'
         ? 'Назначенный FAQ больше не настроен для режима AI-агента, поэтому обращение передано оператору.'
@@ -624,7 +621,6 @@ const continueAgentConversation = async (params: {
 
   try {
     const decision = await SupportAgentService.generateReply({
-      faq,
       user: params.user,
       history,
       latestUserMessage: params.messageText,
@@ -659,6 +655,34 @@ const continueAgentConversation = async (params: {
       'Support agent failed; escalating to human support.',
       formatGeminiRequestFailure(error),
     );
+    void ErrorNotificationService.notify({
+      api: params.api,
+      error,
+      context: {
+        scope: 'support_ai_agent',
+        severity: 'critical',
+        title: 'AI support agent failed',
+        updateId: params.ctx.update.update_id,
+        chatId: params.ctx.chat?.id ?? params.user.telegram_id,
+        chatType: params.ctx.chat?.type ?? 'private',
+        ticketNumber: params.ticket.ticket_number,
+        actor: {
+          telegramId: params.user.telegram_id,
+          username: params.ctx.from?.username ?? null,
+          firstName: params.user.first_name ?? params.ctx.from?.first_name ?? null,
+          lastName: params.user.last_name ?? params.ctx.from?.last_name ?? null,
+          languageCode: params.user.language_code || params.locale,
+        },
+        userMessage: params.messageText,
+        metadata: {
+          userId: params.user.id,
+          matchedFaqId: params.ticket.matched_faq_id || null,
+          agentToken: params.ticket.agent_token || null,
+          photoAttached: Boolean(params.photoFileId),
+          failure: formatGeminiRequestFailure(error),
+        },
+      },
+    });
     await escalateAgentTicketToHuman({
       ...params,
       reason: 'Gemini support agent failed to produce a grounded response.',

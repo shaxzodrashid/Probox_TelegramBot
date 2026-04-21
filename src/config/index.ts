@@ -54,6 +54,7 @@ export const config = {
   // Admin Support Configuration
   SUPPORT_GROUP_ID: process.env.SUPPORT_GROUP_ID || process.env.ADMIN_GROUP_ID || '',
   ADMIN_GROUP_ID: process.env.SUPPORT_GROUP_ID || process.env.ADMIN_GROUP_ID || '',
+  ERROR_NOTIFICATION_CHAT_ID: process.env.ERROR_NOTIFICATION_CHAT_ID || '',
 
   // Rate Limits
   EXPORT_RATE_LIMIT: parseInt(process.env.EXPORT_RATE_LIMIT || '5', 10), // Max exports per hour
@@ -71,7 +72,7 @@ export const config = {
     parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS || '60000', 10) || 60000,
   ),
   GEMINI_TEXT_MODEL: process.env.GEMINI_TEXT_MODEL || 'gemini-3.1-flash-lite-preview',
-  GEMINI_SUPPORT_AGENT_MODEL: process.env.GEMINI_SUPPORT_AGENT_MODEL || 'gemini-2.5-flash',
+  GEMINI_SUPPORT_AGENT_MODEL: process.env.GEMINI_SUPPORT_AGENT_MODEL || 'gemini-3.1-flash-lite-preview',
   GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2-preview',
   FAQ_EMBEDDING_DIM: parseInt(process.env.FAQ_EMBEDDING_DIM || '1536', 10),
   FAQ_SIMILAR_LIMIT: parseInt(process.env.FAQ_SIMILAR_LIMIT || '5', 10),
