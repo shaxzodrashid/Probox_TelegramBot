@@ -10,6 +10,7 @@ import { FaqAnswerVariants, FaqNeighbor, FaqQuestionVariants, FaqRecord } from '
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import { logger } from '../utils/logger';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
+import { formatGeminiRequestFailure } from '../utils/gemini-error.util';
 
 const FAQ_QUESTION_CONFIRM_CALLBACK = 'faq_question_confirm';
 const FAQ_QUESTION_REGENERATE_CALLBACK = 'faq_question_regenerate';
@@ -90,6 +91,18 @@ const getSession = (ctx: BotContext): SessionData => {
 
   return ctx.session;
 };
+
+const externalGemini = async <T>(
+  conversation: BotConversation,
+  operation: () => Promise<T>,
+): Promise<T> =>
+  conversation.external(async () => {
+    try {
+      return await operation();
+    } catch (error) {
+      throw new Error(formatGeminiRequestFailure(error));
+    }
+  });
 
 const clearFaqSession = (ctx: BotContext) => {
   const session = getSession(ctx);
@@ -536,13 +549,13 @@ const runQuestionDraftFlow = async (
     try {
       await ctx.reply(i18n.t(locale, 'admin_faq_processing_questions'));
 
-      const queryEmbedding = await conversation.external(() =>
+      const queryEmbedding = await externalGemini(conversation, () =>
         FaqEmbeddingService.embedQuestionQuery(sourceQuestion),
       );
       const neighbors = await conversation.external(() =>
         FaqService.searchNearestPublishedFaqs(queryEmbedding, config.FAQ_SIMILAR_LIMIT),
       );
-      const variants = await conversation.external(() =>
+      const variants = await externalGemini(conversation, () =>
         FaqAiService.generateQuestionVariants({
           sourceQuestion,
           neighbors,
@@ -574,7 +587,7 @@ const runQuestionDraftFlow = async (
         continue;
       }
 
-      const documentEmbedding = await conversation.external(() =>
+      const documentEmbedding = await externalGemini(conversation, () =>
         FaqEmbeddingService.embedFaqDocument(variants),
       );
       const draft = await conversation.external(() =>
@@ -629,7 +642,7 @@ const runAnswerFlow = async (
       try {
         await ctx.reply(i18n.t(locale, 'admin_faq_processing_answers'));
 
-        const answers = await conversation.external(() =>
+        const answers = await externalGemini(conversation, () =>
           FaqAiService.generateAnswerVariants({
             questions,
             sourceAnswer,
@@ -764,7 +777,7 @@ const updatePublishedFaqQuestions = async (
   faqId: number,
   questions: FaqQuestionVariants,
 ): Promise<FaqRecord | null> => {
-  const embedding = await conversation.external(() => FaqEmbeddingService.embedFaqDocument(questions));
+  const embedding = await externalGemini(conversation, () => FaqEmbeddingService.embedFaqDocument(questions));
   return conversation.external(() =>
     FaqService.updatePublishedQuestionVariants(faqId, questions, embedding),
   );
