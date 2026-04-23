@@ -17,6 +17,7 @@
     "check:gemini": "ts-node src/scripts/check-gemini-key.ts",
     "debug:payment-reminder": "ts-node src/scripts/test-payment-reminder.ts",
     "run:payment-reminder": "ts-node src/scripts/run-payment-reminder.ts",
+    "repair:payment-on-time-coupons": "ts-node src/scripts/repair-payment-on-time-coupons.ts",
     "test:purchase-pdf": "ts-node src/scripts/test-purchase-pdf.ts",
     "test:payment-reminder": "node --require ts-node/register --test --test-force-exit src/services/payment/payment-reminder.service.spec.ts",
     "test:faq-routing": "node --require ts-node/register --test src/services/faq/faq-routing.service.spec.ts src/services/faq/faq-ai.service.spec.ts src/services/faq/faq.service.spec.ts src/utils/faq/faq-routing-score.util.spec.ts",

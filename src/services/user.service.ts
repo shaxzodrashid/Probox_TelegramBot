@@ -1,4 +1,5 @@
 import db from '../database/database';
+import { normalizeUzPhoneOrNull } from '../utils/uz-phone.util';
 
 export interface User {
   id: number;
@@ -22,16 +23,7 @@ export interface User {
 export const normalizeUserPhoneForIdentity = (
   phoneNumber?: string | null,
 ): string | null => {
-  if (!phoneNumber) {
-    return null;
-  }
-
-  const digits = phoneNumber.replace(/\D/g, '');
-  if (digits.length < 9) {
-    return null;
-  }
-
-  return `+998${digits.slice(-9)}`;
+  return normalizeUzPhoneOrNull(phoneNumber);
 };
 
 export const isUserIdentitySwitch = (

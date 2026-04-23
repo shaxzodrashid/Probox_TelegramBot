@@ -24,6 +24,19 @@ export function normalizeUzPhone(phone: string): {
   };
 }
 
+export function normalizeUzPhoneOrNull(phone: string | null | undefined): string | null {
+  if (!phone) {
+    return null;
+  }
+
+  const digits = extractDigits(phone);
+  if (digits.length < 9) {
+    return null;
+  }
+
+  return `+998${digits.slice(-9)}`;
+}
+
 /**
  * Format phone number to +998XXXXXXXXX schema
  */

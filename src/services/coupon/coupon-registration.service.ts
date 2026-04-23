@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { Knex } from 'knex';
 import db from '../../database/database';
+import { IPurchaseInstallment } from '../../interfaces/purchase.interface';
 import { redisService } from '../../redis/redis.service';
 import { formatDateForLocale } from '../../utils/time/tashkent-time.util';
 import { Coupon, CouponService } from './coupon.service';
@@ -11,8 +12,10 @@ import {
   CouponRegistrationStatus,
 } from './coupon-registration-event.service';
 import { PromotionService } from './promotion.service';
+import { PaymentOnTimeCouponRepairService } from './payment-on-time-coupon-repair.service';
 import { Referral, ReferralService } from './referral.service';
 import { User, UserService } from '../user.service';
+import { logger } from '../../utils/logger';
 
 export interface CouponRegistrationPayload {
   phone_number: string;
@@ -82,52 +85,83 @@ export class CouponRegistrationService {
     coupons: Coupon[];
     delivery: CouponRegistrationResponse['delivery'];
   }> {
-    if (!user.phone_number) {
+    if (!user.phone_number && !user.sap_card_code) {
       return { coupons: [], delivery: [] };
     }
 
-    const { assignedCoupons, assignedEvents } = await this.runInTransaction(async (trx) => {
-      const assignedEvents = await CouponRegistrationEventService.assignPendingEventsToUser(
-        user.phone_number!,
-        user.id,
-        trx,
-      );
+    let ownedInstallmentsByKey = new Map<string, IPurchaseInstallment>();
 
-      for (const event of assignedEvents) {
-        if (!event.referred_phone_number) {
-          continue;
-        }
-
-        await ReferralService.createOrIgnore(
-          {
-            referrerUserId: user.id,
-            createdFromEventId: event.id,
-            referrerPhoneSnapshot: user.phone_number,
-            referrerFullNameSnapshot: event.customer_full_name || this.buildName(user),
-            referredPhoneNumber: event.referred_phone_number,
-          },
-          trx,
+    if (user.sap_card_code) {
+      try {
+        ownedInstallmentsByKey =
+          await PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey(user.sap_card_code);
+      } catch (error) {
+        logger.warn(
+          `[COUPON_REGISTRATION] Failed to load payment_on_time ownership for user ${user.id} (${user.sap_card_code})`,
+          error,
         );
       }
+    }
 
-      const assignedCoupons = await CouponService.assignPendingCouponsToUser(
-        {
-          userId: user.id,
-          phoneNumber: user.phone_number!,
-        },
-        trx,
-      );
+    const { assignedCoupons, assignedEvents, repairedCoupons } = await this.runInTransaction(
+      async (trx) => {
+        const assignedEvents = user.phone_number
+          ? await CouponRegistrationEventService.assignPendingEventsToUser(
+              user.phone_number,
+              user.id,
+              trx,
+            )
+          : [];
 
-      return {
-        assignedCoupons,
-        assignedEvents,
-      };
-    });
+        for (const event of assignedEvents) {
+          if (!event.referred_phone_number) {
+            continue;
+          }
+
+          await ReferralService.createOrIgnore(
+            {
+              referrerUserId: user.id,
+              createdFromEventId: event.id,
+              referrerPhoneSnapshot: user.phone_number,
+              referrerFullNameSnapshot: event.customer_full_name || this.buildName(user),
+              referredPhoneNumber: event.referred_phone_number,
+            },
+            trx,
+          );
+        }
+
+        const assignedCoupons = user.phone_number
+          ? await CouponService.assignPendingCouponsToUser(
+              {
+                userId: user.id,
+                phoneNumber: user.phone_number,
+              },
+              trx,
+            )
+          : [];
+        const repairedCoupons = await PaymentOnTimeCouponRepairService.assignOwnedCouponsToUser({
+          user,
+          installmentsByKey: ownedInstallmentsByKey,
+          executor: trx,
+        });
+
+        return {
+          assignedCoupons,
+          assignedEvents,
+          repairedCoupons,
+        };
+      },
+    );
 
     const eventsById = new Map(assignedEvents.map((event) => [event.id, event]));
     const delivery: CouponRegistrationResponse['delivery'] = [];
+    const claimedCouponsById = new Map<number, Coupon>();
 
-    for (const coupon of assignedCoupons) {
+    for (const coupon of [...assignedCoupons, ...repairedCoupons]) {
+      claimedCouponsById.set(coupon.id, coupon);
+    }
+
+    for (const coupon of claimedCouponsById.values()) {
       const templateType =
         coupon.source_type === 'purchase'
           ? 'purchase'
@@ -164,8 +198,17 @@ export class CouponRegistrationService {
       });
     }
 
+    const recoveryDelivery = await PaymentOnTimeCouponRepairService.sendRecoveryNotificationsForUser(
+      {
+        user,
+        coupons: Array.from(claimedCouponsById.values()),
+        installmentsByKey: ownedInstallmentsByKey,
+      },
+    );
+    delivery.push(...recoveryDelivery);
+
     return {
-      coupons: assignedCoupons,
+      coupons: Array.from(claimedCouponsById.values()),
       delivery,
     };
   }

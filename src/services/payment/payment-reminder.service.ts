@@ -5,7 +5,7 @@ import { SapService } from '../../sap/sap-hana.service';
 import { HanaService } from '../../sap/hana.service';
 import { getAdminMissingTemplateKeyboard } from '../../keyboards/template.keyboards';
 import { formatDateForLocale, getTashkentDateKey } from '../../utils/time/tashkent-time.util';
-import { formatUzPhone } from '../../utils/uz-phone.util';
+import { normalizeUzPhoneOrNull } from '../../utils/uz-phone.util';
 import { logger } from '../../utils/logger';
 import { BotNotificationService } from '../bot-notification.service';
 import { Coupon, CouponService } from '../coupon/coupon.service';
@@ -226,15 +226,15 @@ export class PaymentReminderService {
   ): string {
     const candidates = [
       linkedUser?.user.phone_number,
-      installment.Cellular,
       installment.Phone1,
       installment.Phone2,
+      installment.Cellular,
     ];
 
     for (const candidate of candidates) {
-      const formatted = formatUzPhone(candidate);
-      if (formatted !== '-') {
-        return formatted;
+      const normalized = normalizeUzPhoneOrNull(candidate);
+      if (normalized) {
+        return normalized;
       }
     }
 

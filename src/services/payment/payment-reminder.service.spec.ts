@@ -54,6 +54,7 @@ test(
           DocNum: 5002,
           CardCode: 'C002',
           CardName: 'SAP Only Customer',
+          Cellular: 'AC1617845',
           Phone1: '90 123 45 67',
           DocDate: '2026-04-01',
           DocDueDate: '2026-04-05',
@@ -145,6 +146,115 @@ test(
       assert.equal(createdCoupons[1].userId, undefined);
       assert.equal(createdCoupons[1].phoneSnapshot, '+998901234567');
       assert.deepEqual(notifications, [{ telegramId: 998901234, dispatchType: 'payment_on_time' }]);
+    } finally {
+      serviceClass.fetchInstallments = originalFetchInstallments;
+      serviceClass.findExistingRewardCoupon = originalFindExistingRewardCoupon;
+      serviceClass.hasReminderBeenSent = originalHasReminderBeenSent;
+      serviceClass.logReminder = originalLogReminder;
+      CouponService.expireStaleCoupons = originalExpireCoupons;
+      CouponService.createCouponsForUser = originalCreateCoupons;
+      UserService.getUsersWithSapCardCode = originalGetUsersWithSapCardCode;
+      PromotionService.getCurrentPromotion = originalGetCurrentPromotion;
+      BotNotificationService.sendTemplateMessage = originalSendTemplateMessage;
+    }
+  },
+);
+
+test(
+  'PaymentReminderService stores an empty snapshot when SAP phone candidates are invalid',
+  { concurrency: false },
+  async () => {
+    const serviceClass = PaymentReminderService as unknown as {
+      fetchInstallments: (window: { dueDateFrom: string; dueDateTo: string }) => Promise<unknown[]>;
+      findExistingRewardCoupon: () => Promise<undefined>;
+      hasReminderBeenSent: () => Promise<boolean>;
+      logReminder: () => Promise<void>;
+    };
+    const originalFetchInstallments = serviceClass.fetchInstallments;
+    const originalFindExistingRewardCoupon = serviceClass.findExistingRewardCoupon;
+    const originalHasReminderBeenSent = serviceClass.hasReminderBeenSent;
+    const originalLogReminder = serviceClass.logReminder;
+    const originalExpireCoupons = CouponService.expireStaleCoupons;
+    const originalCreateCoupons = CouponService.createCouponsForUser;
+    const originalGetUsersWithSapCardCode = UserService.getUsersWithSapCardCode;
+    const originalGetCurrentPromotion = PromotionService.getCurrentPromotion;
+    const originalSendTemplateMessage = BotNotificationService.sendTemplateMessage;
+
+    try {
+      const createdSnapshots: string[] = [];
+
+      serviceClass.fetchInstallments = async () => [
+        {
+          DocEntry: 109,
+          DocNum: 5009,
+          CardCode: 'C009',
+          CardName: 'Broken Phone Customer',
+          Cellular: 'AC1617845',
+          Phone1: '12345',
+          Phone2: null,
+          DocDate: '2026-04-01',
+          DocDueDate: '2026-04-08',
+          DocCur: 'UZS',
+          Total: 500000,
+          TotalPaid: 500000,
+          InstlmntID: 1,
+          InstDueDate: '2026-04-08',
+          InstTotal: 500000,
+          InstPaidToDate: 500000,
+          InstStatus: 'C',
+          InstActualPaymentDate: '2026-04-08',
+          itemsPairs: 'PH01::Phone::500000',
+        },
+      ];
+      serviceClass.findExistingRewardCoupon = async () => undefined;
+      serviceClass.hasReminderBeenSent = async () => false;
+      serviceClass.logReminder = async () => undefined;
+      CouponService.expireStaleCoupons = async () => 0;
+      CouponService.createCouponsForUser = async (params) => {
+        createdSnapshots.push(params.phoneSnapshot);
+        return [
+          {
+            id: 1,
+            code: 'PROEMPTY01',
+            promotion_id: params.promotionId || null,
+            registration_event_id: null,
+            source_type: 'payment_on_time',
+            status: 'active',
+            issued_phone_snapshot: params.phoneSnapshot,
+            sap_doc_entry: params.sapDocEntry || null,
+            sap_installment_id: params.sapInstallmentId || null,
+            expires_at: new Date('2026-05-08T00:00:00.000Z'),
+            is_active: true,
+            created_at: new Date('2026-04-08T00:00:00.000Z'),
+            updated_at: new Date('2026-04-08T00:00:00.000Z'),
+          },
+        ];
+      };
+      UserService.getUsersWithSapCardCode = async () => [];
+      PromotionService.getCurrentPromotion = async () => ({
+        id: 79,
+        slug: 'april',
+        title_uz: 'Aprel',
+        title_ru: 'Aprel',
+        about_uz: 'Campaign',
+        about_ru: 'Campaign',
+        is_active: true,
+        assign_coupons: true,
+        created_at: new Date('2026-04-01T00:00:00.000Z'),
+        updated_at: new Date('2026-04-01T00:00:00.000Z'),
+      });
+      BotNotificationService.sendTemplateMessage = async () => {
+        throw new Error('sendTemplateMessage should not be called for an unlinked customer');
+      };
+
+      const result = await PaymentReminderService.run({
+        now: new Date('2026-04-10T09:00:00.000Z'),
+        rewardMonth: '2026-04',
+      });
+
+      assert.equal(result.rewardCouponsIssued, 1);
+      assert.equal(result.rewardNotificationsSent, 0);
+      assert.deepEqual(createdSnapshots, ['']);
     } finally {
       serviceClass.fetchInstallments = originalFetchInstallments;
       serviceClass.findExistingRewardCoupon = originalFindExistingRewardCoupon;

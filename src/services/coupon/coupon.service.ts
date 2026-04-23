@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { Knex } from 'knex';
 import db from '../../database/database';
 import { isHappyHourInTashkent } from '../../utils/time/tashkent-time.util';
+import { normalizeUzPhoneOrNull } from '../../utils/uz-phone.util';
 
 export type CouponSourceType = 'store_visit' | 'purchase' | 'referral' | 'payment_on_time';
 export type CouponStatus = 'active' | 'won' | 'expired';
@@ -42,6 +43,15 @@ export interface CouponExportRow extends Coupon {
   promotion_title_uz?: string | null;
   promotion_title_ru?: string | null;
   user_exists: boolean;
+}
+
+export interface CouponInstallmentPair {
+  docEntry: number;
+  installmentId: number;
+}
+
+export interface RepairablePaymentOnTimeCoupon extends Coupon {
+  user_id?: number | null;
 }
 
 interface CouponPromotionSchemaState {
@@ -238,6 +248,153 @@ export class CouponService {
       .ignore();
 
     return coupons;
+  }
+
+  static async getUnmappedPaymentOnTimeCouponsByInstallments(
+    params: {
+      installmentPairs: CouponInstallmentPair[];
+    },
+    executor: DbExecutor = db,
+  ): Promise<Coupon[]> {
+    if (params.installmentPairs.length === 0) {
+      return [];
+    }
+
+    const coupons = await executor<Coupon>('coupons as coupons')
+      .leftJoin('coupon_user_mappings as mapping', 'mapping.coupon_id', 'coupons.id')
+      .where('coupons.source_type', 'payment_on_time')
+      .whereNull('mapping.id')
+      .andWhere((query) => {
+        for (const pair of params.installmentPairs) {
+          query.orWhere((inner) => {
+            inner
+              .where('coupons.sap_doc_entry', pair.docEntry)
+              .andWhere('coupons.sap_installment_id', pair.installmentId);
+          });
+        }
+      })
+      .select('coupons.*')
+      .orderBy('coupons.created_at', 'asc');
+
+    return coupons;
+  }
+
+  static async updateIssuedPhoneSnapshot(
+    couponId: number,
+    phoneNumber: string | null | undefined,
+    executor: DbExecutor = db,
+  ): Promise<boolean> {
+    const normalized = normalizeUzPhoneOrNull(phoneNumber);
+    if (!normalized) {
+      return false;
+    }
+
+    const updatedCount = await executor<Coupon>('coupons')
+      .where('id', couponId)
+      .update({
+        issued_phone_snapshot: normalized,
+        updated_at: new Date(),
+      });
+
+    return updatedCount > 0;
+  }
+
+  static async attachCouponToUser(
+    params: {
+      couponId: number;
+      userId: number;
+      phoneNumber?: string | null;
+    },
+    executor: DbExecutor = db,
+  ): Promise<{
+    attached: boolean;
+    existingUserId: number | null;
+    coupon: Coupon | null;
+  }> {
+    await executor('coupon_user_mappings')
+      .insert({
+        user_id: params.userId,
+        coupon_id: params.couponId,
+      })
+      .onConflict(['coupon_id'])
+      .ignore();
+
+    const mapping = await executor<{ user_id: number }>('coupon_user_mappings')
+      .where('coupon_id', params.couponId)
+      .first();
+    const attached = mapping?.user_id === params.userId;
+
+    if (attached) {
+      await this.updateIssuedPhoneSnapshot(params.couponId, params.phoneNumber, executor);
+    }
+
+    const coupon = (await executor<Coupon>('coupons').where('id', params.couponId).first()) || null;
+
+    return {
+      attached,
+      existingUserId: mapping?.user_id ?? null,
+      coupon,
+    };
+  }
+
+  static async assignPaymentOnTimeCouponsByInstallments(
+    params: {
+      userId: number;
+      installmentPairs: CouponInstallmentPair[];
+      phoneNumber?: string | null;
+    },
+    executor: DbExecutor = db,
+  ): Promise<Coupon[]> {
+    const coupons = await this.getUnmappedPaymentOnTimeCouponsByInstallments(
+      {
+        installmentPairs: params.installmentPairs,
+      },
+      executor,
+    );
+
+    const attachedCoupons: Coupon[] = [];
+
+    for (const coupon of coupons) {
+      const result = await this.attachCouponToUser(
+        {
+          couponId: coupon.id,
+          userId: params.userId,
+          phoneNumber: params.phoneNumber,
+        },
+        executor,
+      );
+
+      if (result.attached && result.coupon) {
+        attachedCoupons.push(result.coupon);
+      }
+    }
+
+    return attachedCoupons;
+  }
+
+  static async hasSuccessfulDispatch(
+    couponId: number,
+    dispatchTypes: string[],
+  ): Promise<boolean> {
+    if (dispatchTypes.length === 0) {
+      return false;
+    }
+
+    const dispatch = await db('message_dispatch_logs')
+      .where('coupon_id', couponId)
+      .where('status', 'sent')
+      .whereIn('dispatch_type', dispatchTypes)
+      .first();
+
+    return Boolean(dispatch);
+  }
+
+  static async listPaymentOnTimeCouponsForRepair(): Promise<RepairablePaymentOnTimeCoupon[]> {
+    return db<RepairablePaymentOnTimeCoupon>('coupons as coupons')
+      .leftJoin('coupon_user_mappings as mapping', 'mapping.coupon_id', 'coupons.id')
+      .where('coupons.source_type', 'payment_on_time')
+      .select('coupons.*', 'mapping.user_id')
+      .orderBy('coupons.created_at', 'asc');
   }
 
   private static async getCouponPromotionSchemaState(): Promise<CouponPromotionSchemaState> {
