@@ -1,15 +1,20 @@
 import { BotContext } from '../types/context';
-import { InputFile } from 'grammy';
+import { GrammyError, InputFile } from 'grammy';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getPromotionsKeyboard, getPromotionDetailKeyboard, getCouponsKeyboard } from '../keyboards/campaign.keyboards';
 import { CouponService } from '../services/coupon/coupon.service';
-import { PromotionService } from '../services/coupon/promotion.service';
+import { Promotion, PromotionService } from '../services/coupon/promotion.service';
 import { UserService } from '../services/user.service';
 import { minioService } from '../services/minio.service';
 import { formatDateForLocale } from '../utils/time/tashkent-time.util';
 import { buildPromotionText } from '../utils/formatting/promotion-text.util';
 import { logger } from '../utils/logger';
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
+import {
+  isCallbackQueryExpiredError,
+  isMessageNotModifiedError,
+  isMessageToDeleteNotFoundError,
+} from '../utils/telegram/telegram-errors';
 
 const resolveLocale = async (ctx: BotContext): Promise<string> => (await ctx.i18n.getLocale()) || 'uz';
 
@@ -17,11 +22,64 @@ const clearPromotionSession = (ctx: BotContext) => {
   ctx.session.promotions = undefined;
 };
 
+const syncPromotionSession = (ctx: BotContext, promotions: Promotion[], locale: string) => {
+  ctx.session.promotions = promotions.map((promotion) => ({
+    id: promotion.id,
+    title: locale === 'ru' ? promotion.title_ru : promotion.title_uz,
+  }));
+};
+
+const getPromotionTitle = (promotion: Promotion, locale: string): string =>
+  locale === 'ru' ? promotion.title_ru : promotion.title_uz;
+
+const getPromotionAbout = (promotion: Promotion, locale: string): string =>
+  locale === 'ru' ? promotion.about_ru : promotion.about_uz;
+
+const buildPromotionCardText = (promotion: Promotion, locale: string): string =>
+  buildPromotionText(getPromotionTitle(promotion, locale), getPromotionAbout(promotion, locale));
+
+const buildPromotionsListText = (promotions: Promotion[], locale: string, header: string): string => {
+  const lines = promotions.map((promotion, index) => `${index + 1}. ${escapeHtml(getPromotionTitle(promotion, locale))}`);
+  return `<b>${escapeHtml(header)}</b>\n\n${lines.join('\n')}`;
+};
+
+const canFallbackToDeleteAndSend = (error: unknown): boolean => {
+  if (isMessageNotModifiedError(error) || isMessageToDeleteNotFoundError(error)) {
+    return true;
+  }
+
+  return error instanceof GrammyError && error.error_code === 400;
+};
+
+const answerPromotionCallback = async (ctx: BotContext) => {
+  if (!ctx.callbackQuery) {
+    return;
+  }
+
+  await ctx.answerCallbackQuery().catch((error) => {
+    if (!isCallbackQueryExpiredError(error)) {
+      throw error;
+    }
+  });
+};
+
+const deleteCurrentPromotionMessage = async (ctx: BotContext) => {
+  if (!ctx.callbackQuery) {
+    return;
+  }
+
+  await ctx.deleteMessage().catch((error) => {
+    if (!isMessageToDeleteNotFoundError(error)) {
+      throw error;
+    }
+  });
+};
+
 const sendPromotionContent = async (
   ctx: BotContext,
   text: string,
   keyboard: ReturnType<typeof getPromotionDetailKeyboard>,
-  promotion: Awaited<ReturnType<typeof PromotionService.getPromotionById>>,
+  promotion: Promotion,
 ) => {
   if (promotion?.cover_image_object_key) {
     try {
@@ -61,9 +119,115 @@ const sendPromotionContent = async (
   });
 };
 
+const editPromotionContent = async (
+  ctx: BotContext,
+  text: string,
+  keyboard: ReturnType<typeof getPromotionDetailKeyboard>,
+  promotion: Promotion,
+): Promise<boolean> => {
+  if (!ctx.callbackQuery) {
+    return false;
+  }
+
+  try {
+    if (promotion.cover_image_object_key) {
+      const buffer = await minioService.getFileAsBuffer(promotion.cover_image_object_key);
+      await ctx.editMessageMedia(
+        {
+          type: 'photo',
+          media: new InputFile(buffer, promotion.cover_image_file_name || `promotion-${promotion.id}.jpg`),
+          caption: text,
+        },
+        {
+          reply_markup: keyboard,
+        },
+      );
+      return true;
+    }
+
+    await ctx.editMessageText(text, {
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    });
+    return true;
+  } catch (error) {
+    if (isMessageNotModifiedError(error)) {
+      return true;
+    }
+
+    if (!canFallbackToDeleteAndSend(error)) {
+      throw error;
+    }
+
+    logger.warn('Promotion detail edit failed; retrying by deleting the selector message.', error);
+    return false;
+  }
+};
+
+const renderPromotionContent = async (
+  ctx: BotContext,
+  promotion: Promotion,
+  locale: string,
+  options: {
+    showBackToPromotions: boolean;
+    showCoupons: boolean;
+    preferEdit?: boolean;
+  },
+) => {
+  const text = buildPromotionCardText(promotion, locale);
+  const keyboard = getPromotionDetailKeyboard(locale, {
+    showBackToPromotions: options.showBackToPromotions,
+    showCoupons: options.showCoupons,
+  });
+
+  if (options.preferEdit && ctx.callbackQuery) {
+    const edited = await editPromotionContent(ctx, text, keyboard, promotion);
+    if (edited) {
+      return;
+    }
+
+    await deleteCurrentPromotionMessage(ctx);
+  }
+
+  await sendPromotionContent(ctx, text, keyboard, promotion);
+};
+
+const renderPromotionsList = async (ctx: BotContext, promotions: Promotion[], locale: string) => {
+  const text = buildPromotionsListText(promotions, locale, ctx.t('campaign_promotions_header'));
+  const keyboard = getPromotionsKeyboard(promotions, locale);
+
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(text, {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
+      return;
+    } catch (error) {
+      if (isMessageNotModifiedError(error)) {
+        return;
+      }
+
+      if (!canFallbackToDeleteAndSend(error)) {
+        throw error;
+      }
+
+      logger.warn('Promotions list edit failed; retrying as a new message.', error);
+      await deleteCurrentPromotionMessage(ctx);
+    }
+  }
+
+  await ctx.reply(text, {
+    parse_mode: 'HTML',
+    reply_markup: keyboard,
+  });
+};
+
 export const promotionsHandler = async (ctx: BotContext) => {
   const locale = await resolveLocale(ctx);
   const promotions = await PromotionService.getActivePromotions();
+
+  await answerPromotionCallback(ctx);
 
   if (promotions.length === 0) {
     clearPromotionSession(ctx);
@@ -71,49 +235,40 @@ export const promotionsHandler = async (ctx: BotContext) => {
     return;
   }
 
-  ctx.session.promotions = promotions.map((promotion) => ({
-    id: promotion.id,
-    title: locale === 'ru' ? promotion.title_ru : promotion.title_uz,
-  }));
+  syncPromotionSession(ctx, promotions, locale);
 
-  if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery().catch(() => undefined);
-    await ctx.deleteMessage().catch(() => undefined);
-    await ctx.reply(ctx.t('campaign_promotions_header'), {
-      reply_markup: getPromotionsKeyboard(promotions, locale),
+  if (promotions.length === 1) {
+    await renderPromotionContent(ctx, promotions[0], locale, {
+      showBackToPromotions: false,
+      showCoupons: true,
+      preferEdit: Boolean(ctx.callbackQuery),
     });
     return;
   }
 
-  await ctx.reply(ctx.t('campaign_promotions_header'), {
-    reply_markup: getPromotionsKeyboard(promotions, locale),
-  });
+  await renderPromotionsList(ctx, promotions, locale);
 };
 
 export const promotionDetailHandler = async (ctx: BotContext) => {
   const locale = await resolveLocale(ctx);
   const promotionId = Number(ctx.callbackQuery?.data?.split(':')[1]);
-  const promotion = await PromotionService.getPromotionById(promotionId);
+  const promotions = await PromotionService.getActivePromotions();
+  const promotion = promotions.find((item) => item.id === promotionId) || null;
 
-  await ctx.answerCallbackQuery().catch(() => undefined);
+  await answerPromotionCallback(ctx);
 
   if (!promotion) {
     await ctx.reply(ctx.t('campaign_promotion_not_found'));
     return;
   }
 
-  const title = locale === 'ru' ? promotion.title_ru : promotion.title_uz;
-  const about = locale === 'ru' ? promotion.about_ru : promotion.about_uz;
-  const text = buildPromotionText(title, about);
+  syncPromotionSession(ctx, promotions, locale);
 
-  const keyboard = getPromotionDetailKeyboard(locale);
-
-  if (ctx.callbackQuery) {
-    await ctx.deleteMessage().catch(() => undefined);
-    await sendPromotionContent(ctx, text, keyboard, promotion);
-  } else {
-    await sendPromotionContent(ctx, text, keyboard, promotion);
-  }
+  await renderPromotionContent(ctx, promotion, locale, {
+    showBackToPromotions: promotions.length > 1,
+    showCoupons: true,
+    preferEdit: Boolean(ctx.callbackQuery),
+  });
 };
 
 export const promotionSelectionHandler = async (ctx: BotContext) => {
@@ -129,17 +284,19 @@ export const promotionSelectionHandler = async (ctx: BotContext) => {
     return;
   }
 
-  const promotion = await PromotionService.getPromotionById(selectedPromotion.id);
+  const promotions = await PromotionService.getActivePromotions();
+  const promotion = promotions.find((item) => item.id === selectedPromotion.id) || null;
   if (!promotion) {
     await ctx.reply(ctx.t('campaign_promotion_not_found'));
     return;
   }
 
-  const title = locale === 'ru' ? promotion.title_ru : promotion.title_uz;
-  const about = locale === 'ru' ? promotion.about_ru : promotion.about_uz;
-  const text = buildPromotionText(title, about);
+  syncPromotionSession(ctx, promotions, locale);
 
-  await sendPromotionContent(ctx, text, getPromotionDetailKeyboard(locale), promotion);
+  await renderPromotionContent(ctx, promotion, locale, {
+    showBackToPromotions: promotions.length > 1,
+    showCoupons: true,
+  });
 };
 
 export const couponsHandler = async (ctx: BotContext) => {
@@ -147,6 +304,7 @@ export const couponsHandler = async (ctx: BotContext) => {
   const telegramId = ctx.from?.id;
 
   clearPromotionSession(ctx);
+  await answerPromotionCallback(ctx);
 
   if (!telegramId) {
     return;
@@ -188,7 +346,6 @@ export const couponsHandler = async (ctx: BotContext) => {
 };
 
 export const campaignBackToPromotionsHandler = async (ctx: BotContext) => {
-  await ctx.answerCallbackQuery().catch(() => undefined);
   return promotionsHandler(ctx);
 };
 

@@ -1,4 +1,4 @@
-import { InlineKeyboard, Keyboard } from 'grammy';
+import { InlineKeyboard } from 'grammy';
 import { i18n } from '../i18n';
 import { Promotion, PromotionPrize, PromotionPrizeListItem } from '../services/coupon/promotion.service';
 
@@ -22,25 +22,47 @@ export const ADMIN_PRIZE_BACK_TO_LIST_CALLBACK = 'admin_prizes_back';
 export const ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX = 'awps:';
 
 export const getPromotionsKeyboard = (promotions: Promotion[], locale: string) => {
-  const keyboard = new Keyboard();
+  const keyboard = new InlineKeyboard();
 
-  promotions.forEach((promotion) => {
-    const title = locale === 'ru' ? promotion.title_ru : promotion.title_uz;
-    keyboard.text(title).row();
+  promotions.forEach((promotion, index) => {
+    keyboard.text(String(index + 1), `promotion_detail:${promotion.id}`);
+
+    if ((index + 1) % 4 === 0 || index === promotions.length - 1) {
+      keyboard.row();
+    }
   });
 
   keyboard
-    .text(i18n.t(locale, 'back'))
-    .text(i18n.t(locale, 'menu_coupons'));
+    .text(i18n.t(locale, 'menu_coupons'), 'campaign_open_coupons')
+    .text(i18n.t(locale, 'back'), 'campaign_back_to_menu');
 
-  return keyboard.resized();
+  return keyboard;
 };
 
-export const getPromotionDetailKeyboard = (locale: string) => {
-  return new InlineKeyboard()
-    .text(i18n.t(locale, 'admin_campaign_promotions_back'), 'campaign_back_to_promotions')
-    .row()
-    .text(i18n.t(locale, 'back'), 'campaign_back_to_menu');
+export const getPromotionDetailKeyboard = (
+  locale: string,
+  options: {
+    showBackToPromotions?: boolean;
+    showCoupons?: boolean;
+  } = {},
+) => {
+  const keyboard = new InlineKeyboard();
+
+  if (options.showBackToPromotions) {
+    keyboard.text(i18n.t(locale, 'admin_campaign_promotions_back'), 'campaign_back_to_promotions');
+  }
+
+  if (options.showCoupons) {
+    keyboard.text(i18n.t(locale, 'menu_coupons'), 'campaign_open_coupons');
+  }
+
+  if (options.showBackToPromotions || options.showCoupons) {
+    keyboard.row();
+  }
+
+  keyboard.text(i18n.t(locale, 'back'), 'campaign_back_to_menu');
+
+  return keyboard;
 };
 
 export const getCouponsKeyboard = (locale: string) => {
