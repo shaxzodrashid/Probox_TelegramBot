@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { config } from '../../config';
-import { i18n } from '../../i18n';
 import { FaqRoutingService } from '../../services/faq/faq-routing.service';
 import { FaqService } from '../../services/faq/faq.service';
 import { SupportAgentService } from '../../services/support/support-agent.service';
@@ -285,6 +284,7 @@ test('enqueueSupportRequest acknowledges immediately and finishes the FAQ reply 
   const { ctx, replies } = makeFakeCtx();
   const deletedMessages: Array<{ chatId: number; messageId: number }> = [];
   const chatActions: string[] = [];
+  let apiMessageCounter = 100;
 
   try {
     await enqueueSupportRequest(
@@ -296,8 +296,22 @@ test('enqueueSupportRequest acknowledges immediately and finishes the FAQ reply 
         sendChatAction: async (_chatId: number, action: string) => {
           chatActions.push(action);
         },
+        sendMessage: async (chatId: number, text: string) => {
+          replies.push(text);
+          apiMessageCounter += 1;
+
+          return {
+            chat: { id: chatId },
+            message_id: apiMessageCounter,
+          };
+        },
       } as unknown as import('grammy').Api<import('grammy').RawApi>,
-      ctx as unknown as import('../../types/context').BotContext,
+      {
+        ...(ctx as object),
+        reply: async () => {
+          throw new Error('deferred support jobs must not use ctx.reply');
+        },
+      } as unknown as import('../../types/context').BotContext,
       makeUser(),
       'Assalomu alaykum, silada dostavka bormi',
       612,
@@ -391,6 +405,7 @@ test('enqueueSupportRequest keeps the thinking message until fallback AI support
 
   const { ctx, replies } = makeFakeCtx();
   const deletedMessages: Array<{ chatId: number; messageId: number }> = [];
+  let apiMessageCounter = 100;
 
   try {
     await enqueueSupportRequest(
@@ -399,9 +414,21 @@ test('enqueueSupportRequest keeps the thinking message until fallback AI support
         deleteMessage: async (chatId: number, messageId: number) => {
           deletedMessages.push({ chatId, messageId });
         },
+        sendMessage: async (chatId: number, text: string) => {
+          replies.push(text);
+          apiMessageCounter += 1;
+
+          return {
+            chat: { id: chatId },
+            message_id: apiMessageCounter,
+          };
+        },
       } as unknown as import('grammy').Api<import('grammy').RawApi>,
       {
         ...(ctx as object),
+        reply: async () => {
+          throw new Error('deferred support jobs must not use ctx.reply');
+        },
         from: {
           ...ctx.from,
           id: 55,

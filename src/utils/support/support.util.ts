@@ -73,6 +73,17 @@ interface ProcessSupportRequestOptions {
   } | null;
 }
 
+interface SupportReplyOptions {
+  api: Api<RawApi>;
+  ctx: BotContext;
+  user: User;
+  locale: string;
+  chatId: number;
+  deferred: boolean;
+  text: string;
+  parseMode?: 'HTML';
+}
+
 const normalizeSupportLocale = (languageCode?: string | null): SupportLocale =>
   languageCode === 'ru' ? 'ru' : 'uz';
 
@@ -194,33 +205,37 @@ const buildSupportReplyMarkup = (user: User, locale: string) => {
   return getMainKeyboardByLocale(locale, false, isLoggedIn);
 };
 
-const replyToSupportUser = async (
-  ctx: BotContext,
-  user: User,
-  locale: string,
-  text: string,
-  parseMode?: 'HTML',
-) => {
-  return ctx.reply(text, {
-    reply_markup: buildSupportReplyMarkup(user, locale),
-    ...(parseMode ? { parse_mode: parseMode } : {}),
-  });
-};
+const replyToSupportUser = async (params: SupportReplyOptions) => {
+  const options = {
+    reply_markup: buildSupportReplyMarkup(params.user, params.locale),
+    ...(params.parseMode ? { parse_mode: params.parseMode } : {}),
+  };
 
-const confirmSupportForwarded = async (ctx: BotContext, user: User, locale: string) => {
-  if (user?.is_admin) {
-    await ctx.reply(i18n.t(locale, 'support_sent') + '\n\n' + i18n.t(locale, 'admin_menu_header'), {
-      reply_markup: buildSupportReplyMarkup(user, locale),
-      parse_mode: 'HTML',
-    });
-    return;
+  if (params.deferred) {
+    return params.api.sendMessage(params.chatId, params.text, options);
   }
 
-  await ctx.reply(i18n.t(locale, 'support_sent'), {
-    reply_markup: buildSupportReplyMarkup(user, locale),
-    parse_mode: 'HTML',
-  });
+  return params.ctx.reply(params.text, options);
 };
+
+const sendSupportLoadingMessage = async (params: {
+  api: Api<RawApi>;
+  ctx: BotContext;
+  chatId: number;
+  locale: string;
+  deferred: boolean;
+}) => {
+  const text = i18n.t(params.locale, 'support_ai_thinking');
+
+  if (params.deferred) {
+    return params.api.sendMessage(params.chatId, text);
+  }
+
+  return params.ctx.reply(text);
+};
+
+const getSupportChatId = (ctx: BotContext, user: User): number =>
+  ctx.chat?.id ?? ctx.from?.id ?? user.telegram_id;
 
 export async function enqueueSupportRequest(
   api: Api<RawApi>,
@@ -236,9 +251,16 @@ export async function enqueueSupportRequest(
     return;
   }
 
+  const chatId = getSupportChatId(ctx, user);
   let loadingMessage: { chat?: { id: number }; message_id?: number } | null = null;
   try {
-    loadingMessage = await ctx.reply(i18n.t(locale, 'support_ai_thinking'));
+    loadingMessage = await sendSupportLoadingMessage({
+      api,
+      ctx,
+      chatId,
+      locale,
+      deferred: true,
+    });
   } catch {
     // ignore error
   }
@@ -513,6 +535,8 @@ const escalateAgentTicketToHuman = async (params: {
   ctx: BotContext;
   user: User;
   locale: string;
+  chatId: number;
+  deferred: boolean;
   ticket: SupportTicket;
   reason: string;
   messageText: string;
@@ -556,24 +580,30 @@ const escalateAgentTicketToHuman = async (params: {
       `[SUPPORT] Failed to forward escalated AI support ticket ${params.ticket.ticket_number} to the admin group.`,
     );
 
-    await replyToSupportUser(
-      params.ctx,
-      params.user,
-      params.locale,
-      i18n.t(params.locale, 'support_ai_fallback'),
-    );
+    await replyToSupportUser({
+      api: params.api,
+      ctx: params.ctx,
+      user: params.user,
+      locale: params.locale,
+      chatId: params.chatId,
+      deferred: params.deferred,
+      text: i18n.t(params.locale, 'support_ai_fallback'),
+    });
     return;
   }
 
   const customerMessage =
     params.customerMessage?.trim() || i18n.t(params.locale, 'support_ai_handoff');
-  await replyToSupportUser(
-    params.ctx,
-    params.user,
-    params.locale,
-    markdownToTelegramHtml(customerMessage),
-    'HTML',
-  );
+  await replyToSupportUser({
+    api: params.api,
+    ctx: params.ctx,
+    user: params.user,
+    locale: params.locale,
+    chatId: params.chatId,
+    deferred: params.deferred,
+    text: markdownToTelegramHtml(customerMessage),
+    parseMode: 'HTML',
+  });
 
   if (forwardResult.groupMessageId && transcript.length) {
     void sendSupportTranscriptAttachmentToAdminGroup({
@@ -592,6 +622,8 @@ const continueAgentConversation = async (params: {
   ctx: BotContext;
   user: User;
   locale: string;
+  chatId: number;
+  deferred: boolean;
   ticket: SupportTicket;
   messageText: string;
   photoFileId?: string;
@@ -635,13 +667,16 @@ const continueAgentConversation = async (params: {
       return;
     }
 
-    const sentMessage = await replyToSupportUser(
-      params.ctx,
-      params.user,
-      params.locale,
-      markdownToTelegramHtml(decision.replyText),
-      'HTML',
-    );
+    const sentMessage = await replyToSupportUser({
+      api: params.api,
+      ctx: params.ctx,
+      user: params.user,
+      locale: params.locale,
+      chatId: params.chatId,
+      deferred: params.deferred,
+      text: markdownToTelegramHtml(decision.replyText),
+      parseMode: 'HTML',
+    });
 
     await SupportService.appendMessage({
       ticketId: params.ticket.id,
@@ -662,8 +697,8 @@ const continueAgentConversation = async (params: {
         scope: 'support_ai_agent',
         severity: 'critical',
         title: 'AI support agent failed',
-        updateId: params.ctx.update.update_id,
-        chatId: params.ctx.chat?.id ?? params.user.telegram_id,
+        updateId: params.ctx.update?.update_id ?? null,
+        chatId: params.ctx.chat?.id ?? params.chatId,
         chatType: params.ctx.chat?.type ?? 'private',
         ticketNumber: params.ticket.ticket_number,
         actor: {
@@ -717,7 +752,7 @@ export async function processSupportRequest(
   let loadingMsg: { chat?: { id: number }; message_id?: number } | null =
     options.loadingMessage || null;
   let typingHeartbeat: ReturnType<typeof setInterval> | null = null;
-  const chatId = ctx.chat?.id ?? ctx.from?.id ?? null;
+  const chatId = getSupportChatId(ctx, user);
 
   const stopTypingHeartbeat = () => {
     if (typingHeartbeat) {
@@ -733,9 +768,15 @@ export async function processSupportRequest(
     }, 4500);
   }
 
-  if (!deferred && !loadingMsg) {
+  if (!loadingMsg) {
     try {
-      loadingMsg = await ctx.reply(i18n.t(locale, 'support_ai_thinking'));
+      loadingMsg = await sendSupportLoadingMessage({
+        api,
+        ctx,
+        chatId,
+        locale,
+        deferred,
+      });
     } catch {
       // ignore error
     }
@@ -782,6 +823,8 @@ export async function processSupportRequest(
           ctx,
           user,
           locale,
+          chatId,
+          deferred,
           ticket: activeAgentTicket,
           messageText,
           photoFileId,
@@ -840,6 +883,8 @@ export async function processSupportRequest(
         ctx,
         user,
         locale,
+        chatId,
+        deferred,
         ticket: agentTicket,
         messageText,
         photoFileId,
@@ -861,18 +906,16 @@ export async function processSupportRequest(
         `Resolved support request for user ${user.telegram_id} with ${faqResolution.resolutionType} FAQ ${faqResolution.faq.id}${semanticDistanceLabel}${confidenceLabel}${reasonLabel}`,
       );
 
-      if (user?.is_admin) {
-        await ctx.reply(markdownToTelegramHtml(localizedAnswer), {
-          reply_markup: getAdminMenuKeyboard(locale),
-          parse_mode: 'HTML',
-        });
-      } else {
-        const isLoggedIn = user ? !user.is_logged_out : false;
-        await ctx.reply(markdownToTelegramHtml(localizedAnswer), {
-          reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
-          parse_mode: 'HTML',
-        });
-      }
+      await replyToSupportUser({
+        api,
+        ctx,
+        user,
+        locale,
+        chatId,
+        deferred,
+        text: markdownToTelegramHtml(localizedAnswer),
+        parseMode: 'HTML',
+      });
 
       await SupportService.appendMessage({
         ticketId: localTicket.id,
@@ -906,6 +949,8 @@ export async function processSupportRequest(
       ctx,
       user,
       locale,
+      chatId,
+      deferred,
       ticket: fallbackAgentTicket,
       messageText,
       photoFileId,
@@ -914,15 +959,26 @@ export async function processSupportRequest(
     logger.error('Error processing support request:', error);
     const isAdmin = user?.is_admin || false;
     if (isAdmin) {
-      await ctx.reply(i18n.t(locale, 'admin_error'), {
-        reply_markup: getAdminMenuKeyboard(locale),
-        parse_mode: 'HTML',
+      await replyToSupportUser({
+        api,
+        ctx,
+        user,
+        locale,
+        chatId,
+        deferred,
+        text: i18n.t(locale, 'admin_error'),
+        parseMode: 'HTML',
       });
     } else {
-      const isLoggedIn = user ? !user.is_logged_out : false;
-      await ctx.reply(i18n.t(locale, 'support_error'), {
-        reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
-        parse_mode: 'HTML',
+      await replyToSupportUser({
+        api,
+        ctx,
+        user,
+        locale,
+        chatId,
+        deferred,
+        text: i18n.t(locale, 'support_error'),
+        parseMode: 'HTML',
       });
     }
     throw error; // Rethrow to let conversation handle it if needed
