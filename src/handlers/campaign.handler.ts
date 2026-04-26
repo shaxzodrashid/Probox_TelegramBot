@@ -1,5 +1,5 @@
 import { BotContext } from '../types/context';
-import { GrammyError, InputFile } from 'grammy';
+import { GrammyError, InlineKeyboard, InputFile } from 'grammy';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getPromotionsKeyboard, getPromotionDetailKeyboard, getCouponsKeyboard } from '../keyboards/campaign.keyboards';
 import { CouponService } from '../services/coupon/coupon.service';
@@ -37,6 +37,9 @@ const getPromotionAbout = (promotion: Promotion, locale: string): string =>
 
 const buildPromotionCardText = (promotion: Promotion, locale: string): string =>
   buildPromotionText(getPromotionTitle(promotion, locale), getPromotionAbout(promotion, locale));
+
+const getRegistrationStarterKeyboard = (ctx: BotContext) =>
+  new InlineKeyboard().text(ctx.t('registration_button'), 'start_registration');
 
 const buildPromotionsListText = (promotions: Promotion[], locale: string, header: string): string => {
   const lines = promotions.map((promotion, index) => `${index + 1}. ${escapeHtml(getPromotionTitle(promotion, locale))}`);
@@ -312,7 +315,9 @@ export const couponsHandler = async (ctx: BotContext) => {
 
   const user = await UserService.getUserByTelegramId(telegramId);
   if (!user || user.is_logged_out) {
-    await ctx.reply(ctx.t('campaign_login_required'));
+    await ctx.reply(ctx.t('campaign_login_required'), {
+      reply_markup: getRegistrationStarterKeyboard(ctx),
+    });
     return;
   }
 

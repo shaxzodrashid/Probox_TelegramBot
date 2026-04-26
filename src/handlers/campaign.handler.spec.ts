@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GrammyError } from 'grammy';
 import {
+  couponsHandler,
   promotionDetailHandler,
   promotionsHandler,
 } from './campaign.handler';
 import { Promotion, PromotionService } from '../services/coupon/promotion.service';
 import { minioService } from '../services/minio.service';
+import { UserService } from '../services/user.service';
 
 const basePromotion = (overrides: Partial<Promotion> = {}): Promotion => ({
   id: 1,
@@ -34,6 +36,8 @@ const translations: Record<string, string> = {
   menu_coupons: '🎟 Kuponlar',
   back: '🔙 Orqaga',
   admin_campaign_promotions_back: '🔙 Ro‘yxatga qaytish',
+  campaign_login_required: "Kuponlarni ko'rish uchun avval akkauntga kiring.",
+  registration_button: "📝 Ro'yxatdan o'tish",
 };
 
 const getInlineButtons = (keyboard: { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> }) =>
@@ -213,5 +217,35 @@ test('promotionDetailHandler deletes the selector message and sends the card whe
   } finally {
     PromotionService.getActivePromotions = originalGetActivePromotions;
     minioService.getFileAsBuffer = originalGetFileAsBuffer;
+  }
+});
+
+test('couponsHandler shows registration starter when user is not logged in', async () => {
+  const originalGetUserByTelegramId = UserService.getUserByTelegramId;
+
+  try {
+    UserService.getUserByTelegramId = (async () => null) as typeof UserService.getUserByTelegramId;
+
+    const { ctx, calls } = createContext();
+    ctx.session.promotions = [{ id: 1, title: 'Barakali Hafta' }];
+
+    await couponsHandler(ctx);
+
+    assert.equal(ctx.session.promotions, undefined);
+    assert.equal(calls.replies.length, 1);
+    assert.equal(calls.replies[0].text, "Kuponlarni ko'rish uchun avval akkauntga kiring.");
+
+    const buttons = getInlineButtons(
+      calls.replies[0].other?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> },
+    );
+
+    assert.deepEqual(
+      buttons.map((button) => ({ text: button.text, callback_data: button.callback_data })),
+      [
+        { text: "📝 Ro'yxatdan o'tish", callback_data: 'start_registration' },
+      ],
+    );
+  } finally {
+    UserService.getUserByTelegramId = originalGetUserByTelegramId;
   }
 });
