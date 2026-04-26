@@ -69,6 +69,24 @@ test(
           InstActualPaymentDate: '2026-04-04',
           itemsPairs: 'WM01::Washing Machine::800000',
         },
+        {
+          DocEntry: 103,
+          DocNum: 5003,
+          CardCode: 'C001',
+          CardName: 'Linked Customer',
+          DocDate: '2026-04-26',
+          DocDueDate: '2026-05-31',
+          DocCur: 'UZS',
+          Total: 900000,
+          TotalPaid: 900000,
+          InstlmntID: 6,
+          InstDueDate: '2026-05-31',
+          InstTotal: 900000,
+          InstPaidToDate: 900000,
+          InstStatus: 'C',
+          InstActualPaymentDate: '2026-04-26',
+          itemsPairs: 'PH16::iPhone 16::900000',
+        },
       ];
       serviceClass.findExistingRewardCoupon = async () => undefined;
       serviceClass.hasReminderBeenSent = async () => false;
@@ -135,17 +153,21 @@ test(
       });
 
       assert.equal(result.checkedCardCodes, 2);
-      assert.equal(result.fetchedInstallments, 2);
-      assert.equal(result.rewardCouponsIssued, 2);
+      assert.equal(result.fetchedInstallments, 3);
+      assert.equal(result.rewardCouponsIssued, 3);
       assert.equal(result.unlinkedRewardCouponsIssued, 1);
-      assert.equal(result.rewardNotificationsSent, 1);
+      assert.equal(result.rewardNotificationsSent, 2);
       assert.equal(result.reminderNotificationsSent, 0);
-      assert.equal(result.remindersSent, 1);
-      assert.equal(createdCoupons.length, 2);
+      assert.equal(result.remindersSent, 2);
+      assert.equal(createdCoupons.length, 3);
       assert.equal(createdCoupons[0].userId, 11);
       assert.equal(createdCoupons[1].userId, undefined);
       assert.equal(createdCoupons[1].phoneSnapshot, '+998901234567');
-      assert.deepEqual(notifications, [{ telegramId: 998901234, dispatchType: 'payment_on_time' }]);
+      assert.equal(createdCoupons[2].userId, 11);
+      assert.deepEqual(notifications, [
+        { telegramId: 998901234, dispatchType: 'payment_on_time' },
+        { telegramId: 998901234, dispatchType: 'payment_on_time' },
+      ]);
     } finally {
       serviceClass.fetchInstallments = originalFetchInstallments;
       serviceClass.findExistingRewardCoupon = originalFindExistingRewardCoupon;
@@ -270,7 +292,7 @@ test(
 );
 
 test(
-  'PaymentReminderService falls back to DocDate when InstActualPaymentDate is missing',
+  'PaymentReminderService does not reward without the incoming payment DocDate',
   { concurrency: false },
   async () => {
     const serviceClass = PaymentReminderService as unknown as {
@@ -290,8 +312,6 @@ test(
     const originalSendTemplateMessage = BotNotificationService.sendTemplateMessage;
 
     try {
-      const notifications: string[] = [];
-
       serviceClass.fetchInstallments = async () => [
         {
           DocEntry: 111,
@@ -360,8 +380,7 @@ test(
         updated_at: new Date('2026-04-01T00:00:00.000Z'),
       });
       BotNotificationService.sendTemplateMessage = async ({ dispatchType }) => {
-        notifications.push(dispatchType);
-        return { delivered: true };
+        throw new Error(`sendTemplateMessage should not be called for ${dispatchType}`);
       };
 
       const result = await PaymentReminderService.run({
@@ -369,10 +388,9 @@ test(
         rewardMonth: '2026-04',
       });
 
-      assert.equal(result.rewardCouponsIssued, 1);
-      assert.equal(result.rewardNotificationsSent, 1);
+      assert.equal(result.rewardCouponsIssued, 0);
+      assert.equal(result.rewardNotificationsSent, 0);
       assert.equal(result.reminderNotificationsSent, 0);
-      assert.deepEqual(notifications, ['payment_on_time']);
     } finally {
       serviceClass.fetchInstallments = originalFetchInstallments;
       serviceClass.findExistingRewardCoupon = originalFindExistingRewardCoupon;
@@ -519,7 +537,7 @@ test(
 );
 
 test(
-  'PaymentReminderService scopes on-time rewards to the configured reward month',
+  'PaymentReminderService scopes on-time rewards to the configured payment month',
   { concurrency: false },
   async () => {
     const serviceClass = PaymentReminderService as unknown as {

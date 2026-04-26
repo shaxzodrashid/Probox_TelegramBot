@@ -155,51 +155,67 @@ export class PaymentReminderService {
     return paid >= total;
   }
 
-  private static getInstallmentPaymentDate(installment: IPurchaseInstallment): Date | null {
-    const rawDate = installment.InstActualPaymentDate || installment.DocDate;
-
-    if (!rawDate) {
+  private static getDateKey(value: string | Date | null | undefined): string | null {
+    if (!value) {
       return null;
     }
 
-    const paymentDate = new Date(rawDate);
-    if (Number.isNaN(paymentDate.getTime())) {
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) {
+        return null;
+      }
+
+      return value.toISOString().slice(0, 10);
+    }
+
+    const rawDate = value.trim();
+    const dateKeyMatch = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (dateKeyMatch) {
+      return dateKeyMatch[1];
+    }
+
+    const parsedDate = new Date(rawDate);
+    if (Number.isNaN(parsedDate.getTime())) {
       return null;
     }
 
-    paymentDate.setHours(0, 0, 0, 0);
-    return paymentDate;
+    return parsedDate.toISOString().slice(0, 10);
+  }
+
+  private static getInstallmentPaymentDateKey(installment: IPurchaseInstallment): string | null {
+    return this.getDateKey(installment.InstActualPaymentDate);
   }
 
   private static isPaidOnTime(installment: IPurchaseInstallment): boolean {
-    const paymentDate = this.getInstallmentPaymentDate(installment);
-    if (!paymentDate) {
+    const paymentDateKey = this.getInstallmentPaymentDateKey(installment);
+    const dueDateKey = this.getDateKey(installment.InstDueDate);
+    if (!paymentDateKey || !dueDateKey) {
       return false;
     }
 
-    const dueDate = new Date(installment.InstDueDate);
-    dueDate.setHours(0, 0, 0, 0);
-
-    return paymentDate <= dueDate;
+    return paymentDateKey <= dueDateKey;
   }
 
   private static isPaidLate(installment: IPurchaseInstallment): boolean {
-    const paymentDate = this.getInstallmentPaymentDate(installment);
-    if (!paymentDate) {
+    const paymentDateKey = this.getInstallmentPaymentDateKey(installment);
+    const dueDateKey = this.getDateKey(installment.InstDueDate);
+    if (!paymentDateKey || !dueDateKey) {
       return false;
     }
 
-    const dueDate = new Date(installment.InstDueDate);
-    dueDate.setHours(0, 0, 0, 0);
-
-    return paymentDate > dueDate;
+    return paymentDateKey > dueDateKey;
   }
 
-  private static isInstallmentInRewardMonth(
+  private static isPaymentInRewardMonth(
     installment: IPurchaseInstallment,
     window: ProcessingWindow,
   ): boolean {
-    return installment.InstDueDate >= window.rewardMonthStart && installment.InstDueDate <= window.rewardMonthEnd;
+    const paymentDateKey = this.getInstallmentPaymentDateKey(installment);
+    return Boolean(
+      paymentDateKey &&
+        paymentDateKey >= window.rewardMonthStart &&
+        paymentDateKey <= window.rewardMonthEnd,
+    );
   }
 
   private static buildLinkedUserMap(users: User[]): Map<string, LinkedUserContext> {
@@ -339,7 +355,7 @@ export class PaymentReminderService {
   }): Promise<{ couponIssued: boolean; notificationSent: boolean }> {
     const { installment, linkedUser, promotion, window, dryRun, missingTemplates } = params;
 
-    if (!this.isInstallmentInRewardMonth(installment, window)) {
+    if (!this.isPaymentInRewardMonth(installment, window)) {
       return { couponIssued: false, notificationSent: false };
     }
 
@@ -547,7 +563,7 @@ export class PaymentReminderService {
       for (const installment of installments) {
         const linkedUser = linkedUsersByCardCode.get(installment.CardCode);
 
-        if (this.isInstallmentInRewardMonth(installment, window)) {
+        if (this.isPaymentInRewardMonth(installment, window)) {
           const rewardResult = await this.issueOnTimeReward({
             installment,
             linkedUser,

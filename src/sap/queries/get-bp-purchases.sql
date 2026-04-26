@@ -102,11 +102,12 @@ LEFT JOIN (
     T1."InstId",
     MAX(T0."DocDate") AS "ActualPaymentDate"
   FROM {{schema}}."ORCT" T0
-  JOIN {{schema}}."RCT2" T1 ON T0."DocEntry" = T1."DocEntry"
+  JOIN {{schema}}."RCT2" T1 ON T0."DocEntry" = T1."DocNum"
   WHERE T1."InvType" = 13
     AND T0."Canceled" = 'N'
+    AND T1."baseAbs" IN (SELECT "DocEntry" FROM inv_base)
   GROUP BY T1."baseAbs", T1."InstId"
-) PAY ON PAY."baseAbs" = B."DocEntry" AND PAY."InstId" = (S."InstlmntID" - 1)
+) PAY ON PAY."baseAbs" = B."DocEntry" AND PAY."InstId" = S."InstlmntID"
 LEFT JOIN items_by_invoice I
   ON I."DocEntry" = B."DocEntry"
 

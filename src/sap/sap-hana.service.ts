@@ -385,6 +385,8 @@ export class SapService {
       return await this.hana.executeOnce<IPurchaseInstallment>(sql, [
         params.dueDateFrom,
         params.dueDateTo,
+        params.dueDateFrom,
+        params.dueDateTo,
       ]);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

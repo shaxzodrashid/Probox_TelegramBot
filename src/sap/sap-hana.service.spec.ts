@@ -149,7 +149,12 @@ test('SapService getPaymentReminderInstallments passes the due-date range to SAP
   });
 
   assert.equal(hana.calls.length, 1);
-  assert.deepEqual(hana.calls[0].params, ['2026-04-01', '2026-04-30']);
+  assert.deepEqual(hana.calls[0].params, [
+    '2026-04-01',
+    '2026-04-30',
+    '2026-04-01',
+    '2026-04-30',
+  ]);
 });
 
 test('SapService getLatestExchangeRateInfo parses string rates and normalizes the currency code', async () => {

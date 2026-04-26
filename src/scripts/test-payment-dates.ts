@@ -46,8 +46,7 @@ async function main() {
             
             console.log('\n--- 🎯 Comparison (On-Time Analysis) ---');
             installments.forEach((inst: any) => {
-                // InstlmntID in INV6 is 1-based, InstId in RCT2 is 0-based
-                const pay = payments.find((p: any) => Number(p.RCT2InstID) === Number(inst.InstlmntID) - 1);
+                const pay = payments.find((p: any) => Number(p.RCT2InstID) === Number(inst.InstlmntID));
                 
                 const dueDate = new Date(inst.InstDueDate);
                 const isPaid = Number(inst.InstPaidToDate) >= Number(inst.InstTotal);
@@ -56,15 +55,7 @@ async function main() {
                 if (!isPaid) {
                     result = '❌ UNPAID';
                 } else if (!pay) {
-                    // Try without -1 just in case
-                    const payAlt = payments.find((p: any) => Number(p.RCT2InstID) === Number(inst.InstlmntID));
-                    if (payAlt) {
-                        const payDate = new Date(payAlt.ActualPaymentDate as string);
-                        const onTime = payDate <= dueDate;
-                        result = onTime ? '✅ ON TIME (Match by exact ID)' : `🚫 LATE (Match by exact ID. Paid: ${payAlt.ActualPaymentDate})`;
-                    } else {
-                        result = '⚠️ PAID (but payment link not found in RCT2)';
-                    }
+                    result = '⚠️ PAID (but payment link not found in RCT2)';
                 } else {
                     const payDate = new Date(pay.ActualPaymentDate as string);
                     const onTime = payDate <= dueDate;
