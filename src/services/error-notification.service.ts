@@ -7,6 +7,7 @@ import {
   getAdminGroupChatId,
   withAdminGroupMigrationRetry,
 } from '../utils/telegram/admin-group-chat.util';
+import { isUserBlockedError } from '../utils/telegram/telegram-errors';
 
 type ErrorNotificationSeverity = 'warning' | 'error' | 'critical';
 
@@ -107,6 +108,24 @@ const formatMetadata = (
     .join('\n');
 };
 
+const formatUserBlockedReason = (error: unknown): string => {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+  if (message.includes('bot was blocked by the user')) {
+    return 'Foydalanuvchi botni bloklagan.';
+  }
+
+  if (message.includes('user is deactivated')) {
+    return 'Foydalanuvchi akkaunti o‘chirilgan.';
+  }
+
+  if (message.includes('chat not found')) {
+    return 'Telegram chat endi mavjud emas.';
+  }
+
+  return 'Telegram xabarni rad etdi, chunki foydalanuvchiga bog‘lanib bo‘lmayapti.';
+};
+
 const getNotificationChatId = (): string => {
   return config.ERROR_NOTIFICATION_CHAT_ID || getAdminGroupChatId();
 };
@@ -136,6 +155,14 @@ export class ErrorNotificationService {
     error: unknown;
     context: ErrorNotificationContext;
   }): string {
+    if (
+      params.context.scope === 'telegram_update' &&
+      params.context.chatType === 'private' &&
+      isUserBlockedError(params.error)
+    ) {
+      return this.buildUserBlockedMessage(params);
+    }
+
     const error = normalizeError(params.error);
     const severity = params.context.severity || 'error';
     const timestamp = new Date().toISOString();
@@ -177,6 +204,40 @@ export class ErrorNotificationService {
 
     if (stack) {
       sections.push(`<b>Stack:</b>\n<pre>${escapeHtml(stack)}</pre>`);
+    }
+
+    return truncate(sections.join('\n\n'), MAX_TELEGRAM_MESSAGE_LENGTH);
+  }
+
+  private static buildUserBlockedMessage(params: {
+    error: unknown;
+    context: ErrorNotificationContext;
+  }): string {
+    const timestamp = new Date().toISOString();
+    const metadata = formatMetadata(params.context.metadata);
+
+    const sections = [
+      'ℹ️ <b>Telegram xabari yuborilmadi</b>',
+      'Foydalanuvchi botni bloklagan, shuning uchun avtomatik javob yuborilmadi. Adminlardan hech qanday harakat talab qilinmaydi.',
+      `<b>Vaqt:</b> <code>${escapeHtml(timestamp)}</code>`,
+      `<b>Sabab:</b> <code>${escapeHtml(formatUserBlockedReason(params.error))}</code>`,
+      `<b>Update:</b> <code>${escapeHtml(String(params.context.updateId ?? 'n/a'))}</code>`,
+      `<b>Chat:</b> <code>${escapeHtml(String(params.context.chatId ?? 'n/a'))}</code>${
+        params.context.chatType ? ` (${escapeHtml(params.context.chatType)})` : ''
+      }`,
+      `<b>Foydalanuvchi:</b> ${escapeHtml(formatActor(params.context.actor))}`,
+    ];
+
+    if (params.context.userMessage) {
+      const userMessage = truncate(
+        params.context.userMessage.replace(/\s+/g, ' ').trim(),
+        MAX_FIELD_LENGTH,
+      );
+      sections.push(`<b>Oxirgi xabar:</b>\n<blockquote>${escapeHtml(userMessage)}</blockquote>`);
+    }
+
+    if (metadata) {
+      sections.push(`<b>Tafsilotlar:</b>\n${metadata}`);
     }
 
     return truncate(sections.join('\n\n'), MAX_TELEGRAM_MESSAGE_LENGTH);

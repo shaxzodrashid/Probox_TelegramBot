@@ -186,7 +186,11 @@ import { applicationHandler } from './handlers/application.handler';
 import { applicationConversation } from './conversations/application.conversation';
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
-import { isCallbackQueryExpiredError, isMessageToDeleteNotFoundError } from './utils/telegram/telegram-errors';
+import {
+  isCallbackQueryExpiredError,
+  isMessageToDeleteNotFoundError,
+  isUserBlockedError,
+} from './utils/telegram/telegram-errors';
 import { enqueueSupportRequest } from './utils/support/support.util';
 import { getMainKeyboardByLocale } from './keyboards';
 import { FaqService } from './services/faq/faq.service';
@@ -386,11 +390,18 @@ bot.catch((err) => {
     return;
   }
 
-  logger.error(`Error while handling update ${ctx.update.update_id}:`);
-  if (e instanceof Error) {
-    logger.error(e.stack || String(e));
+  if (ctx.chat?.type === 'private' && isUserBlockedError(e)) {
+    logger.warn(`Telegram delivery skipped for update ${ctx.update.update_id}: user blocked the bot.`);
+    if (e instanceof Error) {
+      logger.debug(e.stack || String(e));
+    }
   } else {
-    console.error(e);
+    logger.error(`Error while handling update ${ctx.update.update_id}:`);
+    if (e instanceof Error) {
+      logger.error(e.stack || String(e));
+    } else {
+      console.error(e);
+    }
   }
 
   void ErrorNotificationService.notifyBotError({
