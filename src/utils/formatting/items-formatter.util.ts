@@ -1,32 +1,54 @@
+interface FormattedPaymentItem {
+  code: string;
+  name: string;
+  price: number;
+}
+
+const PAIR_SEPARATOR = /\s*\|\|\s*/u;
+const FIELD_SEPARATOR = /\s*:\s*:\s*/u;
+
+function parsePrice(value?: string): number {
+  if (!value) return 0;
+
+  return Number.parseFloat(value.replace(',', '.')) || 0;
+}
+
+function parseItemPair(pair: string): FormattedPaymentItem {
+  const parts = pair
+    .normalize('NFKC')
+    .split(FIELD_SEPARATOR)
+    .map((part) => part.trim());
+
+  if (parts.length >= 3) {
+    return {
+      code: parts[0] || '',
+      name: parts.slice(1, -1).join('::').trim() || parts[0] || '',
+      price: parsePrice(parts[parts.length - 1]),
+    };
+  }
+
+  return {
+    code: parts[0] || '',
+    name: parts[1] || parts[0] || '',
+    price: 0,
+  };
+}
+
 /**
- * Formats a raw itemsPairs string from SAP into a human-readable list.
- * 
- * Example: "CODE1::Item 1||CODE2::Item 2" 
- * Returns: "Item 1 va Item 2" (for uz)
- * 
- * Example: "CODE1::Item 1||CODE2::Item 2||CODE3::Item 3"
- * Returns: "Item 1, Item 2 va Item 3" (for uz)
+ * Formats a raw itemsPairs string from SAP into a human-readable product name.
  */
 export function formatItemsList(itemsPairs: string): string {
   if (!itemsPairs) return '';
 
-  const pairs = itemsPairs.split('||');
-  const items = pairs
-    .map(pair => {
-      const parts = pair.split('::');
-      return {
-        code: parts[0]?.trim() || '',
-        name: parts[1]?.trim() || (parts[0]?.trim() || ''),
-        price: parseFloat(parts[2]) || 0
-      };
-    })
-    .filter(item => item.name);
+  const items = itemsPairs
+    .split(PAIR_SEPARATOR)
+    .map(parseItemPair)
+    .filter((item) => item.name);
 
   if (items.length === 0) return '';
 
-  // Find the most expensive item
   const mostExpensive = items.reduce((prev, current) =>
-    (prev.price > current.price) ? prev : current
+    prev.price > current.price ? prev : current,
   );
 
   return mostExpensive.name;

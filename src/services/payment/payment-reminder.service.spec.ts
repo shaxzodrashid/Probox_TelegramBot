@@ -428,6 +428,7 @@ test(
     try {
       const loggedReminders: string[] = [];
       const notifications: string[] = [];
+      const productNames: string[] = [];
 
       serviceClass.fetchInstallments = async () => [
         {
@@ -445,7 +446,7 @@ test(
           InstTotal: 1000000,
           InstPaidToDate: 0,
           InstStatus: 'O',
-          itemsPairs: 'TV02::TV::1000000',
+          itemsPairs: 'APPLE2528: :SAMSUNG S25 ULTRA 256GB BLACK NANO SIM: :11372571.600000',
         },
         {
           DocEntry: 202,
@@ -506,8 +507,9 @@ test(
         },
       ];
       PromotionService.getCurrentPromotion = async () => null;
-      BotNotificationService.sendTemplateMessage = async ({ dispatchType }) => {
+      BotNotificationService.sendTemplateMessage = async ({ dispatchType, placeholders }) => {
         notifications.push(dispatchType);
+        productNames.push(String(placeholders.product_name || ''));
         return { delivered: true };
       };
 
@@ -521,6 +523,7 @@ test(
       assert.equal(result.reminderNotificationsSent, 2);
       assert.equal(result.remindersSent, 2);
       assert.deepEqual(notifications, ['payment_reminder_d1', 'payment_paid_late']);
+      assert.deepEqual(productNames, ['SAMSUNG S25 ULTRA 256GB BLACK NANO SIM', 'Speaker']);
       assert.deepEqual(loggedReminders, ['d1', 'paid_late']);
     } finally {
       serviceClass.fetchInstallments = originalFetchInstallments;
