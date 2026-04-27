@@ -64,7 +64,7 @@ export class OtpService {
       },
     };
 
-    if (['50', '55', '93', '94'].includes(phoneNumber.slice(-9, -7))) data_to_send.sms.originator = '3700';
+    // if (['50', '55', '93', '94'].includes(phoneNumber.slice(-9, -7))) data_to_send.sms.originator = '3700';
 
     logger.info(`Data to send: ${JSON.stringify(data_to_send)}`);
 
