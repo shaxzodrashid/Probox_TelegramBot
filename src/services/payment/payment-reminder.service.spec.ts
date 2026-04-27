@@ -46,7 +46,7 @@ test(
           InstTotal: 1000000,
           InstPaidToDate: 1000000,
           InstStatus: 'C',
-          InstActualPaymentDate: '2026-04-08',
+          InstFullyPaidDate: '2026-04-08',
           itemsPairs: 'TV01::TV::1000000',
         },
         {
@@ -66,7 +66,7 @@ test(
           InstTotal: 800000,
           InstPaidToDate: 800000,
           InstStatus: 'C',
-          InstActualPaymentDate: '2026-04-04',
+          InstFullyPaidDate: '2026-04-04',
           itemsPairs: 'WM01::Washing Machine::800000',
         },
         {
@@ -84,7 +84,7 @@ test(
           InstTotal: 900000,
           InstPaidToDate: 900000,
           InstStatus: 'C',
-          InstActualPaymentDate: '2026-04-26',
+          InstFullyPaidDate: '2026-04-26',
           itemsPairs: 'PH16::iPhone 16::900000',
         },
       ];
@@ -224,7 +224,7 @@ test(
           InstTotal: 500000,
           InstPaidToDate: 500000,
           InstStatus: 'C',
-          InstActualPaymentDate: '2026-04-08',
+          InstFullyPaidDate: '2026-04-08',
           itemsPairs: 'PH01::Phone::500000',
         },
       ];
@@ -292,7 +292,7 @@ test(
 );
 
 test(
-  'PaymentReminderService does not reward without the incoming payment DocDate',
+  'PaymentReminderService does not reward without the installment fully paid date',
   { concurrency: false },
   async () => {
     const serviceClass = PaymentReminderService as unknown as {
@@ -328,7 +328,7 @@ test(
           InstTotal: 300000,
           InstPaidToDate: 300000,
           InstStatus: 'C',
-          InstActualPaymentDate: undefined,
+          InstFullyPaidDate: undefined,
           itemsPairs: 'PH01::Phone::300000',
         },
       ];
@@ -480,7 +480,7 @@ test(
           InstTotal: 400000,
           InstPaidToDate: 400000,
           InstStatus: 'C',
-          InstActualPaymentDate: '2026-04-09',
+          InstFullyPaidDate: '2026-04-09',
           itemsPairs: 'SP01::Speaker::400000',
         },
       ];
@@ -566,7 +566,7 @@ test(
           InstTotal: 700000,
           InstPaidToDate: 700000,
           InstStatus: 'C',
-          InstActualPaymentDate: '2026-03-30',
+          InstFullyPaidDate: '2026-03-30',
           itemsPairs: 'FR01::Fridge::700000',
         },
       ];

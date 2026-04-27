@@ -59,7 +59,7 @@ export class OtpService {
       sms: {
         originator: config.SMS_ORIGINATOR,
         content: {
-          text: `Probox telegram botida ro'yxatdan o'tishni tasdiqlash kodi - ${code}}`,
+          text: `Probox telegram botida ro'yxatdan o'tishni tasdiqlash kodi - ${code}`,
         },
       },
     };

@@ -182,12 +182,12 @@ export class PaymentReminderService {
     return parsedDate.toISOString().slice(0, 10);
   }
 
-  private static getInstallmentPaymentDateKey(installment: IPurchaseInstallment): string | null {
-    return this.getDateKey(installment.InstActualPaymentDate);
+  private static getInstallmentFullyPaidDateKey(installment: IPurchaseInstallment): string | null {
+    return this.getDateKey(installment.InstFullyPaidDate);
   }
 
   private static isPaidOnTime(installment: IPurchaseInstallment): boolean {
-    const paymentDateKey = this.getInstallmentPaymentDateKey(installment);
+    const paymentDateKey = this.getInstallmentFullyPaidDateKey(installment);
     const dueDateKey = this.getDateKey(installment.InstDueDate);
     if (!paymentDateKey || !dueDateKey) {
       return false;
@@ -197,7 +197,7 @@ export class PaymentReminderService {
   }
 
   private static isPaidLate(installment: IPurchaseInstallment): boolean {
-    const paymentDateKey = this.getInstallmentPaymentDateKey(installment);
+    const paymentDateKey = this.getInstallmentFullyPaidDateKey(installment);
     const dueDateKey = this.getDateKey(installment.InstDueDate);
     if (!paymentDateKey || !dueDateKey) {
       return false;
@@ -210,7 +210,7 @@ export class PaymentReminderService {
     installment: IPurchaseInstallment,
     window: ProcessingWindow,
   ): boolean {
-    const paymentDateKey = this.getInstallmentPaymentDateKey(installment);
+    const paymentDateKey = this.getInstallmentFullyPaidDateKey(installment);
     return Boolean(
       paymentDateKey &&
         paymentDateKey >= window.rewardMonthStart &&

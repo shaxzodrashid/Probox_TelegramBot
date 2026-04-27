@@ -387,6 +387,7 @@ export class SapService {
         params.dueDateTo,
         params.dueDateFrom,
         params.dueDateTo,
+        params.dueDateTo,
       ]);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

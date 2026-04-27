@@ -154,6 +154,7 @@ test('SapService getPaymentReminderInstallments passes the due-date range to SAP
     '2026-04-30',
     '2026-04-01',
     '2026-04-30',
+    '2026-04-30',
   ]);
 });
 

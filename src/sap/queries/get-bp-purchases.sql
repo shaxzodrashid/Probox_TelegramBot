@@ -69,6 +69,50 @@ items_by_invoice AS (
     ) AS "itemsPairs"
   FROM {{schema}}."INV1" L
   GROUP BY L."DocEntry"
+),
+
+payment_applications AS (
+  SELECT
+    T1."baseAbs",
+    T1."InstId",
+    T0."DocEntry" AS "PaymentDocEntry",
+    T0."DocDate",
+    T1."SumApplied"
+  FROM {{schema}}."ORCT" T0
+  JOIN {{schema}}."RCT2" T1 ON T0."DocEntry" = T1."DocNum"
+  JOIN inv_base B ON B."DocEntry" = T1."baseAbs"
+  JOIN {{schema}}."INV6" S
+    ON S."DocEntry" = T1."baseAbs"
+   AND S."InstlmntID" = T1."InstId"
+  WHERE T1."InvType" = 13
+    AND T0."Canceled" = 'N'
+),
+
+payment_progress AS (
+  SELECT
+    payment_applications."baseAbs",
+    payment_applications."InstId",
+    payment_applications."PaymentDocEntry",
+    payment_applications."DocDate",
+    SUM(payment_applications."SumApplied") OVER (
+      PARTITION BY payment_applications."baseAbs", payment_applications."InstId"
+      ORDER BY payment_applications."DocDate", payment_applications."PaymentDocEntry"
+      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS "CumulativePaid"
+  FROM payment_applications
+),
+
+payment_dates AS (
+  SELECT
+    payment_progress."baseAbs",
+    payment_progress."InstId",
+    MIN(payment_progress."DocDate") AS "FullyPaidDate"
+  FROM payment_progress
+  JOIN {{schema}}."INV6" S
+    ON S."DocEntry" = payment_progress."baseAbs"
+   AND S."InstlmntID" = payment_progress."InstId"
+  WHERE payment_progress."CumulativePaid" >= S."InsTotal"
+  GROUP BY payment_progress."baseAbs", payment_progress."InstId"
 )
 
 SELECT
@@ -89,25 +133,16 @@ SELECT
 
   S."PaidToDate"  AS "InstPaidToDate",
   S."Status"      AS "InstStatus",
-  PAY."ActualPaymentDate" AS "InstActualPaymentDate",
+  PAY."FullyPaidDate" AS "InstFullyPaidDate",
 
   I."itemsPairs"
 
 FROM inv_base B
 JOIN {{schema}}."INV6" S
   ON S."DocEntry" = B."DocEntry"
-LEFT JOIN (
-  SELECT 
-    T1."baseAbs", 
-    T1."InstId",
-    MAX(T0."DocDate") AS "ActualPaymentDate"
-  FROM {{schema}}."ORCT" T0
-  JOIN {{schema}}."RCT2" T1 ON T0."DocEntry" = T1."DocNum"
-  WHERE T1."InvType" = 13
-    AND T0."Canceled" = 'N'
-    AND T1."baseAbs" IN (SELECT "DocEntry" FROM inv_base)
-  GROUP BY T1."baseAbs", T1."InstId"
-) PAY ON PAY."baseAbs" = B."DocEntry" AND PAY."InstId" = S."InstlmntID"
+LEFT JOIN payment_dates PAY
+  ON PAY."baseAbs" = B."DocEntry"
+ AND PAY."InstId" = S."InstlmntID"
 LEFT JOIN items_by_invoice I
   ON I."DocEntry" = B."DocEntry"
 

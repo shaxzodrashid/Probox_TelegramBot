@@ -35,7 +35,7 @@ async function main() {
         const installments: any[] = await hana.executeOnce(testInstSql, [docEntry]);
         console.table(installments);
 
-        console.log(`\n--- 💳 [2/2] Fetching Payment Dates for DocEntry: ${docEntry} ---`);
+        console.log(`\n--- 💳 [2/2] Fetching Fully Paid Dates for DocEntry: ${docEntry} ---`);
         const paymentSql = loadSQL('sap/queries/test-get-inst-payment-dates.sql').replace(/{{schema}}/g, schema);
         const payments: any[] = await hana.executeOnce(paymentSql, [docEntry]);
         
@@ -57,9 +57,9 @@ async function main() {
                 } else if (!pay) {
                     result = '⚠️ PAID (but payment link not found in RCT2)';
                 } else {
-                    const payDate = new Date(pay.ActualPaymentDate as string);
+                    const payDate = new Date(pay.FullyPaidDate as string);
                     const onTime = payDate <= dueDate;
-                    result = onTime ? '✅ ON TIME' : `🚫 LATE (Paid: ${pay.ActualPaymentDate})`;
+                    result = onTime ? '✅ ON TIME' : `🚫 LATE (Paid: ${pay.FullyPaidDate})`;
                 }
                 
                 console.log(`Installment #${inst.InstlmntID} (Due: ${inst.InstDueDate}): ${result}`);
