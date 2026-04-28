@@ -7,7 +7,10 @@ import { SupportService } from '../../services/support/support.service';
 import { ErrorNotificationService } from '../../services/error-notification.service';
 import { i18n } from '../../i18n';
 import { logger } from '../logger';
-import { formatGeminiRequestFailure } from '../gemini-error.util';
+import {
+  formatGeminiRequestFailure,
+  formatGeminiRequestFailureSummary,
+} from '../gemini-error.util';
 import { formatUzPhone } from '../uz-phone.util';
 import { escapeHtml, markdownToTelegramHtml } from '../telegram/telegram-rich-text.util';
 import {
@@ -697,6 +700,7 @@ const continueAgentConversation = async (params: {
         scope: 'support_ai_agent',
         severity: 'critical',
         title: 'AI support agent failed',
+        includeStack: false,
         updateId: params.ctx.update?.update_id ?? null,
         chatId: params.ctx.chat?.id ?? params.chatId,
         chatType: params.ctx.chat?.type ?? 'private',
@@ -712,9 +716,8 @@ const continueAgentConversation = async (params: {
         metadata: {
           userId: params.user.id,
           matchedFaqId: params.ticket.matched_faq_id || null,
-          agentToken: params.ticket.agent_token || null,
           photoAttached: Boolean(params.photoFileId),
-          failure: formatGeminiRequestFailure(error),
+          failure: formatGeminiRequestFailureSummary(error),
         },
       },
     });

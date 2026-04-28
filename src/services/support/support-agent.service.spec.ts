@@ -40,8 +40,20 @@ const makeHistory = (): SupportTicketMessage[] => [
 
 const makeInventoryResult = (query: string) => ({
   ok: true,
+  search: query,
   query,
   store: null,
+  requested_filters: {
+    model: null,
+    device_type: null,
+    memory: null,
+    color: null,
+    sim_type: null,
+    condition: null,
+  },
+  exact_match: true,
+  no_exact_match: false,
+  no_exact_match_message: null,
   total_matches: 1,
   returned_matches: 1,
   items: [
@@ -54,27 +66,54 @@ const makeInventoryResult = (query: string) => ({
       sale_price: 12000000,
       item_group_name: 'Phones',
       model: 'iPhone 16',
+      device_type: null,
       color: 'Black',
       memory: '128GB',
       condition: 'Yangi',
       sim_type: 'eSIM',
     },
   ],
+  suggestions: null,
 });
 
 const makeEmptyInventoryResult = (query: string) => ({
   ok: true,
+  search: query,
   query,
   store: null,
+  requested_filters: {
+    model: null,
+    device_type: null,
+    memory: null,
+    color: null,
+    sim_type: null,
+    condition: null,
+  },
+  exact_match: false,
+  no_exact_match: true,
+  no_exact_match_message: null,
   total_matches: 0,
   returned_matches: 0,
   items: [],
+  suggestions: null,
 });
 
 const makeAlternativeInventoryResult = (query: string) => ({
   ok: true,
+  search: query,
   query,
   store: null,
+  requested_filters: {
+    model: null,
+    device_type: null,
+    memory: null,
+    color: null,
+    sim_type: null,
+    condition: null,
+  },
+  exact_match: true,
+  no_exact_match: false,
+  no_exact_match_message: null,
   total_matches: 3,
   returned_matches: 3,
   items: [
@@ -87,6 +126,7 @@ const makeAlternativeInventoryResult = (query: string) => ({
       sale_price: 12000000,
       item_group_name: 'Phones',
       model: 'iPhone 16',
+      device_type: null,
       color: 'Black',
       memory: '128GB',
       condition: 'Yangi',
@@ -101,6 +141,7 @@ const makeAlternativeInventoryResult = (query: string) => ({
       sale_price: 16500000,
       item_group_name: 'Phones',
       model: 'iPhone 16',
+      device_type: 'Pro',
       color: 'Natural',
       memory: '256GB',
       condition: 'Yangi',
@@ -115,12 +156,14 @@ const makeAlternativeInventoryResult = (query: string) => ({
       sale_price: 17000000,
       item_group_name: 'Phones',
       model: 'iPhone 15',
+      device_type: 'Pro Max',
       color: 'Blue',
       memory: '256GB',
       condition: 'Yangi',
       sim_type: 'eSIM',
     },
   ],
+  suggestions: null,
 });
 
 test('SupportAgentService returns parsed Gemini reply payload', async () => {
@@ -474,30 +517,49 @@ test('SupportAgentService exposes the Gemini inventory tool that delegates to it
   const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
 
   let executedToolResult: unknown = null;
+  const lookupCalls: unknown[] = [];
 
-  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => ({
-    ok: true,
-    query: params.query,
-    store: params.store || null,
-    total_matches: 1,
-    returned_matches: 1,
-    items: [
-      {
-        item_code: 'IP16',
-        item_name: 'iPhone 16',
-        store_code: 'W01',
-        store_name: 'Nurafshon',
-        on_hand: 3,
-        sale_price: 12000000,
-        item_group_name: 'Phones',
-        model: 'iPhone 16',
-        color: 'Black',
-        memory: '128GB',
-        condition: 'Yangi',
-        sim_type: 'eSIM',
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => {
+    lookupCalls.push(params);
+
+    return {
+      ok: true,
+      search: params.search || params.query || null,
+      query: params.query,
+      store: params.store || null,
+      requested_filters: {
+        model: params.model || null,
+        device_type: params.deviceType || null,
+        memory: params.memory || null,
+        color: params.color || null,
+        sim_type: params.simType || null,
+        condition: params.condition || null,
       },
-    ],
-  })) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+      exact_match: true,
+      no_exact_match: false,
+      no_exact_match_message: null,
+      total_matches: 1,
+      returned_matches: 1,
+      items: [
+        {
+          item_code: 'IP16',
+          item_name: 'iPhone 16',
+          store_code: 'W01',
+          store_name: 'Nurafshon',
+          on_hand: 3,
+          sale_price: 12000000,
+          item_group_name: 'Phones',
+          model: 'iPhone 16',
+          device_type: params.deviceType || null,
+          color: params.color || 'Black',
+          memory: params.memory || '128GB',
+          condition: params.condition || 'Yangi',
+          sim_type: params.simType || 'eSIM',
+        },
+      ],
+      suggestions: null,
+    };
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
 
   GeminiService.generateJsonWithTools = (async (params) => {
     const inventoryTool = params.tools.find(
@@ -505,9 +567,36 @@ test('SupportAgentService exposes the Gemini inventory tool that delegates to it
     );
 
     assert.ok(inventoryTool);
+    assert.equal(inventoryTool.declaration.strict, true);
+    assert.equal(inventoryTool.declaration.parameters.additionalProperties, false);
+    assert.deepEqual(inventoryTool.declaration.parameters.required, [
+      'search',
+      'model',
+      'device_type',
+      'memory',
+      'color',
+      'sim_type',
+      'condition',
+      'store',
+      'limit',
+      'query',
+    ]);
+    assert.ok('search' in inventoryTool.declaration.parameters.properties);
+    assert.ok('model' in inventoryTool.declaration.parameters.properties);
+    assert.ok('device_type' in inventoryTool.declaration.parameters.properties);
+    assert.ok('memory' in inventoryTool.declaration.parameters.properties);
+    assert.ok('color' in inventoryTool.declaration.parameters.properties);
+    assert.ok('sim_type' in inventoryTool.declaration.parameters.properties);
+    assert.ok('condition' in inventoryTool.declaration.parameters.properties);
 
     executedToolResult = await inventoryTool.execute({
-      query: 'iphone 16',
+      search: 'APPLE2549',
+      model: 'iPhone 17',
+      device_type: 'Pro Max',
+      memory: '256GB',
+      color: 'Deep Blue',
+      sim_type: 'nano-SIM',
+      condition: 'Yangi',
       store: 'Nurafshon',
       limit: '7',
     });
@@ -527,10 +616,34 @@ test('SupportAgentService exposes the Gemini inventory tool that delegates to it
     });
 
     assert.equal(result.replyText, 'Nurafshon filialida mavjud.');
+    assert.deepEqual(lookupCalls[lookupCalls.length - 1], {
+      search: 'APPLE2549',
+      query: '',
+      store: 'Nurafshon',
+      limit: 7,
+      model: 'iPhone 17',
+      deviceType: 'Pro Max',
+      memory: '256GB',
+      color: 'Deep Blue',
+      simType: 'nano-SIM',
+      condition: 'Yangi',
+    });
     assert.deepEqual(executedToolResult, {
       ok: true,
-      query: 'iphone 16',
+      search: 'APPLE2549',
+      query: '',
       store: 'Nurafshon',
+      requested_filters: {
+        model: 'iPhone 17',
+        device_type: 'Pro Max',
+        memory: '256GB',
+        color: 'Deep Blue',
+        sim_type: 'nano-SIM',
+        condition: 'Yangi',
+      },
+      exact_match: true,
+      no_exact_match: false,
+      no_exact_match_message: null,
       total_matches: 1,
       returned_matches: 1,
       items: [
@@ -543,12 +656,14 @@ test('SupportAgentService exposes the Gemini inventory tool that delegates to it
           sale_price: 12000000,
           item_group_name: 'Phones',
           model: 'iPhone 16',
-          color: 'Black',
-          memory: '128GB',
+          device_type: 'Pro Max',
+          color: 'Deep Blue',
+          memory: '256GB',
           condition: 'Yangi',
-          sim_type: 'eSIM',
+          sim_type: 'nano-SIM',
         },
       ],
+      suggestions: null,
     });
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;

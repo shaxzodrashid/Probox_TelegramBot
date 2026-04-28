@@ -76,6 +76,7 @@ const SUPPORT_AGENT_RESPONSE_SCHEMA = {
 
 const SUPPORT_AGENT_SYSTEM_INSTRUCTIONS = [
   '<role>You are a Telegram customer support agent for Probox: warm, brief, natural, and helpful.</role>',
+  '<mission>Help customers choose Apple products and get accurate Probox availability or pricing only after the requested product is clear enough to search SAP safely.</mission>',
   '<language>Reply in the user’s preferred language unless the latest message clearly switches language.</language>',
   '<grounding>',
   'Use only grounded information from the provided context, transcript, inventory pre-check, alternative inventory suggestions, device catalog pre-check, and tool results from this conversation.',
@@ -92,6 +93,14 @@ const SUPPORT_AGENT_SYSTEM_INSTRUCTIONS = [
   'Do not repeat the same fact in multiple sentences unless the user asked for emphasis.',
   'Use at most one concise CTA or follow-up question, and only when it genuinely helps the customer move forward.',
   '</output>',
+  '<product_clarification>',
+  'Before giving SAP availability, price, branch, or stock details for Apple products, make sure the requested product is specific enough: product family, series/generation, exact variant/type, and when applicable storage and color.',
+  'If the customer writes only a bare number such as "16", "17", or asks "16 bormi?" / "17 bormi?", treat it as an iPhone shorthand and ask for confirmation in the same style as: "iPhone 17 kerakmi?" Do not answer stock yet.',
+  'If the customer gives product family plus series/generation but not the exact variant/type, ask which exact type they need. Example: for "iPhone 17", ask "Sizga iPhone 17 qaysi turi kerak: oddiy, Pro yoki Pro Max?" For "MacBook Air", ask the exact size/chip/configuration if needed. For "AirPods", ask which type or generation they need.',
+  'After the exact model/series/type is clear, clarify storage and color when that product line has those options and the customer has not already specified them.',
+  'If the customer describes color in their own words such as "oq", "ko‘k", "qora", or Russian/English equivalents, map it to the closest official company/SAP color name only when grounded by context or SAP results; otherwise ask a short clarification between the likely official color names.',
+  'Do not use inventory pre-check results or call lookup_store_items to answer an ambiguous product request before these details are clarified. If a pre-check already exists for an ambiguous request, treat it as background only and ask the needed clarification instead of presenting stock.',
+  '</product_clarification>',
   '<tool_policy>',
   'Tools available in some turns: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount.',
   'Before any tool call, first check whether the transcript, inventory pre-check, alternative inventory suggestions, device catalog pre-check, or prior tool results already answer the question.',
@@ -103,11 +112,13 @@ const SUPPORT_AGENT_SYSTEM_INSTRUCTIONS = [
   '</tool_policy>',
   '<inventory>',
   'For live stock, availability, store, warehouse, IMEI, and item-code questions, SAP inventory data in this conversation is the source of truth.',
-  'If inventory pre-check already answers, use it. Otherwise use lookup_store_items for specific products and lookup_available_devices for broad catalog questions.',
+  'If inventory pre-check already answers a fully clarified product request, use it. Otherwise use lookup_store_items for specific clarified products and lookup_available_devices for broad catalog questions.',
   'Normalize slang/transliterated product names into official SAP-style naming before inventory lookups.',
   'Use lookup_store_items.store only if the customer explicitly names a branch.',
   'Never claim live availability unless grounded by this conversation’s inventory data.',
   'If an item is unavailable and grounded alternatives exist, say so clearly and suggest up to 3 alternatives.',
+  'When lookup_store_items returns no_exact_match=true for a requested memory, color, or SIM type, clearly say there is no exact match, then suggest grounded same-model/type options from suggestions if present.',
+  'When presenting inventory matches, include the useful variant details grounded in SAP: model, device type, memory, color, SIM type, condition, store, stock count, and price when available.',
   'If the customer asks for other options after no stock, broaden to grounded alternatives instead of repeating the same failed lookup.',
   `Rewrite "sklad" in customer-facing replies as "do'kon" or "filial".`,
   '</inventory>',
@@ -174,7 +185,7 @@ const summarizeInventoryMatches = (result: InventoryLookupResult): string[] =>
     .slice(0, 3)
     .map(
       (item) =>
-        `${item.item_name} @ ${item.store_name} (stock=${item.on_hand}, memory=${item.memory || 'n/a'})`,
+        `${item.item_name} @ ${item.store_name} (stock=${item.on_hand}, type=${item.device_type || 'base'}, memory=${item.memory || 'n/a'}, color=${item.color || 'n/a'}, sim=${item.sim_type || 'n/a'})`,
     );
 
 const FOLLOW_UP_INVENTORY_REGEX =
@@ -625,54 +636,136 @@ const lookupStoreItemsTool: GeminiTool = {
   declaration: {
     name: 'lookup_store_items',
     description:
-      'Looks up live item availability in Probox stores using SAP search behavior. Use this for questions about whether an item is in stock, which store has it, stock counts, warehouse checks, item-code lookups, or IMEI searches. Build one normalized query string with official SAP-style naming that preserves model, device type, memory, color, condition, IMEI fragment, or item code. Do not pass slang or full customer sentences. Examples: "iphone 16 pro max 256 black", "iphone 17", or "123456".',
+      'Looks up live item availability in Probox stores using SAP search behavior and exact structured filters. Use this for questions about whether a clarified item is in stock, which store has it, stock counts, warehouse checks, item-code lookups, or IMEI searches. Before product lookups, clarify product family, series/generation, exact variant/type, and when applicable storage and color. For product lookups, pass structured model/device_type/memory/color/sim_type/condition when known; use search for item-code, IMEI, or extra free-text only. Do not pass slang or full customer sentences. Examples: model="iPhone 17", device_type="Pro Max", memory="256GB", color="Deep Blue", sim_type="nano-SIM", condition="Yangi"; or search="123456".',
+    strict: true,
     parameters: {
       type: 'object',
       properties: {
-        query: {
-          type: 'string',
+        search: {
+          type: ['string', 'null'],
           description:
-            'The normalized SAP-style search string in official product naming. Preserve the product model, device type, memory, color, condition, IMEI fragment, or item code, and translate slang like "ayfon 15" to "iphone 15" first. Example: "iphone 16 pro max 256 black".',
+            'Normalized SAP-style free-text search, IMEI fragment, or item code. Use null when the structured fields fully describe the requested item.',
+        },
+        model: {
+          type: ['string', 'null'],
+          description:
+            'Exact SAP U_Model value when known, such as "iPhone 17", "Airpods", or "Apple watch"; otherwise null.',
+        },
+        device_type: {
+          type: ['string', 'null'],
+          description:
+            'Exact SAP U_DeviceType value when known, such as "Pro", "Pro Max", "Air", "10 46mm", or "-" for a base/blank iPhone variant; otherwise null.',
+        },
+        memory: {
+          type: ['string', 'null'],
+          description: 'Exact SAP U_Memory value when requested, such as "256GB" or "1TB"; otherwise null.',
+        },
+        color: {
+          type: ['string', 'null'],
+          description:
+            'Exact SAP U_Color value when requested. Use grounded official color names such as "Deep Blue", "Silver", or "Cosmic Orange"; otherwise null.',
+        },
+        sim_type: {
+          type: ['string', 'null'],
+          description: 'Exact SAP U_Sim_type value when requested, such as "eSIM" or "nano-SIM"; otherwise null.',
+        },
+        condition: {
+          type: ['string', 'null'],
+          description:
+            'Exact SAP U_PROD_CONDITION value when requested, such as "Yangi" for new or "B/U" for used; otherwise null.',
         },
         store: {
-          type: 'string',
+          type: ['string', 'null'],
           description:
-            'Optional store or warehouse name only if the user explicitly asks about a specific branch or store. Example: "Nurafshon" or "Samarqand darboza".',
+            'Name of the store or warehouse only if the user explicitly asks about a specific branch, otherwise null.',
         },
         limit: {
-          type: 'integer',
+          type: ['integer', 'null'],
           description:
-            'Optional number of results to return, between 1 and 10. Use a small value when only the top matches are needed.',
+            'Number of results to return from 1 to 10, or null for the default result limit.',
+        },
+        query: {
+          type: ['string', 'null'],
+          description:
+            'Deprecated compatibility alias for search. Use null for new calls and set search instead.',
         },
       },
-      required: ['query'],
+      required: [
+        'search',
+        'model',
+        'device_type',
+        'memory',
+        'color',
+        'sim_type',
+        'condition',
+        'store',
+        'limit',
+        'query',
+      ],
+      additionalProperties: false,
     },
   },
   execute: async (args) => {
+    const getTextArg = (...names: string[]): string | undefined => {
+      for (const name of names) {
+        const value = args[name];
+        if (typeof value === 'string' && value.trim()) {
+          return value;
+        }
+      }
+
+      return undefined;
+    };
+
+    const search = getTextArg('search') || getTextArg('query');
     const query = typeof args.query === 'string' ? args.query : '';
-    const store = typeof args.store === 'string' ? args.store : null;
+    const store = typeof args.store === 'string' && args.store.trim() ? args.store : null;
     const limit =
       typeof args.limit === 'number'
         ? args.limit
         : typeof args.limit === 'string'
           ? Number(args.limit)
           : undefined;
+    const model = getTextArg('model', 'U_Model');
+    const deviceType = getTextArg('device_type', 'deviceType', 'U_DeviceType');
+    const memory = getTextArg('memory', 'U_Memory');
+    const color = getTextArg('color', 'U_Color');
+    const simType = getTextArg('sim_type', 'simType', 'U_Sim_type');
+    const condition = getTextArg('condition', 'U_PROD_CONDITION');
 
     logger.info('[SUPPORT_AGENT] Gemini invoked lookup_store_items', {
-      query,
+      search: search || null,
       store,
       limit: limit ?? null,
+      filters: {
+        model: model || null,
+        deviceType: deviceType || null,
+        memory: memory || null,
+        color: color || null,
+        simType: simType || null,
+        condition: condition || null,
+      },
     });
 
     const result = await SupportItemAvailabilityService.lookupAvailableItems({
+      search,
       query,
       store,
       limit,
+      model,
+      deviceType,
+      memory,
+      color,
+      simType,
+      condition,
     });
 
     logger.info('[SUPPORT_AGENT] lookup_store_items completed', {
-      query,
+      search: result.search,
+      query: result.query,
       store,
+      exactMatch: result.exact_match,
+      hasSuggestions: Boolean(result.suggestions),
       totalMatches: result.total_matches,
       returnedMatches: result.returned_matches,
       topMatches: summarizeInventoryMatches(result),
@@ -887,11 +980,15 @@ export class SupportAgentService {
       'Decide first whether the answer is already fully grounded in the context above.',
       'If the context already answers the question, return the final JSON immediately without calling tools.',
       'If a tool is needed, call only a tool that can add a materially new fact for this exact user request.',
+      'If the customer gives only a number such as 16 or 17 with stock intent, ask whether they mean iPhone {number}; do not answer inventory yet.',
+      'If the customer names only a product family plus series/generation, ask for the exact variant/type before using SAP availability details.',
       'If the customer names a specific phone or model series, prefer detailed inventory grounding over broad catalog behavior.',
       'When the customer asks vaguely what devices exist overall, prefer the device catalog tool over item-by-item stock checks.',
       'If a grounded device catalog pre-check is already present for the current message, answer from that grounded catalog instead of improvising a list.',
       'When the customer asks "instead of this, what else is there?" after a missing item, treat it as a grounded alternatives request.',
-      'When calling inventory tools, always convert customer wording to official SAP-style naming first and send only the normalized query string.',
+      'When calling inventory tools for a clarified product, always convert customer wording to official SAP-style naming first and send structured fields when known; use a normalized search string only for free-text, IMEI, or item-code searches.',
+      'When calling lookup_store_items and the customer specified model, device type, memory, color, SIM type, or condition, pass those as structured fields so SAP can do exact matching.',
+      'If lookup_store_items says no_exact_match=true, tell the customer there is no exact match for the requested option, then use suggestions to offer available memory/color/SIM alternatives for the same model and type.',
       'If the requested item has zero exact matches and grounded alternative inventory suggestions are present, proactively offer those alternatives in the same reply.',
       '</task>',
     ].join('\n');

@@ -65,8 +65,20 @@ test('SupportItemAvailabilityService trims input, clamps limits, normalizes item
 
     assert.deepEqual(result, {
       ok: true,
+      search: 'iphone 16',
       query: 'iphone 16',
       store: 'Nurafshon',
+      requested_filters: {
+        model: null,
+        device_type: null,
+        memory: null,
+        color: null,
+        sim_type: null,
+        condition: null,
+      },
+      exact_match: true,
+      no_exact_match: false,
+      no_exact_match_message: null,
       total_matches: 3,
       returned_matches: 2,
       items: [
@@ -79,6 +91,7 @@ test('SupportItemAvailabilityService trims input, clamps limits, normalizes item
           sale_price: 18000000,
           item_group_name: 'Phones',
           model: 'iPhone 16',
+          device_type: null,
           color: 'Natural',
           memory: '256GB',
           condition: 'B/U',
@@ -93,12 +106,14 @@ test('SupportItemAvailabilityService trims input, clamps limits, normalizes item
           sale_price: 12000000,
           item_group_name: 'Phones',
           model: 'iPhone 16',
+          device_type: null,
           color: 'Black',
           memory: '128GB',
           condition: 'Yangi',
           sim_type: 'eSIM',
         },
       ],
+      suggestions: null,
     });
   } finally {
     availabilityServiceClass.sapService.getItems = originalGetItems;
@@ -245,6 +260,134 @@ test('SupportItemAvailabilityService filters out items without settled sale pric
     assert.deepEqual(
       result.items.map((item) => item.item_code),
       ['IP16'],
+    );
+  } finally {
+    availabilityServiceClass.sapService.getItems = originalGetItems;
+  }
+});
+
+test('SupportItemAvailabilityService returns same model suggestions when exact option filters miss', async () => {
+  const availabilityServiceClass = SupportItemAvailabilityService as any;
+  const originalGetItems = availabilityServiceClass.sapService.getItems;
+
+  const capturedParams: Record<string, unknown>[] = [];
+
+  availabilityServiceClass.sapService.getItems = async (params: Record<string, unknown>) => {
+    capturedParams.push(params);
+
+    if (capturedParams.length === 1) {
+      return { total: 0, data: [] };
+    }
+
+    return {
+      total: 2,
+      data: [
+        {
+          ItemCode: 'IP17PM256BLUE',
+          ItemName: 'iPhone 17 Pro Max 256GB Deep Blue nano-SIM Yangi',
+          WhsCode: '04',
+          WhsName: 'Samarqand darboza sklad',
+          OnHand: 14,
+          SalePrice: 19886000,
+          ItemGroupName: 'iPhone',
+          U_Model: 'iPhone 17',
+          U_DeviceType: 'Pro Max',
+          U_Color: 'Deep Blue',
+          U_Memory: '256GB',
+          U_PROD_CONDITION: 'Yangi',
+          U_Sim_type: 'nano-SIM',
+        },
+        {
+          ItemCode: 'IP17PM256SILVER',
+          ItemName: 'iPhone 17 Pro Max 256GB Silver nano-SIM Yangi',
+          WhsCode: '02',
+          WhsName: 'Samarqand darboza sklad',
+          OnHand: 10,
+          SalePrice: 20190000,
+          ItemGroupName: 'iPhone',
+          U_Model: 'iPhone 17',
+          U_DeviceType: 'Pro Max',
+          U_Color: 'Silver',
+          U_Memory: '256GB',
+          U_PROD_CONDITION: 'Yangi',
+          U_Sim_type: 'nano-SIM',
+        },
+      ],
+    };
+  };
+
+  try {
+    const result = await SupportItemAvailabilityService.lookupAvailableItems({
+      query: '',
+      model: 'iPhone 17',
+      deviceType: 'Pro Max',
+      memory: '512GB',
+      color: 'Deep Blue',
+      simType: 'eSIM',
+      condition: 'Yangi',
+    });
+
+    assert.deepEqual(capturedParams[0], {
+      search: undefined,
+      filters: {
+        model: 'iPhone 17',
+        deviceType: 'Pro Max',
+        memory: '512GB',
+        color: 'Deep Blue',
+        simType: 'eSIM',
+        condition: 'Yangi',
+      },
+      limit: 5,
+      offset: 0,
+      includeZeroOnHand: false,
+      storeName: undefined,
+      groupByWarehouse: true,
+    });
+    assert.deepEqual(capturedParams[1], {
+      filters: {
+        model: 'iPhone 17',
+        deviceType: 'Pro Max',
+        condition: 'Yangi',
+      },
+      limit: 10,
+      offset: 0,
+      includeZeroOnHand: false,
+      storeName: undefined,
+      groupByWarehouse: true,
+    });
+    assert.equal(result.exact_match, false);
+    assert.equal(result.no_exact_match, true);
+    assert.match(result.no_exact_match_message || '', /No exact matching item/i);
+    assert.deepEqual(result.suggestions?.available_options, {
+      memories: ['256GB'],
+      colors: ['Deep Blue', 'Silver'],
+      sim_types: ['nano-SIM'],
+      conditions: ['Yangi'],
+    });
+    assert.deepEqual(
+      result.suggestions?.items.map((item) => ({
+        item_code: item.item_code,
+        device_type: item.device_type,
+        memory: item.memory,
+        color: item.color,
+        sim_type: item.sim_type,
+      })),
+      [
+        {
+          item_code: 'IP17PM256BLUE',
+          device_type: 'Pro Max',
+          memory: '256GB',
+          color: 'Deep Blue',
+          sim_type: 'nano-SIM',
+        },
+        {
+          item_code: 'IP17PM256SILVER',
+          device_type: 'Pro Max',
+          memory: '256GB',
+          color: 'Silver',
+          sim_type: 'nano-SIM',
+        },
+      ],
     );
   } finally {
     availabilityServiceClass.sapService.getItems = originalGetItems;

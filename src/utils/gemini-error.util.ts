@@ -38,6 +38,11 @@ const stringifyForLog = (value: unknown): string => {
     : `${serialized.slice(0, MAX_LOG_VALUE_LENGTH - 3)}...`;
 };
 
+const compactText = (value: string, maxLength: number = 240): string => {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
+};
+
 const parseRequestBody = (data: unknown): Record<string, unknown> | null => {
   if (isRecord(data)) {
     return data;
@@ -173,6 +178,48 @@ export const formatGeminiRequestFailure = (error: unknown): string => {
 
   if (typeof error === 'string') {
     return error;
+  }
+
+  return 'Unknown Gemini request failure';
+};
+
+export const formatGeminiRequestFailureSummary = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    const parts: string[] = [];
+    const status = error.response?.status ? `status=${error.response.status}` : '';
+    const code = error.code ? `code=${error.code}` : '';
+    const baseUrl = typeof error.config?.baseURL === 'string' ? error.config.baseURL : '';
+    const urlPath = typeof error.config?.url === 'string' ? error.config.url : '';
+    const requestUrl = urlPath ? redactSensitiveUrl(`${baseUrl}${urlPath}`) : '';
+    const apiError =
+      isRecord(error.response?.data) && isRecord(error.response.data.error)
+        ? error.response.data.error
+        : null;
+    const apiStatus = typeof apiError?.status === 'string' ? apiError.status : '';
+    const apiMessage = typeof apiError?.message === 'string' ? apiError.message : '';
+
+    parts.push([error.message || 'Axios error', status, code].filter(Boolean).join(' '));
+
+    if (apiStatus || apiMessage) {
+      parts.push(compactText([apiStatus, apiMessage].filter(Boolean).join(': ')));
+    }
+
+    if (requestUrl) {
+      const modelMatch = requestUrl.match(/\/models\/([^/?]+)/);
+      if (modelMatch?.[1]) {
+        parts.push(`model=${modelMatch[1]}`);
+      }
+    }
+
+    return parts.join(' | ');
+  }
+
+  if (error instanceof Error) {
+    return compactText(error.message);
+  }
+
+  if (typeof error === 'string') {
+    return compactText(error);
   }
 
   return 'Unknown Gemini request failure';

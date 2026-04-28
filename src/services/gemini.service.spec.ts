@@ -332,9 +332,17 @@ test('GeminiService.generateJsonWithTools sends structured output config separat
           declaration: {
             name: 'dummy_tool',
             description: 'No-op tool for request-shape coverage.',
+            strict: true,
             parameters: {
               type: 'object',
-              properties: {},
+              properties: {
+                query: {
+                  type: ['string', 'null'],
+                  description: 'Optional normalized search text.',
+                },
+              },
+              required: ['query'],
+              additionalProperties: false,
             },
           },
           execute: async () => ({ ok: true }),
@@ -367,6 +375,27 @@ test('GeminiService.generateJsonWithTools sends structured output config separat
         mode: 'VALIDATED',
       },
     });
+    assert.deepEqual(requestBody['tools'], [
+      {
+        functionDeclarations: [
+          {
+            name: 'dummy_tool',
+            description: 'No-op tool for request-shape coverage.',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: ['string', 'null'],
+                  description: 'Optional normalized search text.',
+                },
+              },
+              required: ['query'],
+              additionalProperties: false,
+            },
+          },
+        ],
+      },
+    ]);
     assert.deepEqual(requestBody['generationConfig'], {
       responseMimeType: 'application/json',
       responseJsonSchema: {

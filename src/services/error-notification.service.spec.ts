@@ -15,6 +15,7 @@ test('ErrorNotificationService formats blocked-user bot errors as a calm Uzbek d
         scope: string;
         severity?: 'warning' | 'error' | 'critical';
         title?: string;
+        includeStack?: boolean;
         updateId?: number;
         chatId?: number;
         chatType?: string;
@@ -69,4 +70,37 @@ test('ErrorNotificationService formats blocked-user bot errors as a calm Uzbek d
   assert.doesNotMatch(message, /Stack/);
   assert.doesNotMatch(message, /GrammyError/);
   assert.doesNotMatch(message, /sendMessage' failed/);
+});
+
+test('ErrorNotificationService can omit stacks for compact admin alerts', async () => {
+  const { ErrorNotificationService } = loadModule('./error-notification.service') as typeof import('./error-notification.service');
+  const serviceInternals = ErrorNotificationService as unknown as {
+    buildMessage(params: {
+      error: unknown;
+      context: {
+        scope: string;
+        severity?: 'warning' | 'error' | 'critical';
+        title?: string;
+        includeStack?: boolean;
+      };
+    }): string;
+  };
+
+  const error = new Error('Request failed with status code 503');
+  error.stack = 'Error: Request failed with status code 503\n    at noisyInternalFrame';
+
+  const message = serviceInternals.buildMessage({
+    error,
+    context: {
+      scope: 'support_ai_agent',
+      severity: 'critical',
+      title: 'AI support agent failed',
+      includeStack: false,
+    },
+  });
+
+  assert.match(message, /AI support agent failed/);
+  assert.match(message, /Request failed with status code 503/);
+  assert.doesNotMatch(message, /Stack/);
+  assert.doesNotMatch(message, /noisyInternalFrame/);
 });

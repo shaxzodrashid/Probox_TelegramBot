@@ -29,6 +29,7 @@ interface ErrorNotificationContext {
   actor?: ErrorNotificationActor | null;
   userMessage?: string | null;
   ticketNumber?: string | null;
+  includeStack?: boolean;
   metadata?: Record<string, string | number | boolean | null | undefined>;
 }
 
@@ -171,7 +172,12 @@ export class ErrorNotificationService {
     const userMessage = params.context.userMessage
       ? truncate(params.context.userMessage.replace(/\s+/g, ' ').trim(), MAX_FIELD_LENGTH)
       : null;
-    const stack = error.stack ? truncate(error.stack, MAX_STACK_LENGTH) : null;
+    const stack =
+      params.context.includeStack === false
+        ? null
+        : error.stack
+          ? truncate(error.stack, MAX_STACK_LENGTH)
+          : null;
 
     const sections = [
       `${getSeverityIcon(severity)} <b>${escapeHtml(title)}</b>`,

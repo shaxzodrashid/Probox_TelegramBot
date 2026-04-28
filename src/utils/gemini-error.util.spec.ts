@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { formatGeminiRequestFailure } from './gemini-error.util';
+import { formatGeminiRequestFailure, formatGeminiRequestFailureSummary } from './gemini-error.util';
 
 test('formatGeminiRequestFailure redacts Gemini API keys from Axios error details', () => {
   const message = formatGeminiRequestFailure({
@@ -83,4 +83,38 @@ test('formatGeminiRequestFailure includes Gemini response body and compact reque
   assert.match(message, /"toolNames":\["lookup_store_items"\]/);
   assert.match(message, /"systemInstructionParts":2/);
   assert.doesNotMatch(message, /Customer prompt should not be logged verbatim here/);
+});
+
+test('formatGeminiRequestFailureSummary keeps admin alerts concise', () => {
+  const message = formatGeminiRequestFailureSummary({
+    isAxiosError: true,
+    message: 'Request failed with status code 503',
+    code: 'ERR_BAD_RESPONSE',
+    response: {
+      status: 503,
+      data: {
+        error: {
+          code: 503,
+          message: 'This model is currently experiencing high demand. Please try again later.',
+          status: 'UNAVAILABLE',
+        },
+      },
+    },
+    config: {
+      baseURL: 'https://generativelanguage.googleapis.com/v1beta/models',
+      url: '/gemini-3.1-flash-lite-preview:generateContent?key=SECRET_API_KEY',
+      data: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: 'Do not include this prompt.' }] }],
+      }),
+    },
+  });
+
+  assert.match(message, /status=503/);
+  assert.match(message, /code=ERR_BAD_RESPONSE/);
+  assert.match(message, /UNAVAILABLE/);
+  assert.match(message, /high demand/);
+  assert.match(message, /model=gemini-3\.1-flash-lite-preview:generateContent/);
+  assert.doesNotMatch(message, /SECRET_API_KEY/);
+  assert.doesNotMatch(message, /Do not include this prompt/);
+  assert.doesNotMatch(message, /contents/);
 });

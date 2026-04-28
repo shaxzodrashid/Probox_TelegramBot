@@ -45,16 +45,25 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export interface GeminiToolDeclaration {
   name: string;
   description: string;
+  strict?: boolean;
   parameters: {
     type: 'object';
     properties: Record<string, unknown>;
     required?: string[];
+    additionalProperties?: boolean;
   };
 }
 
 export interface GeminiTool {
   declaration: GeminiToolDeclaration;
   execute: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+interface GeminiFunctionDeclarationPayload {
+  name: string;
+  description: string;
+  parameters?: Record<string, unknown>;
+  parametersJsonSchema?: Record<string, unknown>;
 }
 
 export type GeminiFunctionCallingMode = 'AUTO' | 'VALIDATED' | 'ANY' | 'NONE';
@@ -582,6 +591,54 @@ export class GeminiService {
     return parts.length > 0 ? { parts } : undefined;
   }
 
+  private static hasJsonSchemaOnlyToolFeature(value: unknown): boolean {
+    if (Array.isArray(value)) {
+      return value.some((entry) => this.hasJsonSchemaOnlyToolFeature(entry));
+    }
+
+    if (!isRecord(value)) {
+      return false;
+    }
+
+    const typeValue = value.type;
+    if (Array.isArray(typeValue)) {
+      return true;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(value, 'additionalProperties')) {
+      return true;
+    }
+
+    return Object.values(value).some((entry) => this.hasJsonSchemaOnlyToolFeature(entry));
+  }
+
+  private static buildFunctionDeclarationPayload(
+    declaration: GeminiToolDeclaration,
+  ): GeminiFunctionDeclarationPayload {
+    const payload: GeminiFunctionDeclarationPayload = {
+      name: declaration.name,
+      description: declaration.description,
+    };
+
+    const parameters = declaration.parameters;
+    const hasDeclaredParameters =
+      Object.keys(parameters.properties).length > 0 ||
+      Boolean(parameters.required?.length) ||
+      this.hasJsonSchemaOnlyToolFeature(parameters);
+
+    if (!hasDeclaredParameters) {
+      return payload;
+    }
+
+    if (this.hasJsonSchemaOnlyToolFeature(parameters)) {
+      payload.parametersJsonSchema = parameters;
+      return payload;
+    }
+
+    payload.parameters = parameters;
+    return payload;
+  }
+
   static async generateJson<T>(params: {
     model?: string;
     prompt: string;
@@ -741,7 +798,9 @@ export class GeminiService {
             contents,
             tools: [
               {
-                functionDeclarations: params.tools.map((tool) => tool.declaration),
+                functionDeclarations: params.tools.map((tool) =>
+                  this.buildFunctionDeclarationPayload(tool.declaration),
+                ),
               },
             ],
             ...(systemInstruction ? { systemInstruction } : {}),
