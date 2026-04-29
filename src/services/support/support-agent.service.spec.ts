@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { SupportTicketMessage } from '../../types/support.types';
 import { GeminiService } from '../gemini.service';
 import { SupportAgentService } from './support-agent.service';
+import { SupportInstallmentService } from './support-installment.service';
 import { SupportItemAvailabilityService } from './support-item-availability.service';
 import { User } from '../user.service';
 
@@ -59,6 +60,7 @@ const makeInventoryResult = (query: string) => ({
   items: [
     {
       item_code: 'IP16',
+      imei: '123456789012345',
       item_name: 'iPhone 16',
       store_code: 'W01',
       store_name: 'Nurafshon',
@@ -119,6 +121,7 @@ const makeAlternativeInventoryResult = (query: string) => ({
   items: [
     {
       item_code: 'IP16',
+      imei: null,
       item_name: 'iPhone 16',
       store_code: 'W01',
       store_name: 'Nurafshon',
@@ -134,6 +137,7 @@ const makeAlternativeInventoryResult = (query: string) => ({
     },
     {
       item_code: 'IP16P',
+      imei: null,
       item_name: 'iPhone 16 Pro',
       store_code: 'W02',
       store_name: 'Samarqand Darvoza',
@@ -149,6 +153,7 @@ const makeAlternativeInventoryResult = (query: string) => ({
     },
     {
       item_code: 'IP15PM',
+      imei: null,
       item_name: 'iPhone 15 Pro Max',
       store_code: 'W03',
       store_name: 'Compass',
@@ -284,6 +289,31 @@ test('SupportAgentService preserves an AI handoff note when escalation is reques
   }
 });
 
+test('SupportAgentService escalates explicit admin handoff requests without calling Gemini', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  let geminiCalled = false;
+
+  GeminiService.generateJsonWithTools = (async () => {
+    geminiCalled = true;
+    throw new Error('Gemini should not run for explicit handoff requests');
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    const result = await SupportAgentService.generateReply({
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: 'adminlaga etib qoyin shuni',
+    });
+
+    assert.equal(geminiCalled, false);
+    assert.equal(result.shouldEscalate, true);
+    assert.match(result.replyText, /qo'llab-quvvatlash jamoasiga yo'naltirdim/i);
+    assert.match(result.escalationReason, /operator|admin/i);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+  }
+});
+
 test('SupportAgentService accepts an empty reply when escalation is requested', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
 
@@ -359,7 +389,19 @@ test('SupportAgentService passes system instructions, focused tool config, and s
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
-      /Format reply_text for Telegram: short readable blocks, compact bullets when useful, no tables or code fences/i,
+      /Format reply_text for Telegram for easy scanning: short readable blocks, blank lines between sections, compact bullets for lists, and bold labels with Telegram HTML/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /one direct summary sentence, then bullets grouped by branch\/option\/payment detail, then one concise CTA/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Do not bury prices, monthly payments, stock counts, or down payments inside long paragraphs/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Never do manual arithmetic for prices, currency conversions, installment payments, discounts, or totals/i,
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
@@ -367,7 +409,7 @@ test('SupportAgentService passes system instructions, focused tool config, and s
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
-      /Tools available in some turns: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount/i,
+      /Tools available in some turns: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount, calculate_installment_price/i,
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
@@ -384,6 +426,30 @@ test('SupportAgentService passes system instructions, focused tool config, and s
     assert.match(
       capturedSystemInstruction.join('\n'),
       /For price conversion use convert_currency_amount unless the exact conversion is already grounded here/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Never ask customers for item codes or IMEI numbers/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Never mention the total installment amount, total payable amount, total after percentage, interest amount, or "jami qiymati"/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Never calculate, estimate, derive, round, or adjust installment prices manually/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Down payment is required for installments and must be at least 1,000,000 UZS/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /first calculate with the default down_payment=1000000/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Yangi uses SalePrice, B\/U or B\\U uses PurchasePrice/i,
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
@@ -436,6 +502,33 @@ test('SupportAgentService passes system instructions, focused tool config, and s
     });
     assert.deepEqual(capturedToolNames, ['convert_currency_amount']);
     assert.equal(capturedMaxToolIterations, 3);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+  }
+});
+
+test('SupportAgentService strips total payable lines from installment replies', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+
+  GeminiService.generateJsonWithTools = (async () => ({
+    reply_text:
+      'iPhone 17 Pro modelini 15 oyga olishingiz mumkin:\n\n• Oyiga to‘lov: 2 108 567 so‘m\n• Boshlang‘ich to‘lovsiz\n• Jami qiymati (ustama bilan): 31 628 500 so‘m',
+    should_escalate: false,
+    escalation_reason: '',
+  })) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    const result = await SupportAgentService.generateReply({
+      user: makeUser(),
+      history: makeHistory(),
+      latestUserMessage: '15 oyga qancha tushadi?',
+    });
+
+    assert.equal(
+      result.replyText,
+      'iPhone 17 Pro modelini 15 oyga olishingiz mumkin:\n\n• Oyiga to‘lov: 2 108 567 so‘m\n• Boshlang‘ich to‘lovsiz',
+    );
+    assert.doesNotMatch(result.replyText, /jami qiymati|31 628 500/i);
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
   }
@@ -543,6 +636,7 @@ test('SupportAgentService exposes the Gemini inventory tool that delegates to it
       items: [
         {
           item_code: 'IP16',
+          imei: '123456789012345',
           item_name: 'iPhone 16',
           store_code: 'W01',
           store_name: 'Nurafshon',
@@ -649,6 +743,7 @@ test('SupportAgentService exposes the Gemini inventory tool that delegates to it
       items: [
         {
           item_code: 'IP16',
+          imei: '123456789012345',
           item_name: 'iPhone 16',
           store_code: 'W01',
           store_name: 'Nurafshon',
@@ -718,6 +813,285 @@ test('SupportAgentService exposes the Gemini device catalog tool that delegates 
   }
 });
 
+test('SupportAgentService exposes installment calculator with grounded item identifiers', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+  const originalCalculateMonthlyInstallment = SupportInstallmentService.calculateMonthlyInstallment;
+
+  let capturedToolNames: string[] = [];
+  let executedToolResult: unknown = null;
+  const calculatorCalls: unknown[] = [];
+  let defaultDownPaymentToolResult: unknown = null;
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) =>
+    makeInventoryResult(
+      params.query,
+    )) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  SupportInstallmentService.calculateMonthlyInstallment = (async (params) => {
+    calculatorCalls.push(params);
+
+    return {
+      ok: true,
+      error: null,
+      lookup: {
+        imei: params.imei || null,
+        item_code: params.itemCode || null,
+        used: 'imei',
+      },
+      months: params.months,
+      down_payment: params.downPayment || 0,
+      product: {
+        imei: params.imei || null,
+        item_code: params.itemCode || 'IP16',
+        item_name: 'iPhone 16',
+        store_code: 'W01',
+        store_name: 'Nurafshon',
+        on_hand: 1,
+        sale_price: 12000000,
+        purchase_price: null,
+        model: 'iPhone 16',
+        device_type: null,
+        memory: '128GB',
+        color: 'Black',
+        sim_type: 'eSIM',
+        condition: 'Yangi',
+      },
+      percentage: 63,
+      sale_price: 12000000,
+      purchase_price: null,
+      actual_price: 12000000,
+      price_source: 'SalePrice',
+      financed_amount: 10000000,
+      monthly_installment: 1358333,
+    };
+  }) as typeof SupportInstallmentService.calculateMonthlyInstallment;
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    capturedToolNames = params.tools.map((tool) => tool.declaration.name);
+    const calculatorTool = params.tools.find(
+      (tool) => tool.declaration.name === 'calculate_installment_price',
+    );
+
+    assert.ok(calculatorTool);
+    assert.equal(calculatorTool.declaration.strict, true);
+    assert.deepEqual(calculatorTool.declaration.parameters.required, [
+      'imei',
+      'item_code',
+      'months',
+      'down_payment',
+    ]);
+    const calculatorParameters = calculatorTool.declaration.parameters as unknown as {
+      properties: {
+        down_payment: {
+          description: string;
+        };
+      };
+    };
+    assert.match(
+      calculatorParameters.properties.down_payment.description,
+      /Minimum is 1,000,000 UZS/i,
+    );
+
+    executedToolResult = await calculatorTool.execute({
+      imei: '123456789012345',
+      item_code: 'IP16',
+      months: 12,
+      down_payment: 2000000,
+    });
+    defaultDownPaymentToolResult = await calculatorTool.execute({
+      imei: '123456789012345',
+      item_code: 'IP16',
+      months: 12,
+      down_payment: null,
+    });
+
+    return {
+      reply_text: '12 oyga oyiga 1 358 333 so‘mdan bo‘ladi.',
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    const result = await SupportAgentService.generateReply({
+      user: makeUser(),
+      history: [
+        {
+          id: 1,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text: 'iPhone 16 128GB black bormi?',
+          photo_file_id: null,
+          telegram_message_id: 111,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+      ],
+      latestUserMessage: '2 million boshlangich tolov bilan 12 oyga qancha?',
+    });
+
+    assert.equal(result.replyText, '12 oyga oyiga 1 358 333 so‘mdan bo‘ladi.');
+    assert.deepEqual(capturedToolNames, ['lookup_store_items', 'calculate_installment_price']);
+    assert.deepEqual(calculatorCalls[0], {
+      imei: '123456789012345',
+      itemCode: 'IP16',
+      months: 12,
+      downPayment: 2000000,
+    });
+    assert.deepEqual(calculatorCalls[1], {
+      imei: '123456789012345',
+      itemCode: 'IP16',
+      months: 12,
+      downPayment: 1000000,
+    });
+    assert.deepEqual(executedToolResult, {
+      ok: true,
+      error: null,
+      lookup: {
+        imei: '123456789012345',
+        item_code: 'IP16',
+        used: 'imei',
+      },
+      months: 12,
+      down_payment: 2000000,
+      product: {
+        imei: '123456789012345',
+        item_code: 'IP16',
+        item_name: 'iPhone 16',
+        store_code: 'W01',
+        store_name: 'Nurafshon',
+        on_hand: 1,
+        sale_price: 12000000,
+        purchase_price: null,
+        model: 'iPhone 16',
+        device_type: null,
+        memory: '128GB',
+        color: 'Black',
+        sim_type: 'eSIM',
+        condition: 'Yangi',
+      },
+      percentage: 63,
+      sale_price: 12000000,
+      purchase_price: null,
+      actual_price: 12000000,
+      price_source: 'SalePrice',
+      financed_amount: 10000000,
+      monthly_installment: 1358333,
+    });
+    assert.deepEqual(defaultDownPaymentToolResult, {
+      ok: true,
+      error: null,
+      lookup: {
+        imei: '123456789012345',
+        item_code: 'IP16',
+        used: 'imei',
+      },
+      months: 12,
+      down_payment: 1000000,
+      product: {
+        imei: '123456789012345',
+        item_code: 'IP16',
+        item_name: 'iPhone 16',
+        store_code: 'W01',
+        store_name: 'Nurafshon',
+        on_hand: 1,
+        sale_price: 12000000,
+        purchase_price: null,
+        model: 'iPhone 16',
+        device_type: null,
+        memory: '128GB',
+        color: 'Black',
+        sim_type: 'eSIM',
+        condition: 'Yangi',
+      },
+      percentage: 63,
+      sale_price: 12000000,
+      purchase_price: null,
+      actual_price: 12000000,
+      price_source: 'SalePrice',
+      financed_amount: 10000000,
+      monthly_installment: 1358333,
+    });
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+    SupportInstallmentService.calculateMonthlyInstallment = originalCalculateMonthlyInstallment;
+  }
+});
+
+test('SupportAgentService treats down-payment follow-up slang as installment intent', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+
+  let capturedToolNames: string[] = [];
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    capturedToolNames = params.tools.map((tool) => tool.declaration.name);
+
+    return {
+      reply_text:
+        '<b>Muddatli to‘lov</b>\n\n• Boshlang‘ich to‘lov: 1 000 000 so‘m\n• Oylik to‘lovni kalkulyator orqali tekshirib beraman.',
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      user: makeUser(),
+      history: [
+        {
+          id: 1,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text: '17 pro oqi bomi 256 tali',
+          photo_file_id: null,
+          telegram_message_id: 111,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 2,
+          ticket_id: 99,
+          sender_type: 'agent',
+          message_text:
+            "iPhone 17 Pro 256GB Silver (oq) modelimiz mavjud. Narxi 18 605 000 so'm.",
+          photo_file_id: null,
+          telegram_message_id: 112,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 3,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text: '15 oyga osam nechpulda tushadi',
+          photo_file_id: null,
+          telegram_message_id: 113,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 4,
+          ticket_id: 99,
+          sender_type: 'agent',
+          message_text:
+            "15 oyga oyiga 2 108 567 so'mdan to'lov qilasiz (1 000 000 so'm boshlang'ich to'lov bilan).",
+          photo_file_id: null,
+          telegram_message_id: 114,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+      ],
+      latestUserMessage: 'boshiga bermasda osa boladimi',
+    });
+
+    assert.deepEqual(capturedToolNames, ['lookup_store_items', 'calculate_installment_price']);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+  }
+});
+
 test('SupportAgentService preloads live inventory context for direct availability questions', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
   const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
@@ -782,6 +1156,58 @@ test('SupportAgentService normalizes shorthand model slang like "silada 15 pro b
     });
 
     assert.equal(preloadedQuery, 'iphone 15 pro');
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+  }
+});
+
+test('SupportAgentService carries previous iPhone model into memory/color follow-up slang', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+
+  let preloadedQuery = '';
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => {
+    preloadedQuery = params.query;
+    return makeInventoryResult(params.query);
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  GeminiService.generateJsonWithTools = (async () => ({
+    reply_text: 'iPhone 15 Pro 256GB oq rang bo‘yicha tekshirib beraman.',
+    should_escalate: false,
+    escalation_reason: '',
+  })) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      user: makeUser(),
+      history: [
+        {
+          id: 1,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text: '15 pro bomi',
+          photo_file_id: null,
+          telegram_message_id: 111,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 2,
+          ticket_id: 99,
+          sender_type: 'agent',
+          message_text: 'Qaysi xotira va rang kerak?',
+          photo_file_id: null,
+          telegram_message_id: 112,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+      ],
+      latestUserMessage: 'oqi bomi 256 tali',
+    });
+
+    assert.equal(preloadedQuery, 'iphone 15 pro 256gb white');
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
     SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;

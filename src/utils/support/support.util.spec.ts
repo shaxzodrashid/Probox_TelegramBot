@@ -7,7 +7,13 @@ import { FaqService } from '../../services/faq/faq.service';
 import { SupportAgentService } from '../../services/support/support-agent.service';
 import { SupportDispatcherService } from '../../services/support/support-dispatcher.service';
 import { SupportService } from '../../services/support/support.service';
-import { enqueueSupportRequest, processSupportRequest } from './support.util';
+import { SupportTicketMessage } from '../../types/support.types';
+import { redisService } from '../../redis/redis.service';
+import {
+  enqueueSupportRequest,
+  formatAdminGroupMessage,
+  processSupportRequest,
+} from './support.util';
 
 const makeUser = () => ({
   id: 1,
@@ -89,6 +95,51 @@ const makeFakeApi = () => ({
   sendPhoto: async () => ({ message_id: 999 }),
 });
 
+test('formatAdminGroupMessage applies Telegram HTML formatting for agent transcript lines only', () => {
+  const message = formatAdminGroupMessage(
+    'ABC123',
+    {
+      first_name: 'Ali',
+      last_name: 'Valiyev',
+      phone_number: '+998901234567',
+      telegram_id: 55,
+      username: 'ali',
+      sap_card_code: 'C001',
+      language_code: 'uz',
+    },
+    'ha <script>alert(1)</script>',
+    new Date('2026-04-20T09:10:00.000Z'),
+    {
+      transcript: [
+        {
+          id: 1,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text: '<b>raw user</b>',
+          photo_file_id: null,
+          telegram_message_id: 1,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 2,
+          ticket_id: 99,
+          sender_type: 'agent',
+          message_text: '<b>Oyiga to‘lov:</b> 1 995 233 so‘m',
+          photo_file_id: null,
+          telegram_message_id: 2,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+      ],
+    },
+  );
+
+  assert.match(message, /ha &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(message, /1\. <b>Foydalanuvchi:<\/b> &lt;b&gt;raw user&lt;\/b&gt;/);
+  assert.match(message, /2\. <b>AI agent:<\/b> <b>Oyiga to‘lov:<\/b> 1 995 233 so‘m/);
+});
+
 test('processSupportRequest routes active AI-ticket messages through FAQ resolution before continuing the ticket', async () => {
   const originalGetOpenAgentTicketByUserTelegramId =
     SupportService.getOpenAgentTicketByUserTelegramId;
@@ -99,10 +150,11 @@ test('processSupportRequest routes active AI-ticket messages through FAQ resolut
   const originalCloseTicket = SupportService.closeTicket;
   const originalSyncTicketPreviewMessage = SupportService.syncTicketPreviewMessage;
   const originalCreateTicket = SupportService.createTicket;
+  const originalGetTicketMessages = SupportService.getTicketMessages;
   const originalGenerateReply = SupportAgentService.generateReply;
 
   const appendedMessages: string[] = [];
-  const resolveCalls: string[] = [];
+  const resolveCalls: Array<{ question: string; semanticSearchText?: string }> = [];
   let closeTicketId: number | null = null;
   let syncCallCount = 0;
   let createTicketCallCount = 0;
@@ -114,8 +166,34 @@ test('processSupportRequest routes active AI-ticket messages through FAQ resolut
   SupportService.getLatestOpenUnforwardedTicketByUserTelegramId = (async () =>
     null) as typeof SupportService.getLatestOpenUnforwardedTicketByUserTelegramId;
 
-  FaqRoutingService.resolveSupportFaq = (async (question) => {
-    resolveCalls.push(question);
+  SupportService.getTicketMessages = (async () => [
+    {
+      id: 1,
+      ticket_id: 10,
+      sender_type: 'user',
+      message_text: 'iPhone 17 bormi?',
+      photo_file_id: null,
+      telegram_message_id: 500,
+      group_message_id: null,
+      created_at: new Date(),
+    },
+    {
+      id: 2,
+      ticket_id: 10,
+      sender_type: 'agent',
+      message_text: 'Qaysi xotira kerak?',
+      photo_file_id: null,
+      telegram_message_id: 501,
+      group_message_id: null,
+      created_at: new Date(),
+    },
+  ]) as typeof SupportService.getTicketMessages;
+
+  FaqRoutingService.resolveSupportFaq = (async (question, options) => {
+    resolveCalls.push({
+      question,
+      semanticSearchText: options?.semanticSearchText,
+    });
 
     return {
       faq: {
@@ -194,7 +272,16 @@ test('processSupportRequest routes active AI-ticket messages through FAQ resolut
       'uz',
     );
 
-    assert.deepEqual(resolveCalls, ['Assalomu alaykum, sizlarda nechta filial bor']);
+    assert.deepEqual(resolveCalls, [
+      {
+        question: 'Assalomu alaykum, sizlarda nechta filial bor',
+        semanticSearchText: [
+          'user: iPhone 17 bormi?',
+          'agent: Qaysi xotira kerak?',
+          'user: Assalomu alaykum, sizlarda nechta filial bor',
+        ].join('\n'),
+      },
+    ]);
     assert.equal(closeTicketId, 10);
     assert.equal(syncCallCount, 0);
     assert.equal(createTicketCallCount, 1);
@@ -214,6 +301,7 @@ test('processSupportRequest routes active AI-ticket messages through FAQ resolut
     SupportService.closeTicket = originalCloseTicket;
     SupportService.syncTicketPreviewMessage = originalSyncTicketPreviewMessage;
     SupportService.createTicket = originalCreateTicket;
+    SupportService.getTicketMessages = originalGetTicketMessages;
     SupportAgentService.generateReply = originalGenerateReply;
   }
 });
@@ -571,6 +659,188 @@ test('processSupportRequest still continues an active AI ticket when FAQ routing
     FaqRoutingService.resolveSupportFaq = originalResolveSupportFaq;
     SupportService.appendMessage = originalAppendMessage;
     SupportService.syncTicketPreviewMessage = originalSyncTicketPreviewMessage;
+    FaqService.getPublishedFaqById = originalGetPublishedFaqById;
+    SupportService.getTicketMessages = originalGetTicketMessages;
+    SupportAgentService.generateReply = originalGenerateReply;
+  }
+});
+
+test('processSupportRequest keeps active AI ticket history when FAQ routing upgrades a fallback thread to an agent FAQ', async () => {
+  const originalGetOpenAgentTicketByUserTelegramId =
+    SupportService.getOpenAgentTicketByUserTelegramId;
+  const originalResolveSupportFaq = FaqRoutingService.resolveSupportFaq;
+  const originalAppendMessage = SupportService.appendMessage;
+  const originalSyncTicketPreviewMessage = SupportService.syncTicketPreviewMessage;
+  const originalUpdateTicketHandling = SupportService.updateTicketHandling;
+  const originalCloseTicket = SupportService.closeTicket;
+  const originalCreateTicket = SupportService.createTicket;
+  const originalGetPublishedFaqById = FaqService.getPublishedFaqById;
+  const originalGetTicketMessages = SupportService.getTicketMessages;
+  const originalGenerateReply = SupportAgentService.generateReply;
+
+  const activeFallbackTicket = {
+    ...makeActiveAgentTicket(),
+    ticket_number: 'OJB985',
+    matched_faq_id: null,
+    agent_token: '__FALLBACK_AI_SUPPORT__',
+  };
+  const ticketMessages: SupportTicketMessage[] = [
+    {
+      id: 1,
+      ticket_id: activeFallbackTicket.id,
+      sender_type: 'user' as const,
+      message_text: '15 pro bomi',
+      photo_file_id: null,
+      telegram_message_id: 7749,
+      group_message_id: null,
+      created_at: new Date(),
+    },
+    {
+      id: 2,
+      ticket_id: activeFallbackTicket.id,
+      sender_type: 'agent' as const,
+      message_text: 'iPhone 15 Pro uchun qaysi xotira va rang kerak?',
+      photo_file_id: null,
+      telegram_message_id: 7750,
+      group_message_id: null,
+      created_at: new Date(),
+    },
+  ];
+  const appendedMessages: string[] = [];
+  let syncCallCount = 0;
+  let closeCallCount = 0;
+  let createTicketCallCount = 0;
+  let updatedMatchedFaqId: number | null = null;
+  let capturedHistory: Array<{ sender_type: string; message_text: string }> = [];
+
+  const agentFaq = {
+    id: 7,
+    question_uz: "Sizning do'koningizda {phone_type} qurilmasi sotuvda bormi?",
+    question_ru: 'Есть ли в продаже устройство {phone_type}?',
+    question_en: 'Do you have {phone_type} in stock?',
+    answer_uz: '__AGENT_FAQ_7__',
+    answer_ru: '__AGENT_FAQ_7__',
+    answer_en: '__AGENT_FAQ_7__',
+    status: 'published' as const,
+    vector_embedding: '[]',
+    agent_enabled: true,
+    agent_token: '__AGENT_FAQ_7__',
+    created_by_admin_telegram_id: 1,
+    locked_by_admin_telegram_id: null,
+    workflow_stage: 'completed' as const,
+    created_at: new Date(),
+    updated_at: new Date(),
+  };
+
+  SupportService.getOpenAgentTicketByUserTelegramId = (async () =>
+    activeFallbackTicket) as typeof SupportService.getOpenAgentTicketByUserTelegramId;
+
+  FaqRoutingService.resolveSupportFaq = (async () => ({
+    faq: agentFaq,
+    resolutionType: 'semantic_ai' as const,
+    distance: 0.25,
+    confidence: 0.95,
+    reason: 'The user is asking for availability of a specific iPhone configuration.',
+  })) as typeof FaqRoutingService.resolveSupportFaq;
+
+  SupportService.syncTicketPreviewMessage = (async () => {
+    syncCallCount += 1;
+  }) as typeof SupportService.syncTicketPreviewMessage;
+
+  SupportService.updateTicketHandling = (async (params) => {
+    updatedMatchedFaqId = params.matchedFaqId ?? null;
+
+    return {
+      ...activeFallbackTicket,
+      handling_mode: params.handlingMode,
+      matched_faq_id: params.matchedFaqId ?? null,
+      agent_token: params.agentToken ?? null,
+      agent_escalation_reason: params.agentEscalationReason ?? null,
+    };
+  }) as typeof SupportService.updateTicketHandling;
+
+  SupportService.closeTicket = (async () => {
+    closeCallCount += 1;
+    return true;
+  }) as typeof SupportService.closeTicket;
+
+  SupportService.createTicket = (async () => {
+    createTicketCallCount += 1;
+    return makeLocalTicket();
+  }) as typeof SupportService.createTicket;
+
+  SupportService.appendMessage = (async (params) => {
+    appendedMessages.push(`${params.senderType}:${params.messageText}`);
+    const message = {
+      id: ticketMessages.length + 1,
+      ticket_id: params.ticketId,
+      sender_type: params.senderType,
+      message_text: params.messageText,
+      photo_file_id: params.photoFileId || null,
+      telegram_message_id: params.telegramMessageId || null,
+      group_message_id: params.groupMessageId || null,
+      created_at: new Date(),
+    };
+    ticketMessages.push(message);
+    return message;
+  }) as typeof SupportService.appendMessage;
+
+  FaqService.getPublishedFaqById = (async () => agentFaq) as typeof FaqService.getPublishedFaqById;
+
+  SupportService.getTicketMessages = (async () =>
+    ticketMessages) as typeof SupportService.getTicketMessages;
+
+  SupportAgentService.generateReply = (async (params) => {
+    capturedHistory = params.history.map((message) => ({
+      sender_type: message.sender_type,
+      message_text: message.message_text,
+    }));
+
+    return {
+      replyText: "Hozir iPhone 15 Pro 256GB oq rang bo'yicha tekshiraman.",
+      shouldEscalate: false,
+      escalationReason: '',
+    };
+  }) as typeof SupportAgentService.generateReply;
+
+  const { ctx, replies } = makeFakeCtx();
+
+  try {
+    await processSupportRequest(
+      makeFakeApi() as unknown as import('grammy').Api<import('grammy').RawApi>,
+      ctx as unknown as import('../../types/context').BotContext,
+      makeUser(),
+      'oqi bomi 256 tali',
+      7752,
+      undefined,
+      'uz',
+    );
+
+    assert.equal(syncCallCount, 1);
+    assert.equal(closeCallCount, 0);
+    assert.equal(createTicketCallCount, 0);
+    assert.equal(updatedMatchedFaqId, 7);
+    assert.deepEqual(appendedMessages, [
+      'user:oqi bomi 256 tali',
+      "agent:Hozir iPhone 15 Pro 256GB oq rang bo'yicha tekshiraman.",
+    ]);
+    assert.deepEqual(capturedHistory, [
+      { sender_type: 'user', message_text: '15 pro bomi' },
+      {
+        sender_type: 'agent',
+        message_text: 'iPhone 15 Pro uchun qaysi xotira va rang kerak?',
+      },
+      { sender_type: 'user', message_text: 'oqi bomi 256 tali' },
+    ]);
+    assert.equal(replies[1], "Hozir iPhone 15 Pro 256GB oq rang bo'yicha tekshiraman.");
+  } finally {
+    SupportService.getOpenAgentTicketByUserTelegramId = originalGetOpenAgentTicketByUserTelegramId;
+    FaqRoutingService.resolveSupportFaq = originalResolveSupportFaq;
+    SupportService.appendMessage = originalAppendMessage;
+    SupportService.syncTicketPreviewMessage = originalSyncTicketPreviewMessage;
+    SupportService.updateTicketHandling = originalUpdateTicketHandling;
+    SupportService.closeTicket = originalCloseTicket;
+    SupportService.createTicket = originalCreateTicket;
     FaqService.getPublishedFaqById = originalGetPublishedFaqById;
     SupportService.getTicketMessages = originalGetTicketMessages;
     SupportAgentService.generateReply = originalGenerateReply;
@@ -1251,7 +1521,7 @@ test('processSupportRequest formats escalated AI handoff replies as Telegram HTM
 
   SupportAgentService.generateReply = (async () => ({
     replyText:
-      "Tushundim, Muhammadali. Sizni qiziqtirgan **iPhone 16 Pro 128GB White (yangi)** modeli uchun narxni tez orada aniqlab, sizga xabar beraman.",
+      'Tushundim, Muhammadali. Sizni qiziqtirgan **iPhone 16 Pro 128GB White (yangi)** modeli uchun narxni tez orada aniqlab, sizga xabar beraman.',
     shouldEscalate: true,
     escalationReason: 'Narxni qo‘lda aniqlashtirish kerak.',
   })) as typeof SupportAgentService.generateReply;
@@ -1286,11 +1556,212 @@ test('processSupportRequest formats escalated AI handoff replies as Telegram HTM
     SupportService.updateTicketHandling = originalUpdateTicketHandling;
     SupportService.escalateAgentTicket = originalEscalateAgentTicket;
     SupportService.updateGroupMessageId = originalUpdateGroupMessageId;
-    SupportService.updateLatestMessageGroupMessageId =
-      originalUpdateLatestMessageGroupMessageId;
+    SupportService.updateLatestMessageGroupMessageId = originalUpdateLatestMessageGroupMessageId;
     FaqService.getPublishedFaqById = originalGetPublishedFaqById;
     SupportService.getTicketMessages = originalGetTicketMessages;
     SupportAgentService.generateReply = originalGenerateReply;
+  }
+});
+
+test('processSupportRequest routes CRM application requests to the application flow instead of the admin group', async () => {
+  const originalSupportGroupId = config.SUPPORT_GROUP_ID;
+  const originalGetOpenAgentTicketByUserTelegramId =
+    SupportService.getOpenAgentTicketByUserTelegramId;
+  const originalGetLatestOpenUnforwardedTicketByUserTelegramId =
+    SupportService.getLatestOpenUnforwardedTicketByUserTelegramId;
+  const originalResolveSupportFaq = FaqRoutingService.resolveSupportFaq;
+  const originalAppendMessage = SupportService.appendMessage;
+  const originalCreateTicket = SupportService.createTicket;
+  const originalUpdateTicketHandling = SupportService.updateTicketHandling;
+  const originalCloseTicket = SupportService.closeTicket;
+  const originalEscalateAgentTicket = SupportService.escalateAgentTicket;
+  const originalUpdateGroupMessageId = SupportService.updateGroupMessageId;
+  const originalUpdateLatestMessageGroupMessageId =
+    SupportService.updateLatestMessageGroupMessageId;
+  const originalGetPublishedFaqById = FaqService.getPublishedFaqById;
+  const originalGetTicketMessages = SupportService.getTicketMessages;
+  const originalGenerateReply = SupportAgentService.generateReply;
+  const originalRedisSet = redisService.set;
+
+  config.SUPPORT_GROUP_ID = '12345';
+
+  const apiMessages: string[] = [];
+  const appendedMessages: string[] = [];
+  let closedTicketId: number | null = null;
+  let escalated = false;
+  let groupMessageUpdated = false;
+  const pendingActionSets: Array<{ key: string; value: unknown; expireTime?: number }> = [];
+
+  SupportService.getOpenAgentTicketByUserTelegramId = (async () =>
+    null) as typeof SupportService.getOpenAgentTicketByUserTelegramId;
+
+  SupportService.getLatestOpenUnforwardedTicketByUserTelegramId = (async () =>
+    null) as typeof SupportService.getLatestOpenUnforwardedTicketByUserTelegramId;
+
+  FaqRoutingService.resolveSupportFaq = (async () => ({
+    faq: {
+      id: 7,
+      question_uz: 'Mahsulot bormi?',
+      question_ru: 'Есть товар?',
+      question_en: 'Is product available?',
+      answer_uz: '__AGENT_FAQ_7__',
+      answer_ru: '__AGENT_FAQ_7__',
+      answer_en: '__AGENT_FAQ_7__',
+      status: 'published',
+      vector_embedding: '[]',
+      agent_enabled: true,
+      agent_token: '__AGENT_FAQ_7__',
+      created_by_admin_telegram_id: 1,
+      locked_by_admin_telegram_id: null,
+      workflow_stage: 'completed',
+      created_at: new Date(),
+      updated_at: new Date(),
+    },
+    resolutionType: 'semantic_ai' as const,
+    distance: 0.1,
+    confidence: 0.99,
+    reason: 'Stock-check agent.',
+  })) as typeof FaqRoutingService.resolveSupportFaq;
+
+  SupportService.createTicket = (async () =>
+    makeLocalTicket()) as typeof SupportService.createTicket;
+
+  SupportService.updateTicketHandling = (async (params) => ({
+    ...makeLocalTicket(),
+    handling_mode: params.handlingMode,
+    matched_faq_id: params.matchedFaqId ?? null,
+    agent_token: params.agentToken ?? null,
+    agent_escalation_reason: params.agentEscalationReason ?? null,
+  })) as typeof SupportService.updateTicketHandling;
+
+  SupportService.escalateAgentTicket = (async () => {
+    escalated = true;
+    return makeLocalTicket();
+  }) as typeof SupportService.escalateAgentTicket;
+
+  SupportService.closeTicket = (async (ticketId) => {
+    closedTicketId = ticketId;
+    return true;
+  }) as typeof SupportService.closeTicket;
+
+  SupportService.updateGroupMessageId = (async () => {
+    groupMessageUpdated = true;
+  }) as typeof SupportService.updateGroupMessageId;
+
+  SupportService.updateLatestMessageGroupMessageId = (async () =>
+    undefined) as typeof SupportService.updateLatestMessageGroupMessageId;
+
+  SupportService.appendMessage = (async (params) => {
+    appendedMessages.push(`${params.senderType}:${params.messageText}`);
+    return {
+      id: appendedMessages.length,
+      ticket_id: params.ticketId,
+      sender_type: params.senderType,
+      message_text: params.messageText,
+      photo_file_id: params.photoFileId || null,
+      telegram_message_id: params.telegramMessageId || null,
+      group_message_id: params.groupMessageId || null,
+      created_at: new Date(),
+    };
+  }) as typeof SupportService.appendMessage;
+
+  FaqService.getPublishedFaqById = (async () => ({
+    id: 7,
+    question_uz: 'Mahsulot bormi?',
+    question_ru: 'Есть товар?',
+    question_en: 'Is product available?',
+    answer_uz: '__AGENT_FAQ_7__',
+    answer_ru: '__AGENT_FAQ_7__',
+    answer_en: '__AGENT_FAQ_7__',
+    status: 'published',
+    vector_embedding: '[]',
+    agent_enabled: true,
+    agent_token: '__AGENT_FAQ_7__',
+    created_by_admin_telegram_id: 1,
+    locked_by_admin_telegram_id: null,
+    workflow_stage: 'completed',
+    created_at: new Date(),
+    updated_at: new Date(),
+  })) as typeof FaqService.getPublishedFaqById;
+
+  SupportService.getTicketMessages = (async () => [
+    {
+      id: 1,
+      ticket_id: 11,
+      sender_type: 'user',
+      message_text: 'ha',
+      photo_file_id: null,
+      telegram_message_id: 600,
+      group_message_id: null,
+      created_at: new Date(),
+    },
+  ]) as typeof SupportService.getTicketMessages;
+
+  SupportAgentService.generateReply = (async () => ({
+    replyText: 'Arizani boshlaymiz.',
+    shouldEscalate: true,
+    escalationReason: 'CRM application requested',
+  })) as typeof SupportAgentService.generateReply;
+
+  redisService.set = (async (key, value, expireTime) => {
+    pendingActionSets.push({ key, value, expireTime });
+    return 'OK';
+  }) as typeof redisService.set;
+
+  const { ctx, replies } = makeFakeCtx();
+  const api = {
+    ...makeFakeApi(),
+    sendMessage: async (_chatId: number, text: string) => {
+      apiMessages.push(text);
+      return { message_id: 999 };
+    },
+  };
+
+  try {
+    await processSupportRequest(
+      api as unknown as import('grammy').Api<import('grammy').RawApi>,
+      ctx as unknown as import('../../types/context').BotContext,
+      makeUser(),
+      'ha',
+      701,
+      undefined,
+      'uz',
+      false,
+      { deferred: true },
+    );
+
+    assert.equal(replies.length, 0);
+    assert.deepEqual(apiMessages, [
+      "⏳ AI yordamchi so'rovingizni tekshiryapti...",
+      "✅ Tushunarli, ariza qoldirish bo'limiga o'tamiz. Davom etish uchun tugmani bosing.",
+    ]);
+    assert.deepEqual(pendingActionSets, [
+      { key: 'pendingAction:55', value: 'application', expireTime: 3600 },
+    ]);
+    assert.equal(closedTicketId, 11);
+    assert.equal(escalated, false);
+    assert.equal(groupMessageUpdated, false);
+    assert.deepEqual(appendedMessages, [
+      'user:ha',
+      "system:AI yordamchi murojaatni ariza qoldirish jarayoniga o'tkazdi: CRM application requested",
+    ]);
+  } finally {
+    config.SUPPORT_GROUP_ID = originalSupportGroupId;
+    SupportService.getOpenAgentTicketByUserTelegramId = originalGetOpenAgentTicketByUserTelegramId;
+    SupportService.getLatestOpenUnforwardedTicketByUserTelegramId =
+      originalGetLatestOpenUnforwardedTicketByUserTelegramId;
+    FaqRoutingService.resolveSupportFaq = originalResolveSupportFaq;
+    SupportService.appendMessage = originalAppendMessage;
+    SupportService.createTicket = originalCreateTicket;
+    SupportService.updateTicketHandling = originalUpdateTicketHandling;
+    SupportService.closeTicket = originalCloseTicket;
+    SupportService.escalateAgentTicket = originalEscalateAgentTicket;
+    SupportService.updateGroupMessageId = originalUpdateGroupMessageId;
+    SupportService.updateLatestMessageGroupMessageId = originalUpdateLatestMessageGroupMessageId;
+    FaqService.getPublishedFaqById = originalGetPublishedFaqById;
+    SupportService.getTicketMessages = originalGetTicketMessages;
+    SupportAgentService.generateReply = originalGenerateReply;
+    redisService.set = originalRedisSet;
   }
 });
 

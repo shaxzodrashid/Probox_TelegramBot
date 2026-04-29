@@ -1,5 +1,5 @@
 import { SupportTicket, SupportTicketMessage } from '../../types/support.types';
-import { escapeHtml } from '../telegram/telegram-rich-text.util';
+import { escapeHtml, richTextToTelegramHtml } from '../telegram/telegram-rich-text.util';
 import { formatUzPhone } from '../uz-phone.util';
 
 export interface SupportTranscriptUserSnapshot {
@@ -350,8 +350,10 @@ const renderMessageBubble = (
   const sender = getSenderPresentation(message.sender_type);
   const hasPhoto = Boolean(message.photo_file_id);
   const text = message.message_text?.trim() || '';
+  const renderedText =
+    message.sender_type === 'agent' ? richTextToTelegramHtml(text) : escapeHtml(text);
   const safeText = text
-    ? escapeHtml(text).replace(/\n/g, '<br />')
+    ? renderedText.replace(/\n/g, '<br />')
     : `<span class="muted" ${renderLocalizedAttributes({
         uz: TRANSCRIPT_COPY.uz.other.noText,
         ru: TRANSCRIPT_COPY.ru.other.noText,

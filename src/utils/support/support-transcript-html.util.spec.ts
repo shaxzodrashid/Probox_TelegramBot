@@ -52,7 +52,7 @@ const makeMessages = (): SupportTicketMessage[] => [
     id: 2,
     ticket_id: 99,
     sender_type: 'agent',
-    message_text: 'Salom! Yordam beraman.',
+    message_text: '<b>Salom!</b> Yordam beraman. <script>alert(2)</script>',
     photo_file_id: null,
     telegram_message_id: 102,
     group_message_id: null,
@@ -91,6 +91,7 @@ test('buildSupportTranscriptHtmlExport renders the full stored transcript as a s
   assert.match(html, /Rasm biriktirilgan/);
   assert.match(html, /AgACAgIAAxkBAAIB/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /<b>Salom!<\/b> Yordam beraman\. &lt;script&gt;alert\(2\)&lt;\/script&gt;/);
   assert.match(html, /class="message user"/);
   assert.match(html, /class="message agent"/);
   assert.match(html, /class="message system"/);

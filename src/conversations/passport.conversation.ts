@@ -31,7 +31,6 @@ export async function addPassportDataConversation(conversation: BotConversation,
     let currentSeries = '';
     let currentJshshir = '';
     let method = '';
-    let fileIds: string[] = [];
     let passportBuffers: Buffer[] = [];
     let extractedFirstName: string | null = null;
     let extractedLastName: string | null = null;
@@ -91,7 +90,6 @@ export async function addPassportDataConversation(conversation: BotConversation,
         currentJshshir = result.jshshir;
         extractedFirstName = result.firstName;
         extractedLastName = result.lastName;
-        fileIds = result.fileIds;
         passportBuffers = result.buffers || [];
         currentCtx = result.lastCtx;
         break;
@@ -252,7 +250,9 @@ export async function addPassportDataConversation(conversation: BotConversation,
           const msg = await addressCtx.reply(i18n.t(locale, 'settings_passport_address_processing'));
           addressProcessingMsgId = msg.message_id;
           await ctx.api.sendChatAction(addressCtx.chat!.id, 'find_location').catch(() => {});
-        } catch (e) {}
+        } catch {
+          addressProcessingMsgId = null;
+        }
 
         const { latitude, longitude } = addressCtx.message.location;
         extractedAddress = await conversation.external(() => 
@@ -285,8 +285,6 @@ export async function addPassportDataConversation(conversation: BotConversation,
       } catch (err) {
         logger.error('[Passport] Failed to submit application after passport save:', err);
         await currentCtx.reply(i18n.t(locale, 'application_error')).catch(() => {});
-      } finally {
-        await conversation.external(() => redisService.delete(`pendingAction:${telegramId}`));
       }
       return;
     }

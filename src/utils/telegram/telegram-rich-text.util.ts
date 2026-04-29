@@ -16,10 +16,7 @@ type MessageLike = {
 };
 
 export const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const escapeAttribute = (value: string): string => escapeHtml(value).replace(/"/g, '&quot;');
 
@@ -38,9 +35,7 @@ const wrapEntity = (entity: TelegramEntityLike, inner: string, rawText: string):
     case 'text_link':
       return entity.url ? `<a href="${escapeAttribute(entity.url)}">${inner}</a>` : inner;
     case 'text_mention':
-      return entity.user?.id
-        ? `<a href="tg://user?id=${entity.user.id}">${inner}</a>`
-        : inner;
+      return entity.user?.id ? `<a href="tg://user?id=${entity.user.id}">${inner}</a>` : inner;
     case 'url':
       return `<a href="${escapeAttribute(rawText)}">${inner}</a>`;
     case 'code':
@@ -129,15 +124,11 @@ export const telegramMessageToHtml = (message: MessageLike): string => {
   return renderRange(text, entities, 0, text.length);
 };
 
-export const markdownToTelegramHtml = (text: string): string => {
-  // First escape all existing HTML to prevent raw injection, 
-  // since Telegram HTML parse mode only supports specific tags.
-  let html = escapeHtml(text);
-
+const applyMarkdownToTelegramHtml = (html: string): string => {
   // Markdown Bold: **text**
   html = html.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 
-  // Markdown Italic: *text* or _text_ (excluding bold). 
+  // Markdown Italic: *text* or _text_ (excluding bold).
   html = html.replace(/(?<!\w)\*([^*]+)\*(?!\w)/g, '<i>$1</i>');
   html = html.replace(/(?<!\w)_([^_]+)_(?!\w)/g, '<i>$1</i>');
 
@@ -149,3 +140,23 @@ export const markdownToTelegramHtml = (text: string): string => {
 
   return html;
 };
+
+const restoreAllowedTelegramHtmlTags = (html: string): string =>
+  html
+    .replace(
+      /&lt;(\/?)(b|strong|i|em|u|ins|s|strike|del|code|pre|tg-spoiler)&gt;/gi,
+      (_match, closing: string, tag: string) => `<${closing}${tag.toLowerCase()}>`,
+    )
+    .replace(
+      /&lt;pre language="([a-z0-9_+-]+)"&gt;/gi,
+      (_match, language: string) => `<pre language="${escapeAttribute(language)}">`,
+    );
+
+export const markdownToTelegramHtml = (text: string): string => {
+  // First escape all existing HTML to prevent raw injection,
+  // since Telegram HTML parse mode only supports specific tags.
+  return applyMarkdownToTelegramHtml(escapeHtml(text));
+};
+
+export const richTextToTelegramHtml = (text: string): string =>
+  applyMarkdownToTelegramHtml(restoreAllowedTelegramHtmlTags(escapeHtml(text)));

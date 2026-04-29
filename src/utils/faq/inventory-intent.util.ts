@@ -38,6 +38,7 @@ export const normalizeInventoryText = (value: string): string =>
   value
     .toLowerCase()
     .replace(/[‘’`´]/g, "'")
+    .replace(/\bbomi\b/g, 'bormi')
     .replace(/['’`]?la?n[iyu]?\b/g, '')
     .replace(/\b(?:ayfon|aifon|айфон)\b/g, 'iphone')
     .replace(/\b(?:aypad|aipad|айпад)\b/g, 'ipad')
@@ -46,6 +47,10 @@ export const normalizeInventoryText = (value: string): string =>
     .replace(/\b(?:apple\s*watch|apel\s*watch|эпл\s*вотч)\b/g, 'apple watch')
     .replace(/\b(?:yengisi|yangisi)\b/g, 'new')
     .replace(/\b(?:ishlatilgani|b\/u|bu)\b/g, 'used')
+    .replace(/\b(64|128|256|512)\s*(?:ta(?:li|lik|ligi)?|tal\w*)\b/g, '$1gb')
+    .replace(/\boq(?:i|ini|idan|rang)?\b/g, 'white')
+    .replace(/\bqora(?:si|sini|rang)?\b/g, 'black')
+    .replace(/\bko['’`]?k(?:i|ini|rang)?\b/g, 'blue')
     .replace(/\s+/g, ' ')
     .trim();
 

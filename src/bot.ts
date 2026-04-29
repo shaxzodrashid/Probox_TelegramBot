@@ -18,22 +18,25 @@ import {
   backToMenuHandler,
   downloadPdfHandler,
   contractSelectionHandler,
-  backFromContractsToMenuHandler
+  backFromContractsToMenuHandler,
 } from './handlers/contracts.handler';
 import {
   paymentsHandler,
   paymentSelectionHandler,
-  backFromPaymentsToMenuHandler
+  backFromPaymentsToMenuHandler,
 } from './handlers/payments.handler';
 import { registrationConversation } from './conversations/registration.conversation';
-import { changeNameConversation, changePhoneConversation } from './conversations/settings.conversation';
+import {
+  changeNameConversation,
+  changePhoneConversation,
+} from './conversations/settings.conversation';
 import { supportConversation } from './conversations/support.conversation';
 import { adminReplyConversation } from './conversations/admin-reply.conversation';
 import {
   adminBroadcastConversation,
   adminSearchConversation,
   adminSendMessageConversation,
-  adminAddBranchConversation
+  adminAddBranchConversation,
 } from './conversations/admin.conversation';
 import {
   adminCouponSearchConversation,
@@ -44,11 +47,11 @@ import {
 } from './conversations/admin-campaign.conversation';
 import {
   adminTemplateCreateConversation,
-  adminTemplateEditConversation
+  adminTemplateEditConversation,
 } from './conversations/admin-template.conversation';
 import {
   adminFaqCreateConversation,
-  adminFaqEditConversation
+  adminFaqEditConversation,
 } from './conversations/admin-faq.conversation';
 import { branchesConversation } from './conversations/branches.conversation';
 import { supportHandler } from './handlers/support.handler';
@@ -56,7 +59,7 @@ import {
   handleReplyButton,
   handleCloseButton,
   handleBlockButton,
-  handleViewReplyButton
+  handleViewReplyButton,
 } from './handlers/admin-reply.handler';
 import {
   adminMenuHandler,
@@ -116,7 +119,7 @@ import {
   adminFaqEditHandler,
   adminFaqDeleteHandler,
   adminFaqDeleteConfirmHandler,
-  adminFaqDeleteCancelHandler
+  adminFaqDeleteCancelHandler,
 } from './handlers/admin.handler';
 import {
   campaignBackToPromotionsHandler,
@@ -124,7 +127,7 @@ import {
   couponsHandler,
   promotionDetailHandler,
   promotionSelectionHandler,
-  promotionsHandler
+  promotionsHandler,
 } from './handlers/campaign.handler';
 import { branchesHandler } from './handlers/branches.handler';
 import {
@@ -145,12 +148,12 @@ import {
   ADMIN_PROMOTION_PAGE_CALLBACK_PREFIX,
   ADMIN_PROMOTION_TOGGLE_CALLBACK_PREFIX,
   ADMIN_PROMOTION_ASSIGN_COUPONS_TOGGLE_CALLBACK_PREFIX,
-  ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX
+  ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX,
 } from './keyboards/campaign.keyboards';
 import {
   ADMIN_BRANCH_DEACTIVATE_CALLBACK_PREFIX,
   ADMIN_BRANCH_DEACTIVATE_CONFIRM_CALLBACK_PREFIX,
-  ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX
+  ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX,
 } from './keyboards/branch.keyboards';
 import {
   ADMIN_TEMPLATE_PAGE_CALLBACK_PREFIX,
@@ -159,7 +162,7 @@ import {
   ADMIN_TEMPLATE_TOGGLE_CALLBACK_PREFIX,
   ADMIN_TEMPLATE_DELETE_CALLBACK_PREFIX,
   ADMIN_TEMPLATE_CREATE_CALLBACK,
-  ADMIN_TEMPLATE_BACK_TO_LIST_CALLBACK
+  ADMIN_TEMPLATE_BACK_TO_LIST_CALLBACK,
 } from './keyboards/template.keyboards';
 import {
   ADMIN_FAQ_BACK_CALLBACK,
@@ -178,7 +181,7 @@ import {
   changeNameHandler,
   changePhoneHandler,
   changeLanguageHandler,
-  addPassportHandler
+  addPassportHandler,
 } from './handlers/settings.handler';
 import { addPassportDataConversation } from './conversations/passport.conversation';
 import { logoutHandler } from './handlers/logout.handler';
@@ -186,19 +189,21 @@ import { applicationHandler } from './handlers/application.handler';
 import { applicationConversation } from './conversations/application.conversation';
 import { exampleConversation } from './conversations/example.conversation';
 import { UserService } from './services/user.service';
+import { isApplicationRegistrationComplete } from './utils/application/application-payload.util';
 import {
   isCallbackQueryExpiredError,
   isMessageToDeleteNotFoundError,
   isUserBlockedError,
 } from './utils/telegram/telegram-errors';
 import { enqueueSupportRequest } from './utils/support/support.util';
+import {
+  markSupportApplicationRouteStarted,
+  resolveSupportApplicationRoute,
+} from './utils/support/support-application-router.util';
 import { getMainKeyboardByLocale } from './keyboards';
 import { FaqService } from './services/faq/faq.service';
 import { ErrorNotificationService } from './services/error-notification.service';
-import {
-  resolveUiTextAction,
-  routeUiTextAction,
-} from './utils/formatting/ui-text-resolver';
+import { resolveUiTextAction, routeUiTextAction } from './utils/formatting/ui-text-resolver';
 
 import { RedisAdapter } from '@grammyjs/storage-redis';
 import { redisService } from './redis/redis.service';
@@ -232,8 +237,6 @@ bot.api.config.use((prev, method, payload, signal) => {
 
   return prev(method, payload, signal);
 });
-
-
 
 // Middlewares
 bot.use(loggerMiddleware);
@@ -297,7 +300,10 @@ bot.use(async (ctx, next) => {
       const isRegistrationCallback = ctx.callbackQuery?.data === 'start_registration';
       const isPassportCallback = ctx.callbackQuery?.data === 'start_passport_conv';
       const isPassportText = ctx.message?.text === ctx.t('application_start_passport_button');
-      const isBackText = ctx.message?.text === ctx.t('back') || ctx.message?.text === ctx.t('admin_reply_cancel') || ctx.message?.text === ctx.t('admin_cancel');
+      const isBackText =
+        ctx.message?.text === ctx.t('back') ||
+        ctx.message?.text === ctx.t('admin_reply_cancel') ||
+        ctx.message?.text === ctx.t('admin_cancel');
       const isStartCommand = ctx.message?.text === '/start';
 
       const isRecognizedUiText = Boolean(resolveUiTextAction(ctx.message?.text));
@@ -314,11 +320,10 @@ bot.use(async (ctx, next) => {
         const hasActive = Object.values(active).some((count) => count > 0);
 
         if (!hasActive && pendingAction === 'application') {
-          // Verify the user is actually registered before auto-entering the app flow.
-          // If they're not, clear the stale key and let them go through normal flow.
+          // Verify the user has completed phone registration before auto-entering
+          // the app flow; partial support-created users must register first.
           const user = await UserService.getLoggedInUser(telegramId);
-          if (user) {
-            await redisService.delete(`pendingAction:${telegramId}`);
+          if (user && isApplicationRegistrationComplete(user)) {
             if (ctx.callbackQuery) {
               await ctx.answerCallbackQuery().catch((err) => {
                 if (!isCallbackQueryExpiredError(err)) throw err;
@@ -363,17 +368,18 @@ bot.use(async (ctx, next) => {
   }
 
   if (ctx.callbackQuery) {
-    await ctx.answerCallbackQuery({
-      text: ctx.t('admin_faq_resume_notice'),
-      show_alert: false,
-    }).catch((err) => {
-      if (!isCallbackQueryExpiredError(err)) throw err;
-    });
+    await ctx
+      .answerCallbackQuery({
+        text: ctx.t('admin_faq_resume_notice'),
+        show_alert: false,
+      })
+      .catch((err) => {
+        if (!isCallbackQueryExpiredError(err)) throw err;
+      });
   }
 
   await ctx.conversation.enter('adminFaqCreateConversation');
 });
-
 
 // Error Handling
 bot.catch((err) => {
@@ -391,7 +397,9 @@ bot.catch((err) => {
   }
 
   if (ctx.chat?.type === 'private' && isUserBlockedError(e)) {
-    logger.warn(`Telegram delivery skipped for update ${ctx.update.update_id}: user blocked the bot.`);
+    logger.warn(
+      `Telegram delivery skipped for update ${ctx.update.update_id}: user blocked the bot.`,
+    );
     if (e instanceof Error) {
       logger.debug(e.stack || String(e));
     }
@@ -581,50 +589,122 @@ bot.callbackQuery(/^admin_block_support:\d+$/, adminBlockSupportHandler);
 bot.callbackQuery(/^admin_unblock_support:\d+$/, adminUnblockSupportHandler);
 bot.callbackQuery(/^admin_send_message:\d+$/, adminSendMessageHandler);
 bot.callbackQuery(/^admin_coupon_mark_winner:.+$/, adminCouponMarkWinnerHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX}.+`), adminWinnerPrizeSelectHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX}.+`),
+  adminWinnerPrizeSelectHandler,
+);
 bot.callbackQuery(/^promotion_detail:\d+$/, promotionDetailHandler);
 bot.callbackQuery('campaign_open_coupons', couponsHandler);
 bot.callbackQuery('campaign_back_to_promotions', campaignBackToPromotionsHandler);
 bot.callbackQuery('campaign_back_to_menu', campaignBackToMenuHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_PAGE_CALLBACK_PREFIX}\\d+$`), adminPromotionPageHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_DETAIL_CALLBACK_PREFIX}\\d+$`), adminPromotionDetailHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PROMOTION_PAGE_CALLBACK_PREFIX}\\d+$`),
+  adminPromotionPageHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PROMOTION_DETAIL_CALLBACK_PREFIX}\\d+$`),
+  adminPromotionDetailHandler,
+);
 bot.callbackQuery(ADMIN_PROMOTION_CREATE_CALLBACK, adminPromotionCreateHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminPromotionEditHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminPromotionToggleHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_ASSIGN_COUPONS_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminPromotionAssignCouponsToggleHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_ARCHIVE_CALLBACK_PREFIX}\\d+$`), adminPromotionArchiveHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PROMOTION_IMAGE_REMOVE_CALLBACK_PREFIX}\\d+$`), adminPromotionImageRemoveHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PROMOTION_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`),
+  adminPromotionEditHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PROMOTION_TOGGLE_CALLBACK_PREFIX}\\d+$`),
+  adminPromotionToggleHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PROMOTION_ASSIGN_COUPONS_TOGGLE_CALLBACK_PREFIX}\\d+$`),
+  adminPromotionAssignCouponsToggleHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PROMOTION_ARCHIVE_CALLBACK_PREFIX}\\d+$`),
+  adminPromotionArchiveHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PROMOTION_IMAGE_REMOVE_CALLBACK_PREFIX}\\d+$`),
+  adminPromotionImageRemoveHandler,
+);
 bot.callbackQuery(ADMIN_PROMOTION_BACK_TO_LIST_CALLBACK, adminPromotionBackToListHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_PAGE_CALLBACK_PREFIX}\\d+$`), adminPrizePageHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_DETAIL_CALLBACK_PREFIX}\\d+$`), adminPrizeDetailHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PRIZE_DETAIL_CALLBACK_PREFIX}\\d+$`),
+  adminPrizeDetailHandler,
+);
 bot.callbackQuery(ADMIN_PRIZE_CREATE_CALLBACK, adminPrizeCreateHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminPrizeEditHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminPrizeToggleHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_DELETE_CALLBACK_PREFIX}\\d+$`), adminPrizeDeleteHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX}\\d+$`), adminPrizeImageRemoveHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PRIZE_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`),
+  adminPrizeEditHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PRIZE_TOGGLE_CALLBACK_PREFIX}\\d+$`),
+  adminPrizeToggleHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PRIZE_DELETE_CALLBACK_PREFIX}\\d+$`),
+  adminPrizeDeleteHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX}\\d+$`),
+  adminPrizeImageRemoveHandler,
+);
 bot.callbackQuery(ADMIN_PRIZE_BACK_TO_LIST_CALLBACK, adminPrizeBackToListHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_PAGE_CALLBACK_PREFIX}\\d+$`), adminTemplatePageHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_DETAIL_CALLBACK_PREFIX}\\d+$`), adminTemplateDetailHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_TEMPLATE_PAGE_CALLBACK_PREFIX}\\d+$`),
+  adminTemplatePageHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_TEMPLATE_DETAIL_CALLBACK_PREFIX}\\d+$`),
+  adminTemplateDetailHandler,
+);
 bot.callbackQuery(ADMIN_TEMPLATE_CREATE_CALLBACK, adminTemplateCreateHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminTemplateEditHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_TOGGLE_CALLBACK_PREFIX}\\d+$`), adminTemplateToggleHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_TEMPLATE_DELETE_CALLBACK_PREFIX}\\d+$`), adminTemplateDeleteHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_TEMPLATE_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`),
+  adminTemplateEditHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_TEMPLATE_TOGGLE_CALLBACK_PREFIX}\\d+$`),
+  adminTemplateToggleHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_TEMPLATE_DELETE_CALLBACK_PREFIX}\\d+$`),
+  adminTemplateDeleteHandler,
+);
 bot.callbackQuery(ADMIN_TEMPLATE_BACK_TO_LIST_CALLBACK, adminTemplateBackToListHandler);
 bot.callbackQuery(ADMIN_FAQ_CREATE_CALLBACK, adminFaqCreateHandler);
 bot.callbackQuery(ADMIN_FAQ_RESUME_CALLBACK, adminFaqResumeHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_PAGE_CALLBACK_PREFIX}\\d+$`), adminFaqPageHandler);
 bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DETAIL_CALLBACK_PREFIX}\\d+$`), adminFaqDetailHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`), adminFaqEditHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_FAQ_EDIT_CALLBACK_PREFIX}\\d+:[a-z_]+$`),
+  adminFaqEditHandler,
+);
 bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DELETE_CALLBACK_PREFIX}\\d+$`), adminFaqDeleteHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DELETE_CONFIRM_CALLBACK_PREFIX}\\d+$`), adminFaqDeleteConfirmHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_FAQ_DELETE_CANCEL_CALLBACK_PREFIX}\\d+$`), adminFaqDeleteCancelHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_FAQ_DELETE_CONFIRM_CALLBACK_PREFIX}\\d+$`),
+  adminFaqDeleteConfirmHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_FAQ_DELETE_CANCEL_CALLBACK_PREFIX}\\d+$`),
+  adminFaqDeleteCancelHandler,
+);
 bot.callbackQuery(ADMIN_FAQ_BACK_TO_LIST_CALLBACK, adminFaqBackToListHandler);
 bot.callbackQuery(ADMIN_FAQ_BACK_CALLBACK, adminBackToMenuHandler);
 
-bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX}.+$`), adminBranchDetailHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_BRANCH_DETAIL_CALLBACK_PREFIX}.+$`),
+  adminBranchDetailHandler,
+);
 bot.callbackQuery('admin_branch_add', adminBranchCreateHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DEACTIVATE_CONFIRM_CALLBACK_PREFIX}.+$`), adminBranchDeactivateConfirmHandler);
-bot.callbackQuery(new RegExp(`^${ADMIN_BRANCH_DEACTIVATE_CALLBACK_PREFIX}.+$`), adminBranchDeactivateHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_BRANCH_DEACTIVATE_CONFIRM_CALLBACK_PREFIX}.+$`),
+  adminBranchDeactivateConfirmHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_BRANCH_DEACTIVATE_CALLBACK_PREFIX}.+$`),
+  adminBranchDeactivateHandler,
+);
 bot.callbackQuery('admin_branches_back', adminBranchesHandler);
 bot.callbackQuery('admin_back_to_menu', adminBackToMenuHandler);
 bot.callbackQuery('admin_back_to_users', adminUsersHandler);
@@ -662,19 +742,12 @@ bot.callbackQuery('noop', (ctx) =>
     if (!isCallbackQueryExpiredError(err)) throw err;
   }),
 );
-// Fallback: if the router didn't handle continue_to_application (e.g. user already logged in
-// but no pending action), just dismiss the spinner.
-bot.callbackQuery('continue_to_application', async (ctx) => {
-  await ctx.answerCallbackQuery().catch((err) => {
-    if (!isCallbackQueryExpiredError(err)) throw err;
-  });
-  await ctx.deleteMessage().catch((err) => {
-    if (!isMessageToDeleteNotFoundError(err)) throw err;
-  });
-});
+// Fallback: stale or manually retried continue buttons should still run the
+// application gate instead of only dismissing the spinner.
+bot.callbackQuery('continue_to_application', applicationHandler);
 
 // ─── Always-On Support Catch-All ───────────────────────────────────────────
-// Captures any unhandled text or photo messages in private chats and 
+// Captures any unhandled text or photo messages in private chats and
 // processes them as support tickets.
 bot.on(['message:text', 'message:photo'], async (ctx) => {
   if (ctx.chat.type !== 'private') return; // Ignore groups
@@ -700,37 +773,69 @@ bot.on(['message:text', 'message:photo'], async (ctx) => {
   if (!user) {
     const locale = (await ctx.i18n.getLocale()) || 'uz';
     user = await UserService.createUser({
-        telegram_id: telegramId,
-        first_name: ctx.from?.first_name,
-        last_name: ctx.from?.last_name,
-        language_code: locale,
+      telegram_id: telegramId,
+      first_name: ctx.from?.first_name,
+      last_name: ctx.from?.last_name,
+      language_code: locale,
     });
   }
 
   // 2. Check if user is banned from support
   if (user.is_support_banned) {
-      const locale = (await ctx.i18n.getLocale()) || 'uz';
-      const isLoggedIn = user ? !user.is_logged_out : false;
-      await ctx.reply(ctx.t('support_banned'), {
-          reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
-      });
-      return;
+    const locale = (await ctx.i18n.getLocale()) || 'uz';
+    const isLoggedIn = user ? !user.is_logged_out : false;
+    await ctx.reply(ctx.t('support_banned'), {
+      reply_markup: getMainKeyboardByLocale(locale, false, isLoggedIn),
+    });
+    return;
   }
 
   // 3. Process the support request
   const locale = (await ctx.i18n.getLocale()) || 'uz';
-  const text = ctx.message.text?.trim() || ctx.message.caption?.trim() || `[${ctx.t('admin_broadcast_enter_message')}]`;
+  const text =
+    ctx.message.text?.trim() ||
+    ctx.message.caption?.trim() ||
+    `[${ctx.t('admin_broadcast_enter_message')}]`;
   const photoFileId = ctx.message.photo?.[ctx.message.photo.length - 1].file_id;
 
   try {
+    if (!photoFileId) {
+      const applicationRoute = await resolveSupportApplicationRoute(telegramId, text).catch(
+        (error) => {
+          logger.warn(
+            `[SUPPORT] Failed to check application route for user ${telegramId}; falling back to support queue.`,
+            error,
+          );
+          return null;
+        },
+      );
+      if (applicationRoute) {
+        try {
+          await markSupportApplicationRouteStarted({
+            ticket: applicationRoute.ticket,
+            messageText: text,
+            messageId: ctx.message.message_id,
+            photoFileId,
+          });
+          await applicationHandler(ctx);
+          return;
+        } catch (error) {
+          logger.warn(
+            `[SUPPORT] Failed to route ticket ${applicationRoute.ticket.ticket_number} to application flow; falling back to support queue.`,
+            error,
+          );
+        }
+      }
+    }
+
     await enqueueSupportRequest(
-        bot.api,
-        ctx,
-        user,
-        text,
-        ctx.message.message_id,
-        photoFileId,
-        locale
+      bot.api,
+      ctx,
+      user,
+      text,
+      ctx.message.message_id,
+      photoFileId,
+      locale,
     );
   } catch {
     // Already logged in processSupportRequest

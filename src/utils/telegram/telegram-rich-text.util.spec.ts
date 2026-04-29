@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { markdownToTelegramHtml, telegramMessageToHtml } from './telegram-rich-text.util';
+import {
+  markdownToTelegramHtml,
+  richTextToTelegramHtml,
+  telegramMessageToHtml,
+} from './telegram-rich-text.util';
 
 test('telegramMessageToHtml keeps plain text when there are no entities', () => {
   const result = telegramMessageToHtml({
@@ -27,9 +31,7 @@ test('telegramMessageToHtml supports caption entities and links', () => {
   const text = 'Visit site';
   const result = telegramMessageToHtml({
     caption: text,
-    caption_entities: [
-      { type: 'text_link', offset: 6, length: 4, url: 'https://example.com' },
-    ],
+    caption_entities: [{ type: 'text_link', offset: 6, length: 4, url: 'https://example.com' }],
   });
 
   assert.equal(result, 'Visit <a href="https://example.com">site</a>');
@@ -43,5 +45,16 @@ test('markdownToTelegramHtml converts bold markdown for Telegram HTML parse mode
   assert.equal(
     result,
     'Tushundim. <b>iPhone 16 Pro 128GB White (yangi)</b> modeli bo‘yicha aniqlab beraman.',
+  );
+});
+
+test('richTextToTelegramHtml preserves Telegram-safe agent HTML and escapes unsafe tags', () => {
+  const result = richTextToTelegramHtml(
+    '<b>Oyiga to‘lov:</b> 1 995 233 so‘m\n<script>alert(1)</script>',
+  );
+
+  assert.equal(
+    result,
+    '<b>Oyiga to‘lov:</b> 1 995 233 so‘m\n&lt;script&gt;alert(1)&lt;/script&gt;',
   );
 });

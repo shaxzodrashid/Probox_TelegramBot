@@ -229,6 +229,62 @@ test('SapService getLatestExchangeRateInfo wraps SAP failures', async () => {
   );
 });
 
+test('SapService getInstallmentPercentageForMonths reads active percentage row by month', async () => {
+  const { hana, service } = createService(async () => [{ month: '12', percentage: '63' }]);
+
+  const result = await service.getInstallmentPercentageForMonths(12);
+
+  assert.deepEqual(result, {
+    month: 12,
+    percentage: 63,
+  });
+  assert.equal(hana.calls.length, 1);
+  assert.match(hana.calls[0].query, /"@PERCENTAGE"/);
+  assert.match(hana.calls[0].query, /COALESCE\("Canceled", 'N'\) = 'N'/);
+  assert.deepEqual(hana.calls[0].params, [12]);
+});
+
+test('SapService getInstallmentItemByImeiOrItemCode prefers IMEI and falls back to item code', async () => {
+  const { hana, service } = createService(async (query) => {
+    if (/R\."DistNumber" = \?/.test(query)) {
+      return [];
+    }
+
+    return [
+      {
+        IMEI: null,
+        ItemCode: 'IP16',
+        ItemName: 'iPhone 16',
+        WhsCode: 'W01',
+        WhsName: 'Nurafshon',
+        OnHand: '2',
+        SalePrice: '12000000',
+        PurchasePrice: null,
+        U_Model: 'iPhone 16',
+        U_DeviceType: null,
+        U_Memory: '128GB',
+        U_Color: 'Black',
+        U_Sim_type: 'eSIM',
+        U_PROD_CONDITION: 'Yangi',
+      },
+    ];
+  });
+
+  const result = await service.getInstallmentItemByImeiOrItemCode({
+    imei: '123456789012345',
+    itemCode: 'IP16',
+  });
+
+  assert.equal(result?.ItemCode, 'IP16');
+  assert.equal(hana.calls.length, 2);
+  assert.match(hana.calls[0].query, /FROM PROBOX_PROD_3\."OSRN" R/);
+  assert.deepEqual(hana.calls[0].params, ['123456789012345']);
+  assert.match(hana.calls[1].query, /FROM PROBOX_PROD_3\."OITW" T0/);
+  assert.match(hana.calls[1].query, /AS "PurchasePrice"/);
+  assert.match(hana.calls[1].query, /HAVING[\s\S]*R\."CostTotal"/);
+  assert.deepEqual(hana.calls[1].params, ['IP16']);
+});
+
 test('SapService getAvailableDeviceNames groups full device names by new and used conditions', async () => {
   const { hana, service } = createService(async () => [
     { full_name: 'iPhone 16 Pro', condition: 'Yangi' },

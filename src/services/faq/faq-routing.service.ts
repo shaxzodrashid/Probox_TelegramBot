@@ -12,6 +12,7 @@ import {
   isStockCheckQuestion,
 } from '../../utils/faq/inventory-intent.util';
 import { logger } from '../../utils/logger';
+import { isHumanHandoffRequest } from '../../utils/support/support-intent.util';
 import { FaqAiService } from './faq-ai.service';
 import { FaqCandidateRecord, FaqService } from './faq.service';
 
@@ -21,6 +22,10 @@ export interface SupportFaqResolution {
   distance?: number;
   confidence?: number;
   reason?: string;
+}
+
+interface ResolveSupportFaqOptions {
+  semanticSearchText?: string;
 }
 
 const previewSupportQuestion = (question: string, maxLength: number = 160): string => {
@@ -33,10 +38,44 @@ const previewSupportQuestion = (question: string, maxLength: number = 160): stri
   return `${normalized.slice(0, maxLength - 3)}...`;
 };
 
+const CONTEXTUAL_REFERENCE_REGEX =
+  /\b(shu|shuni|buni|uni|o['’`]?sha|mana\s+shu|mana\s+bu|this|that|it|это|этого|его|её)\b/i;
+
+const shouldUseTranscriptContextForSemanticSearch = (question: string): boolean => {
+  const normalized = question.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return false;
+  }
+
+  const tokenCount = normalized.split(/\s+/).filter(Boolean).length;
+  return tokenCount <= 5 && CONTEXTUAL_REFERENCE_REGEX.test(normalized);
+};
+
 export class FaqRoutingService {
-  static async resolveSupportFaq(question: string): Promise<SupportFaqResolution | null> {
+  static async resolveSupportFaq(
+    question: string,
+    options: ResolveSupportFaqOptions = {},
+  ): Promise<SupportFaqResolution | null> {
     const questionPreview = previewSupportQuestion(question);
+    const providedSemanticSearchText = options.semanticSearchText?.trim();
+    const shouldUseContextualSemanticSearch =
+      Boolean(providedSemanticSearchText) &&
+      providedSemanticSearchText !== question &&
+      !isStockCheckQuestion(question) &&
+      !isHumanHandoffRequest(question) &&
+      shouldUseTranscriptContextForSemanticSearch(question);
+    const semanticSearchText = shouldUseContextualSemanticSearch
+      ? providedSemanticSearchText || question
+      : question;
+    const semanticSearchPreview = previewSupportQuestion(semanticSearchText);
     logger.info(`[FAQ_ROUTING] Resolving support question="${questionPreview}"`);
+
+    if (isHumanHandoffRequest(question)) {
+      logger.info(
+        `[FAQ_ROUTING] Skipping FAQ auto-reply for question="${questionPreview}" because the latest message asks for a human/admin handoff.`,
+      );
+      return null;
+    }
 
     const exactMatch = await FaqService.findExactPublishedFaqByQuestion(question);
     if (exactMatch) {
@@ -54,14 +93,24 @@ export class FaqRoutingService {
       return null;
     }
 
-    const candidates = await FaqService.findSemanticFaqCandidatesByQuestion(question);
+    if (shouldUseContextualSemanticSearch) {
+      logger.info(
+        `[FAQ_ROUTING] Using support transcript context for semantic FAQ search="${semanticSearchPreview}" latest="${questionPreview}"`,
+      );
+    } else if (providedSemanticSearchText && providedSemanticSearchText !== question) {
+      logger.info(
+        `[FAQ_ROUTING] Ignoring support transcript context for semantic FAQ search; latest message is the routing anchor latest="${questionPreview}"`,
+      );
+    }
+
+    const candidates = await FaqService.findSemanticFaqCandidatesByQuestion(semanticSearchText);
     if (candidates.length === 0) {
       logger.info(`[FAQ_ROUTING] No semantic FAQ candidates found for question="${questionPreview}"`);
       return null;
     }
 
     const rankedCandidates = rankFaqCandidatesForRouting(
-      question,
+      semanticSearchText,
       candidates,
       config.FAQ_AUTO_REPLY_MAX_DISTANCE,
     );
@@ -93,15 +142,22 @@ export class FaqRoutingService {
         .join(', ')}`,
     );
 
-    if (stockCheckQuestion && stockCheckAgentCandidates.length === 1) {
+    if (stockCheckQuestion && stockCheckAgentCandidates.length > 0) {
       logger.info(
-        `[FAQ_ROUTING] Deterministically routed stock-check question="${questionPreview}" to dedicated agent FAQ faq:${stockCheckAgentCandidates[0].faq.id}`,
+        `[FAQ_ROUTING] Deterministically routed stock-check question="${questionPreview}" to stock-check agent FAQ faq:${stockCheckAgentCandidates[0].faq.id}`,
       );
       return this.toSemanticResolution(
         stockCheckAgentCandidates[0],
         1,
-        'Stock-check questions always route to the dedicated AI inventory agent when a single matching agent FAQ candidate is available.',
+        'Stock-check questions route to an AI inventory agent before static FAQ auto-replies.',
       );
+    }
+
+    if (stockCheckQuestion) {
+      logger.info(
+        `[FAQ_ROUTING] Skipping static FAQ auto-reply for stock-check question="${questionPreview}" because no stock-check agent FAQ candidate was found.`,
+      );
+      return null;
     }
 
     if (
@@ -144,7 +200,7 @@ export class FaqRoutingService {
 
     try {
       const decision = await FaqAiService.chooseSupportFaqCandidate({
-        userMessage: question,
+        userMessage: semanticSearchText,
         candidates: aiCandidates,
       });
       const matchedStockCheckCandidate = stockCheckQuestion

@@ -27,6 +27,7 @@ menu_support = 📞 Qo'llab-quvvatlash
 menu_application = ✍️ Ariza qoldirish
 menu_application_placeholder = 🚧 Ariza qoldirish bo'limi tez orada ishga tushadi!
 application_passport_required = ⚠️ Ariza qoldirish uchun pasport ma'lumotlari talab qilinadi.
+application_profile_required = ⚠️ Ariza yuborish uchun telefon raqam, pasport, selfi va manzil ma'lumotlari to'liq bo'lishi kerak.
 application_start_passport_button = 🪪 Pasport ma'lumotlarini kiritish
 application_success = ✅ Arizangiz muvaffaqiyatli qabul qilindi!
 application_error = ❌ Arizani yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring.
@@ -230,6 +231,7 @@ support_reply_received = 📩 Murojaatingiz <b>#{ $ticket }</b> ga javob:
 support_ai_thinking = ⏳ AI yordamchi so'rovingizni tekshiryapti...
 support_ai_handoff = ✅ Murojaatingiz qo'llab-quvvatlash jamoasiga yo'naltirildi. Javob tayyor bo'lgach, shu chatda yuboriladi.
 support_ai_fallback = ❌ Afsuski, murojaatingizni avtomatik qayta ishlash vaqtincha yakunlanmadi. Iltimos, birozdan so'ng qayta urinib ko'ring yoki yangi murojaat yuboring.
+support_application_flow_ready = ✅ Tushunarli, ariza qoldirish bo'limiga o'tamiz. Davom etish uchun tugmani bosing.
 
 
 # Admin Support

@@ -12,7 +12,7 @@ import {
   formatGeminiRequestFailureSummary,
 } from '../gemini-error.util';
 import { formatUzPhone } from '../uz-phone.util';
-import { escapeHtml, markdownToTelegramHtml } from '../telegram/telegram-rich-text.util';
+import { escapeHtml, richTextToTelegramHtml } from '../telegram/telegram-rich-text.util';
 import {
   getAdminGroupChatId,
   withAdminGroupMigrationRetry,
@@ -20,10 +20,12 @@ import {
 import { getFaqAnswerForLanguage, getFaqAgentToken } from '../faq/faq-match.util';
 import { getSupportTicketKeyboard, getMainKeyboardByLocale } from '../../keyboards';
 import { getAdminMenuKeyboard } from '../../keyboards/admin.keyboards';
-import { Api, InputFile, RawApi } from 'grammy';
+import { redisService } from '../../redis/redis.service';
+import { Api, InlineKeyboard, InputFile, RawApi } from 'grammy';
 import { SupportTicket, SupportTicketMessage } from '../../types/support.types';
 import { User } from '../../services/user.service';
 import { buildSupportTranscriptHtmlExport } from './support-transcript-html.util';
+import { isCrmApplicationEscalationReason } from './support-application-router.util';
 
 interface SupportAdminUserSnapshot {
   first_name?: string;
@@ -132,6 +134,11 @@ const buildEscalationSystemMessage = (locale: SupportLocale, reason: string): st
     ? `AI-агент передал обращение оператору: ${reason}`
     : `AI yordamchi murojaatni operatorga yo'naltirdi: ${reason}`;
 
+const buildApplicationFlowSystemMessage = (locale: SupportLocale): string =>
+  locale === 'ru'
+    ? 'AI-агент перевел обращение в сценарий подачи заявки: CRM application requested'
+    : "AI yordamchi murojaatni ariza qoldirish jarayoniga o'tkazdi: CRM application requested";
+
 const localizeSystemSenderLabel = (locale: SupportLocale): string =>
   locale === 'ru'
     ? SUPPORT_ADMIN_GROUP_COPY.ru.transcriptSystemPrefix
@@ -194,9 +201,37 @@ const formatTranscriptExcerpt = (
     .slice(-limit)
     .map((message, index) => {
       const photoSuffix = message.photo_file_id ? (locale === 'ru' ? ' [фото]' : ' [rasm]') : '';
-      return `${index + 1}. <b>${escapeHtml(getSenderLabel(message.sender_type, locale))}:</b> ${escapeHtml(message.message_text)}${photoSuffix}`;
+      const messageText =
+        message.sender_type === 'agent'
+          ? richTextToTelegramHtml(message.message_text)
+          : escapeHtml(message.message_text);
+      return `${index + 1}. <b>${escapeHtml(getSenderLabel(message.sender_type, locale))}:</b> ${messageText}${photoSuffix}`;
     })
     .join('\n');
+};
+
+const buildFaqSemanticSearchText = (
+  history: SupportTicketMessage[],
+  latestUserMessage: string,
+): string => {
+  const lines = history
+    .map((message) => {
+      const text = message.message_text?.trim();
+      if (!text) {
+        return '';
+      }
+
+      const photoSuffix = message.photo_file_id ? ' [photo]' : '';
+      return `${message.sender_type}: ${text}${photoSuffix}`;
+    })
+    .filter(Boolean);
+
+  const trimmedLatestUserMessage = latestUserMessage.trim();
+  if (trimmedLatestUserMessage) {
+    lines.push(`user: ${trimmedLatestUserMessage}`);
+  }
+
+  return lines.join('\n').trim() || latestUserMessage;
 };
 
 const buildSupportReplyMarkup = (user: User, locale: string) => {
@@ -379,11 +414,11 @@ const shouldContinueActiveAgentTicket = (params: {
     return true;
   }
 
-  return Boolean(
-    params.agentToken &&
-    params.activeAgentTicket.matched_faq_id &&
-    params.faqResolution.faq.id === params.activeAgentTicket.matched_faq_id,
-  );
+  if (!params.agentToken || !params.faqResolution.faq.agent_enabled) {
+    return false;
+  }
+
+  return true;
 };
 
 const closeSupersededAgentTicket = async (params: { ticket: SupportTicket; reason: string }) => {
@@ -604,7 +639,7 @@ const escalateAgentTicketToHuman = async (params: {
     locale: params.locale,
     chatId: params.chatId,
     deferred: params.deferred,
-    text: markdownToTelegramHtml(customerMessage),
+    text: richTextToTelegramHtml(customerMessage),
     parseMode: 'HTML',
   });
 
@@ -618,6 +653,48 @@ const escalateAgentTicketToHuman = async (params: {
       groupMessageId: forwardResult.groupMessageId,
     });
   }
+};
+
+const moveAgentTicketToApplicationFlow = async (params: {
+  api: Api<RawApi>;
+  ctx: BotContext;
+  user: User;
+  locale: string;
+  chatId: number;
+  deferred: boolean;
+  ticket: SupportTicket;
+}) => {
+  const supportLocale = normalizeSupportLocale(params.locale);
+  const telegramId = params.user.telegram_id;
+
+  await redisService.set(`pendingAction:${telegramId}`, 'application', 3600);
+  await SupportService.appendMessage({
+    ticketId: params.ticket.id,
+    senderType: 'system',
+    messageText: buildApplicationFlowSystemMessage(supportLocale),
+  });
+  await SupportService.closeTicket(params.ticket.id);
+
+  logger.info(
+    `[SUPPORT] Moving AI support ticket ${params.ticket.ticket_number} for user ${telegramId} to application flow.`,
+  );
+
+  const inlineKeyboard = new InlineKeyboard().text(
+    i18n.t(params.locale, 'application_continue_button'),
+    'continue_to_application',
+  );
+  const text = i18n.t(params.locale, 'support_application_flow_ready');
+  const replyOptions = {
+    reply_markup: inlineKeyboard,
+    parse_mode: 'HTML' as const,
+  };
+
+  if (params.deferred) {
+    await params.api.sendMessage(params.chatId, text, replyOptions);
+    return;
+  }
+
+  await params.ctx.reply(text, replyOptions);
 };
 
 const continueAgentConversation = async (params: {
@@ -662,6 +739,11 @@ const continueAgentConversation = async (params: {
     });
 
     if (decision.shouldEscalate) {
+      if (isCrmApplicationEscalationReason(decision.escalationReason)) {
+        await moveAgentTicketToApplicationFlow(params);
+        return;
+      }
+
       await escalateAgentTicketToHuman({
         ...params,
         reason: decision.escalationReason || 'Gemini requested human takeover.',
@@ -677,7 +759,7 @@ const continueAgentConversation = async (params: {
       locale: params.locale,
       chatId: params.chatId,
       deferred: params.deferred,
-      text: markdownToTelegramHtml(decision.replyText),
+      text: richTextToTelegramHtml(decision.replyText),
       parseMode: 'HTML',
     });
 
@@ -789,7 +871,13 @@ export async function processSupportRequest(
     const activeAgentTicket = await SupportService.getOpenAgentTicketByUserTelegramId(
       user.telegram_id,
     );
-    const faqResolution = await FaqRoutingService.resolveSupportFaq(messageText);
+    const activeAgentHistory = activeAgentTicket
+      ? await SupportService.getTicketMessages(activeAgentTicket.id)
+      : [];
+    const faqSemanticSearchText = buildFaqSemanticSearchText(activeAgentHistory, messageText);
+    const faqResolution = await FaqRoutingService.resolveSupportFaq(messageText, {
+      semanticSearchText: faqSemanticSearchText,
+    });
     const localizedAnswer = faqResolution
       ? getFaqAnswerForLanguage(faqResolution.faq, user.language_code || locale)
       : '';
@@ -803,14 +891,29 @@ export async function processSupportRequest(
           agentToken,
         })
       ) {
+        const continuedTicket =
+          faqResolution && agentToken
+            ? (await SupportService.updateTicketHandling({
+                ticketId: activeAgentTicket.id,
+                handlingMode: 'agent',
+                matchedFaqId: faqResolution.faq.id,
+                agentToken,
+                agentEscalationReason: null,
+              })) || {
+                ...activeAgentTicket,
+                matched_faq_id: faqResolution.faq.id,
+                agent_token: agentToken,
+              }
+            : activeAgentTicket;
+
         await SupportService.syncTicketPreviewMessage({
-          ticketId: activeAgentTicket.id,
+          ticketId: continuedTicket.id,
           messageText,
           messageId,
           photoFileId,
         });
         await SupportService.appendMessage({
-          ticketId: activeAgentTicket.id,
+          ticketId: continuedTicket.id,
           senderType: 'user',
           messageText,
           photoFileId,
@@ -818,7 +921,7 @@ export async function processSupportRequest(
         });
 
         logger.info(
-          `[SUPPORT] Continuing active AI support ticket ${activeAgentTicket.ticket_number} for user ${user.telegram_id}.`,
+          `[SUPPORT] Continuing active AI support ticket ${continuedTicket.ticket_number} for user ${user.telegram_id}.`,
         );
 
         await continueAgentConversation({
@@ -828,7 +931,7 @@ export async function processSupportRequest(
           locale,
           chatId,
           deferred,
-          ticket: activeAgentTicket,
+          ticket: continuedTicket,
           messageText,
           photoFileId,
         });
@@ -916,7 +1019,7 @@ export async function processSupportRequest(
         locale,
         chatId,
         deferred,
-        text: markdownToTelegramHtml(localizedAnswer),
+        text: richTextToTelegramHtml(localizedAnswer),
         parseMode: 'HTML',
       });
 

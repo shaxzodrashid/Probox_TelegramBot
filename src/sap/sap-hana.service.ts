@@ -25,6 +25,33 @@ interface SapAvailableDeviceRow {
   condition: string | null;
 }
 
+export interface SapPercentageScheduleRow {
+  month: number;
+  percentage: number;
+}
+
+interface SapPercentageScheduleDbRow {
+  month: number | string;
+  percentage: number | string;
+}
+
+export interface SapInstallmentItemLookupRow {
+  IMEI: string | null;
+  ItemCode: string;
+  ItemName: string;
+  WhsCode: string;
+  WhsName: string;
+  OnHand: number | string;
+  SalePrice: number | string;
+  PurchasePrice: number | string | null;
+  U_Model: string | null;
+  U_DeviceType: string | null;
+  U_Memory: string | null;
+  U_Color: string | null;
+  U_Sim_type: string | null;
+  U_PROD_CONDITION: string | null;
+}
+
 export class SapService {
   private readonly logger = logger;
   private readonly schema: string = process.env.SAP_SCHEMA || 'PROBOX_PROD_3';
@@ -440,6 +467,224 @@ export class SapService {
       this.logger.error('❌ [SAP] getLatestExchangeRate failed', message);
 
       throw new Error(`SAP query failed (getLatestExchangeRateInfo)`);
+    }
+  }
+
+  async getPercentageSchedule(): Promise<SapPercentageScheduleRow[]> {
+    const db = this.schema;
+    const sql = `
+    SELECT
+      CAST("U_month" AS INTEGER) AS "month",
+      CAST("U_percentage" AS DECIMAL(18, 4)) AS "percentage"
+    FROM ${db}."@PERCENTAGE"
+    WHERE COALESCE("Canceled", 'N') = 'N'
+    ORDER BY CAST("U_month" AS INTEGER)
+`;
+
+    try {
+      this.logger.info('📦 [SAP] Fetching installment percentage schedule');
+      const rows = await this.hana.executeOnce<SapPercentageScheduleDbRow>(sql);
+
+      return rows
+        .map((row) => ({
+          month: Number(row.month),
+          percentage: Number(row.percentage),
+        }))
+        .filter((row) => Number.isFinite(row.month) && Number.isFinite(row.percentage));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getPercentageSchedule failed', message);
+
+      throw new Error('SAP query failed (getPercentageSchedule)');
+    }
+  }
+
+  async getInstallmentPercentageForMonths(
+    months: number,
+  ): Promise<SapPercentageScheduleRow | null> {
+    const normalizedMonths = Math.trunc(months);
+    if (!Number.isFinite(normalizedMonths) || normalizedMonths <= 0) {
+      return null;
+    }
+
+    const db = this.schema;
+    const sql = `
+    SELECT
+      CAST("U_month" AS INTEGER) AS "month",
+      CAST("U_percentage" AS DECIMAL(18, 4)) AS "percentage"
+    FROM ${db}."@PERCENTAGE"
+    WHERE COALESCE("Canceled", 'N') = 'N'
+      AND CAST("U_month" AS INTEGER) = ?
+    LIMIT 1
+`;
+
+    try {
+      this.logger.info(`📦 [SAP] Fetching installment percentage for ${normalizedMonths} months`);
+      const rows = await this.hana.executeOnce<SapPercentageScheduleDbRow>(sql, [
+        normalizedMonths,
+      ]);
+      const row = rows[0];
+
+      if (!row) {
+        return null;
+      }
+
+      const percentage = Number(row.percentage);
+      if (!Number.isFinite(percentage)) {
+        return null;
+      }
+
+      return {
+        month: Number(row.month),
+        percentage,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getInstallmentPercentageForMonths failed', message);
+
+      throw new Error('SAP query failed (getInstallmentPercentageForMonths)');
+    }
+  }
+
+  async getInstallmentItemByImeiOrItemCode(params: {
+    imei?: string | null;
+    itemCode?: string | null;
+  }): Promise<SapInstallmentItemLookupRow | null> {
+    const imei = params.imei?.trim();
+    const itemCode = params.itemCode?.trim();
+
+    if (imei) {
+      const item = await this.getInstallmentItemByImei(imei);
+      if (item) {
+        return item;
+      }
+    }
+
+    if (itemCode) {
+      return this.getInstallmentItemByItemCode(itemCode);
+    }
+
+    return null;
+  }
+
+  private async getInstallmentItemByImei(
+    imei: string,
+  ): Promise<SapInstallmentItemLookupRow | null> {
+    const db = this.schema;
+    const sql = `
+    SELECT
+      R."DistNumber"                       AS "IMEI",
+      T1."ItemCode"                        AS "ItemCode",
+      T1."ItemName"                        AS "ItemName",
+      Q."WhsCode"                          AS "WhsCode",
+      MAX(T2."WhsName")                    AS "WhsName",
+      SUM(CAST(Q."Quantity" AS INTEGER))   AS "OnHand",
+      MAX(PR."Price")                      AS "SalePrice",
+      MAX(R."CostTotal")                   AS "PurchasePrice",
+      MAX(T1."U_Model")                    AS "U_Model",
+      MAX(T1."U_DeviceType")               AS "U_DeviceType",
+      MAX(T1."U_Memory")                   AS "U_Memory",
+      MAX(T1."U_Color")                    AS "U_Color",
+      MAX(T1."U_Sim_type")                 AS "U_Sim_type",
+      MAX(T1."U_PROD_CONDITION")           AS "U_PROD_CONDITION"
+    FROM ${db}."OSRN" R
+      INNER JOIN ${db}."OSRQ" Q
+        ON Q."ItemCode" = R."ItemCode"
+       AND Q."SysNumber" = R."SysNumber"
+      INNER JOIN ${db}."OITM" T1 ON T1."ItemCode" = R."ItemCode"
+      INNER JOIN ${db}."OWHS" T2 ON T2."WhsCode" = Q."WhsCode"
+      LEFT JOIN ${db}."ITM1" PR
+        ON PR."ItemCode" = T1."ItemCode"
+       AND PR."PriceList" = 1
+    WHERE
+      R."DistNumber" = ?
+      AND Q."Quantity" > 0
+      AND (COALESCE(PR."Price", 0) > 0 OR COALESCE(R."CostTotal", 0) > 0)
+    GROUP BY
+      R."DistNumber",
+      T1."ItemCode",
+      T1."ItemName",
+      Q."WhsCode"
+    ORDER BY SUM(CAST(Q."Quantity" AS INTEGER)) DESC
+    LIMIT 1
+`;
+
+    try {
+      this.logger.info('📦 [SAP] Fetching installment item by IMEI');
+      const rows = await this.hana.executeOnce<SapInstallmentItemLookupRow>(sql, [imei]);
+      return rows[0] || null;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getInstallmentItemByImei failed', message);
+
+      throw new Error('SAP query failed (getInstallmentItemByImei)');
+    }
+  }
+
+  private async getInstallmentItemByItemCode(
+    itemCode: string,
+  ): Promise<SapInstallmentItemLookupRow | null> {
+    const db = this.schema;
+    const sql = `
+    SELECT
+      NULL                                  AS "IMEI",
+      T1."ItemCode"                        AS "ItemCode",
+      MAX(T1."ItemName")                   AS "ItemName",
+      T0."WhsCode"                         AS "WhsCode",
+      MAX(T2."WhsName")                    AS "WhsName",
+      SUM(CAST(T0."OnHand" AS INTEGER))    AS "OnHand",
+      MAX(PR."Price")                      AS "SalePrice",
+      MAX(
+        CASE
+          WHEN Q."Quantity" > 0 THEN R."CostTotal"
+          ELSE NULL
+        END
+      )                                    AS "PurchasePrice",
+      MAX(T1."U_Model")                    AS "U_Model",
+      MAX(T1."U_DeviceType")               AS "U_DeviceType",
+      MAX(T1."U_Memory")                   AS "U_Memory",
+      MAX(T1."U_Color")                    AS "U_Color",
+      MAX(T1."U_Sim_type")                 AS "U_Sim_type",
+      MAX(T1."U_PROD_CONDITION")           AS "U_PROD_CONDITION"
+    FROM ${db}."OITW" T0
+      INNER JOIN ${db}."OITM" T1 ON T0."ItemCode" = T1."ItemCode"
+      INNER JOIN ${db}."OWHS" T2 ON T0."WhsCode" = T2."WhsCode"
+      LEFT JOIN ${db}."OSRN" R
+        ON R."ItemCode" = T1."ItemCode"
+      LEFT JOIN ${db}."OSRQ" Q
+        ON Q."ItemCode" = R."ItemCode"
+       AND Q."SysNumber" = R."SysNumber"
+       AND Q."WhsCode" = T0."WhsCode"
+       AND Q."Quantity" > 0
+      LEFT JOIN ${db}."ITM1" PR
+        ON PR."ItemCode" = T1."ItemCode"
+       AND PR."PriceList" = 1
+    WHERE
+      T1."ItemCode" = ?
+      AND T0."OnHand" > 0
+    GROUP BY
+      T1."ItemCode",
+      T0."WhsCode"
+    HAVING
+      COALESCE(MAX(PR."Price"), 0) > 0
+      OR COALESCE(MAX(CASE WHEN Q."Quantity" > 0 THEN R."CostTotal" ELSE NULL END), 0) > 0
+    ORDER BY SUM(CAST(T0."OnHand" AS INTEGER)) DESC
+    LIMIT 1
+`;
+
+    try {
+      this.logger.info('📦 [SAP] Fetching installment item by item code');
+      const rows = await this.hana.executeOnce<SapInstallmentItemLookupRow>(sql, [itemCode]);
+      return rows[0] || null;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.logger.error('❌ [SAP] getInstallmentItemByItemCode failed', message);
+
+      throw new Error('SAP query failed (getInstallmentItemByItemCode)');
     }
   }
 

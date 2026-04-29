@@ -135,6 +135,135 @@ test('resolveSupportFaq accepts AI-confirmed semantic candidate', async () => {
   }
 });
 
+test('resolveSupportFaq keeps self-contained messages anchored to the latest text', async () => {
+  const originalFindExact = FaqService.findExactPublishedFaqByQuestion;
+  const originalFindCandidates = FaqService.findSemanticFaqCandidatesByQuestion;
+  const originalChooseCandidate = FaqAiService.chooseSupportFaqCandidate;
+  const originalSemanticEnabled = config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED;
+
+  const faq = makeFaq(22, 'Nasiya shartlari qanday?', '__AGENT_FAQ_22__', {
+    agentEnabled: true,
+    agentToken: '__AGENT_FAQ_22__',
+  });
+  const transcriptContext = [
+    'user: iPhone 16 Pro Max olmoqchiman',
+    'agent: Xotirasi nechchi GB kerak?',
+    'user: Nasiya necha oyga beriladi?',
+  ].join('\n');
+  let semanticQuery = '';
+  let aiUserMessage = '';
+
+  FaqService.findExactPublishedFaqByQuestion = async (question) => {
+    assert.equal(question, 'Nasiya necha oyga beriladi?');
+    return null;
+  };
+  FaqService.findSemanticFaqCandidatesByQuestion = async (question) => {
+    semanticQuery = question;
+    return [{ faq, distance: 0.18 }];
+  };
+  FaqAiService.chooseSupportFaqCandidate = async (params) => {
+    aiUserMessage = params.userMessage;
+    return {
+      shouldAutoReply: true,
+      matchedFaqId: 22,
+      confidence: 0.93,
+      reason: 'The FAQ directly answers the financing terms question.',
+    };
+  };
+  config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = true;
+
+  try {
+    const result = await FaqRoutingService.resolveSupportFaq('Nasiya necha oyga beriladi?', {
+      semanticSearchText: transcriptContext,
+    });
+
+    assert.equal(result?.faq.id, 22);
+    assert.equal(semanticQuery, 'Nasiya necha oyga beriladi?');
+    assert.equal(aiUserMessage, 'Nasiya necha oyga beriladi?');
+  } finally {
+    FaqService.findExactPublishedFaqByQuestion = originalFindExact;
+    FaqService.findSemanticFaqCandidatesByQuestion = originalFindCandidates;
+    FaqAiService.chooseSupportFaqCandidate = originalChooseCandidate;
+    config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = originalSemanticEnabled;
+  }
+});
+
+test('resolveSupportFaq uses transcript context only for short contextual follow-ups', async () => {
+  const originalFindExact = FaqService.findExactPublishedFaqByQuestion;
+  const originalFindCandidates = FaqService.findSemanticFaqCandidatesByQuestion;
+  const originalChooseCandidate = FaqAiService.chooseSupportFaqCandidate;
+  const originalSemanticEnabled = config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED;
+
+  const faq = makeFaq(22, 'Nasiya shartlari qanday?', '__AGENT_FAQ_22__', {
+    agentEnabled: true,
+    agentToken: '__AGENT_FAQ_22__',
+  });
+  const transcriptContext = [
+    'user: iPhone 16 Pro Max olmoqchiman',
+    'agent: Xotirasi nechchi GB kerak?',
+    'user: shu haqida',
+  ].join('\n');
+  let semanticQuery = '';
+  let aiUserMessage = '';
+
+  FaqService.findExactPublishedFaqByQuestion = async (question) => {
+    assert.equal(question, 'shu haqida');
+    return null;
+  };
+  FaqService.findSemanticFaqCandidatesByQuestion = async (question) => {
+    semanticQuery = question;
+    return [{ faq, distance: 0.18 }];
+  };
+  FaqAiService.chooseSupportFaqCandidate = async (params) => {
+    aiUserMessage = params.userMessage;
+    return {
+      shouldAutoReply: true,
+      matchedFaqId: 22,
+      confidence: 0.93,
+      reason: 'The transcript context disambiguates the short follow-up.',
+    };
+  };
+  config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = true;
+
+  try {
+    const result = await FaqRoutingService.resolveSupportFaq('shu haqida', {
+      semanticSearchText: transcriptContext,
+    });
+
+    assert.equal(result?.faq.id, 22);
+    assert.equal(semanticQuery, transcriptContext);
+    assert.equal(aiUserMessage, transcriptContext);
+  } finally {
+    FaqService.findExactPublishedFaqByQuestion = originalFindExact;
+    FaqService.findSemanticFaqCandidatesByQuestion = originalFindCandidates;
+    FaqAiService.chooseSupportFaqCandidate = originalChooseCandidate;
+    config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = originalSemanticEnabled;
+  }
+});
+
+test('resolveSupportFaq skips FAQ routing for explicit human handoff requests', async () => {
+  const originalFindExact = FaqService.findExactPublishedFaqByQuestion;
+  const originalFindCandidates = FaqService.findSemanticFaqCandidatesByQuestion;
+  const originalSemanticEnabled = config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED;
+
+  FaqService.findExactPublishedFaqByQuestion = async () => {
+    throw new Error('exact lookup should not run for handoff requests');
+  };
+  FaqService.findSemanticFaqCandidatesByQuestion = async () => {
+    throw new Error('semantic lookup should not run for handoff requests');
+  };
+  config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = true;
+
+  try {
+    const result = await FaqRoutingService.resolveSupportFaq('adminlaga etib qoyin shuni');
+    assert.equal(result, null);
+  } finally {
+    FaqService.findExactPublishedFaqByQuestion = originalFindExact;
+    FaqService.findSemanticFaqCandidatesByQuestion = originalFindCandidates;
+    config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = originalSemanticEnabled;
+  }
+});
+
 test('resolveSupportFaq falls back to human when AI confidence is too low', async () => {
   const originalFindExact = FaqService.findExactPublishedFaqByQuestion;
   const originalFindCandidates = FaqService.findSemanticFaqCandidatesByQuestion;
@@ -298,6 +427,63 @@ test('resolveSupportFaq deterministically routes stock-check questions to the de
 
   try {
     const result = await FaqRoutingService.resolveSupportFaq('Silada iPhone 17 Pro modeli bormi ?');
+    assert.equal(result?.resolutionType, 'semantic_ai');
+    assert.equal(result?.faq.id, 7);
+    assert.equal(result?.confidence, 1);
+  } finally {
+    FaqService.findExactPublishedFaqByQuestion = originalFindExact;
+    FaqService.findSemanticFaqCandidatesByQuestion = originalFindCandidates;
+    FaqAiService.chooseSupportFaqCandidate = originalChooseCandidate;
+    config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = originalSemanticEnabled;
+  }
+});
+
+test('resolveSupportFaq routes shorthand stock checks by latest message instead of transcript context', async () => {
+  const originalFindExact = FaqService.findExactPublishedFaqByQuestion;
+  const originalFindCandidates = FaqService.findSemanticFaqCandidatesByQuestion;
+  const originalChooseCandidate = FaqAiService.chooseSupportFaqCandidate;
+  const originalSemanticEnabled = config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED;
+
+  const stockFaq = makeFaq(
+    7,
+    "Sotuvda aynan qaysi turdagi telefonlar yoki modellar mavjudligini qanday bilsam bo'ladi?",
+    '__AGENT_FAQ_7__',
+    {
+      agentEnabled: true,
+      agentToken: '__AGENT_FAQ_7__',
+    },
+  );
+  const branchFaq = makeFaq(
+    2,
+    "Respublika bo'ylab boshqa hududlarda ham xizmat ko'rsatish shoxobchalaringiz joylashganmi?",
+    "Hozircha faqat Toshkent shahrida filiallarimiz mavjud.",
+  );
+  const transcriptContext = [
+    'user: Shu haqida adminlaga etib qoyin',
+    "agent: Hozirgi vaqtda barcha xizmat ko'rsatish shoxobchalarimiz faqat Toshkent shahrida joylashgan.",
+    'user: silada 12 pro bomi',
+  ].join('\n');
+  let semanticQuery = '';
+
+  FaqService.findExactPublishedFaqByQuestion = async () => null;
+  FaqService.findSemanticFaqCandidatesByQuestion = async (question) => {
+    semanticQuery = question;
+    return [
+      { faq: branchFaq, distance: 0.1962 },
+      { faq: stockFaq, distance: 0.2514 },
+    ];
+  };
+  FaqAiService.chooseSupportFaqCandidate = async () => {
+    throw new Error('Gemini routing should not run for deterministic stock-check routing');
+  };
+  config.FAQ_SEMANTIC_AUTO_REPLY_ENABLED = true;
+
+  try {
+    const result = await FaqRoutingService.resolveSupportFaq('silada 12 pro bomi', {
+      semanticSearchText: transcriptContext,
+    });
+
+    assert.equal(semanticQuery, 'silada 12 pro bomi');
     assert.equal(result?.resolutionType, 'semantic_ai');
     assert.equal(result?.faq.id, 7);
     assert.equal(result?.confidence, 1);

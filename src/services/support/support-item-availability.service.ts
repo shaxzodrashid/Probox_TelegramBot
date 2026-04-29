@@ -1,4 +1,4 @@
-import { ISapItem } from '../../interfaces/item.interface';
+import { ISapItem, ISupportItemAvailabilityItem } from '../../interfaces/item.interface';
 import { HanaService } from '../../sap/hana.service';
 import { SapService } from '../../sap/sap-hana.service';
 import { normalizeInventoryText } from '../../utils/faq/inventory-intent.util';
@@ -44,6 +44,7 @@ const clampLimit = (value: number | undefined): number => {
 };
 
 const normalizeItem = (item: ISapItem) => ({
+  imei: item.IMEI || null,
   item_code: item.ItemCode,
   item_name: item.ItemName,
   store_code: item.WhsCode,
@@ -57,7 +58,7 @@ const normalizeItem = (item: ISapItem) => ({
   memory: item.U_Memory || null,
   condition: item.U_PROD_CONDITION || item.U_Condition || null,
   sim_type: item.U_Sim_type || null,
-});
+}) satisfies ISupportItemAvailabilityItem;
 
 const hasSettledSalePrice = (
   item: ReturnType<typeof normalizeItem>,
