@@ -92,6 +92,31 @@ export const getBroadcastTargetKeyboard = (locale: string) => {
         .text(i18n.t(locale, 'admin_cancel'), 'admin_cancel');
 };
 
+export const getBroadcastDeliveryModeKeyboard = (locale: string) => {
+    return new InlineKeyboard()
+        .text(i18n.t(locale, 'admin_broadcast_send_now'), 'admin_broadcast_send_now')
+        .row()
+        .text(i18n.t(locale, 'admin_broadcast_weekly'), 'admin_broadcast_weekly')
+        .row()
+        .text(i18n.t(locale, 'admin_cancel'), 'admin_cancel');
+};
+
+export const getBroadcastWeekDayKeyboard = (locale: string) => {
+    return new InlineKeyboard()
+        .text(i18n.t(locale, 'weekday_monday'), 'admin_broadcast_weekday:1')
+        .text(i18n.t(locale, 'weekday_tuesday'), 'admin_broadcast_weekday:2')
+        .row()
+        .text(i18n.t(locale, 'weekday_wednesday'), 'admin_broadcast_weekday:3')
+        .text(i18n.t(locale, 'weekday_thursday'), 'admin_broadcast_weekday:4')
+        .row()
+        .text(i18n.t(locale, 'weekday_friday'), 'admin_broadcast_weekday:5')
+        .text(i18n.t(locale, 'weekday_saturday'), 'admin_broadcast_weekday:6')
+        .row()
+        .text(i18n.t(locale, 'weekday_sunday'), 'admin_broadcast_weekday:0')
+        .row()
+        .text(i18n.t(locale, 'admin_cancel'), 'admin_cancel');
+};
+
 /**
  * Get broadcast confirmation keyboard
  */

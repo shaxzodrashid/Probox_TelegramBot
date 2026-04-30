@@ -1,27 +1,64 @@
 import db from '../database/database';
-import { BroadcastMessage, CreateBroadcastParams, BroadcastStatus } from '../types/support.types';
+import {
+    BroadcastMessage,
+    BroadcastTargetType,
+    CreateBroadcastParams,
+    CreateScheduledBroadcastParams,
+    ScheduledBroadcast,
+    BroadcastStatus,
+} from '../types/support.types';
 import { AdminService } from './admin.service';
 import { UserService } from './user.service';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { isUserBlockedError } from '../utils/telegram/telegram-errors';
 import { bot } from '../bot';
-import { escapeHtml, markdownToTelegramHtml } from '../utils/telegram/telegram-rich-text.util';
+import { markdownToTelegramHtml } from '../utils/telegram/telegram-rich-text.util';
+import {
+    getTashkentDateKey,
+    getTashkentTimeKey,
+    getTashkentWeekDay,
+} from '../utils/time/tashkent-time.util';
 
 /**
  * BroadcastService - Broadcasting logic for admin messages
  */
 export class BroadcastService {
+    private static async getRecipientUsers(
+        targetType: BroadcastTargetType,
+        targetUserId?: number | null
+    ) {
+        if (targetType === 'single') {
+            if (!targetUserId) {
+                return [];
+            }
+
+            const user = await UserService.getUserByTelegramId(targetUserId);
+            return user ? [user] : [];
+        }
+
+        return AdminService.getAllUsers();
+    }
+
+    private static async getRecipientCount(
+        targetType: BroadcastTargetType,
+        targetUserId?: number | null
+    ): Promise<number> {
+        if (targetType === 'single') {
+            return targetUserId ? 1 : 0;
+        }
+
+        const users = await AdminService.getAllUsers();
+        return users.length;
+    }
+
     /**
      * Create a broadcast record
      */
     static async createBroadcast(params: CreateBroadcastParams): Promise<BroadcastMessage> {
         const { adminTelegramId, messageText, photoFileId, targetType, targetUserId } = params;
 
-        let totalRecipients = 1;
-        if (targetType === 'all') {
-            totalRecipients = await AdminService.getUserCount();
-        }
+        const totalRecipients = await this.getRecipientCount(targetType, targetUserId);
 
         const [result] = await db('broadcast_messages')
             .insert({
@@ -36,6 +73,29 @@ export class BroadcastService {
             .returning('*');
 
         logger.info(`Broadcast created by admin ${adminTelegramId} for ${targetType} (${totalRecipients} recipients)`);
+
+        return result;
+    }
+
+    static async createScheduledBroadcast(
+        params: CreateScheduledBroadcastParams
+    ): Promise<ScheduledBroadcast> {
+        const [result] = await db('scheduled_broadcasts')
+            .insert({
+                admin_telegram_id: params.adminTelegramId,
+                message_text: params.messageText,
+                photo_file_id: params.photoFileId,
+                target_type: params.targetType,
+                target_user_id: params.targetUserId,
+                week_day: params.weekDay,
+                scheduled_time: params.scheduledTime,
+                is_active: true,
+            })
+            .returning('*');
+
+        logger.info(
+            `Scheduled weekly broadcast ${result.id} created by admin ${params.adminTelegramId} for ${params.targetType} at ${params.weekDay} ${params.scheduledTime}`,
+        );
 
         return result;
     }
@@ -141,7 +201,7 @@ export class BroadcastService {
 
         await this.updateBroadcastStatus(broadcastId, 'in_progress');
 
-        const users = await AdminService.getAllUsers();
+        const users = await this.getRecipientUsers(broadcast.target_type, broadcast.target_user_id);
         let successCount = 0;
         let failedCount = 0;
 
@@ -182,6 +242,114 @@ export class BroadcastService {
         logger.info(`Broadcast ${broadcastId} completed: ${successCount}/${users.length} successful`);
 
         return { success: successCount, failed: failedCount };
+    }
+
+    static async getDueScheduledBroadcasts(now: Date = new Date()): Promise<ScheduledBroadcast[]> {
+        const today = getTashkentDateKey(now);
+        const weekDay = getTashkentWeekDay(now);
+        const time = getTashkentTimeKey(now);
+
+        return db('scheduled_broadcasts')
+            .where({
+                is_active: true,
+                week_day: weekDay,
+                scheduled_time: time,
+            })
+            .where((builder) => {
+                builder.whereNull('last_run_date').orWhere('last_run_date', '<>', today);
+            })
+            .orderBy('id', 'asc');
+    }
+
+    private static async claimScheduledBroadcastRun(
+        scheduledBroadcastId: number,
+        today: string,
+        now: Date
+    ): Promise<boolean> {
+        const updated = await db('scheduled_broadcasts')
+            .where({
+                id: scheduledBroadcastId,
+                is_active: true,
+            })
+            .where((builder) => {
+                builder.whereNull('last_run_date').orWhere('last_run_date', '<>', today);
+            })
+            .update({
+                last_run_date: today,
+                last_run_at: now,
+                updated_at: now,
+            });
+
+        return updated > 0;
+    }
+
+    private static async processScheduledBroadcast(
+        scheduledBroadcast: ScheduledBroadcast
+    ): Promise<{ broadcastId: number; success: number; failed: number }> {
+        const broadcast = await this.createBroadcast({
+            adminTelegramId: scheduledBroadcast.admin_telegram_id,
+            messageText: scheduledBroadcast.message_text || undefined,
+            photoFileId: scheduledBroadcast.photo_file_id || undefined,
+            targetType: scheduledBroadcast.target_type,
+            targetUserId: scheduledBroadcast.target_user_id || undefined,
+        });
+
+        await db('scheduled_broadcasts')
+            .where('id', scheduledBroadcast.id)
+            .update({
+                last_broadcast_message_id: broadcast.id,
+                updated_at: new Date(),
+            });
+
+        try {
+            const result = await this.processBroadcast(broadcast.id);
+            return {
+                broadcastId: broadcast.id,
+                success: result.success,
+                failed: result.failed,
+            };
+        } catch (error) {
+            await this.updateBroadcastStatus(broadcast.id, 'failed');
+            throw error;
+        }
+    }
+
+    static async processDueScheduledBroadcasts(now: Date = new Date()): Promise<{
+        checked: number;
+        processed: number;
+        failed: number;
+    }> {
+        const dueBroadcasts = await this.getDueScheduledBroadcasts(now);
+        const today = getTashkentDateKey(now);
+        let processed = 0;
+        let failed = 0;
+
+        for (const scheduledBroadcast of dueBroadcasts) {
+            const claimed = await this.claimScheduledBroadcastRun(scheduledBroadcast.id, today, now);
+            if (!claimed) {
+                continue;
+            }
+
+            try {
+                const result = await this.processScheduledBroadcast(scheduledBroadcast);
+                processed++;
+                logger.info(
+                    `[SCHEDULED_BROADCAST] Scheduled broadcast ${scheduledBroadcast.id} created broadcast ${result.broadcastId}: ${result.success} successful, ${result.failed} failed`,
+                );
+            } catch (error) {
+                failed++;
+                logger.error(
+                    `[SCHEDULED_BROADCAST] Scheduled broadcast ${scheduledBroadcast.id} failed`,
+                    error,
+                );
+            }
+        }
+
+        return {
+            checked: dueBroadcasts.length,
+            processed,
+            failed,
+        };
     }
 
     /**

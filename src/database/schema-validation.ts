@@ -101,6 +101,22 @@ const REQUIRED_COLUMNS = {
     'created_at',
     'updated_at',
   ],
+  scheduled_broadcasts: [
+    'id',
+    'admin_telegram_id',
+    'message_text',
+    'photo_file_id',
+    'target_type',
+    'target_user_id',
+    'week_day',
+    'scheduled_time',
+    'is_active',
+    'last_run_date',
+    'last_run_at',
+    'last_broadcast_message_id',
+    'created_at',
+    'updated_at',
+  ],
 } as const;
 
 const getMissingColumns = async (
@@ -143,6 +159,7 @@ export const validateDatabaseSchema = async (): Promise<void> => {
   const missingReferralColumns = await getMissingColumns('referrals');
   const missingReferralRewardLogColumns = await getMissingColumns('referral_reward_logs');
   const missingFaqColumns = await getMissingColumns('faqs');
+  const missingScheduledBroadcastColumns = await getMissingColumns('scheduled_broadcasts');
 
   const issues: string[] = [];
   const pendingMigrationNames = pendingMigrations.map((migration: { file?: string; name?: string } | string) =>
@@ -189,6 +206,10 @@ export const validateDatabaseSchema = async (): Promise<void> => {
 
   if (missingFaqColumns.length > 0) {
     issues.push(`Missing columns in faqs: ${missingFaqColumns.join(', ')}`);
+  }
+
+  if (missingScheduledBroadcastColumns.length > 0) {
+    issues.push(`Missing columns in scheduled_broadcasts: ${missingScheduledBroadcastColumns.join(', ')}`);
   }
 
   if (issues.length > 0) {

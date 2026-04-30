@@ -9,6 +9,7 @@ import { startBot } from './start-bot';
 import { redisService } from '../redis/redis.service';
 import { SapSyncCron } from '../cron/sap-sync.cron';
 import { PaymentReminderCron } from '../cron/payment-reminder.cron';
+import { ScheduledBroadcastCron } from '../cron/scheduled-broadcast.cron';
 import { SapService } from '../sap/sap-hana.service';
 
 type RuntimeResources = {
@@ -50,6 +51,7 @@ export const bootstrap = async (): Promise<RuntimeResources> => {
     bot = await startBot();
     SapSyncCron.init();
     PaymentReminderCron.init();
+    ScheduledBroadcastCron.init();
 
     return {
       apiServer,

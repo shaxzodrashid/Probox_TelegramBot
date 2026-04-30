@@ -37,6 +37,20 @@ export const getTashkentDateKey = (date: Date = new Date()): string => {
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
+export const getTashkentWeekDay = (date: Date = new Date()): number => {
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: TASHKENT_TIME_ZONE,
+    weekday: 'short',
+  }).format(date);
+
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday);
+};
+
+export const getTashkentTimeKey = (date: Date = new Date()): string => {
+  const parts = getFormatterParts(date);
+  return `${parts.hour}:${parts.minute}`;
+};
+
 export const formatDateForLocale = (date: Date | string, locale: string): string => {
   const target = typeof date === 'string' ? new Date(date) : date;
   if (Number.isNaN(target.getTime())) {

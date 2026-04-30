@@ -7,6 +7,7 @@ export type SupportHandlingMode = 'human' | 'agent';
 export type SupportMessageSenderType = 'user' | 'agent' | 'admin' | 'system';
 export type BroadcastStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 export type BroadcastTargetType = 'all' | 'single';
+export type ScheduledBroadcastWeekDay = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface SupportTicket {
     id: number;
@@ -70,10 +71,32 @@ export interface CreateTicketParams {
     agentToken?: string | null;
 }
 
+export interface ScheduledBroadcast {
+    id: number;
+    admin_telegram_id: number;
+    message_text?: string | null;
+    photo_file_id?: string | null;
+    target_type: BroadcastTargetType;
+    target_user_id?: number | null;
+    week_day: ScheduledBroadcastWeekDay;
+    scheduled_time: string;
+    is_active: boolean;
+    last_run_date?: string | null;
+    last_run_at?: Date | null;
+    last_broadcast_message_id?: number | null;
+    created_at: Date;
+    updated_at: Date;
+}
+
 export interface CreateBroadcastParams {
     adminTelegramId: number;
     messageText?: string;
     photoFileId?: string;
     targetType: BroadcastTargetType;
     targetUserId?: number;
+}
+
+export interface CreateScheduledBroadcastParams extends CreateBroadcastParams {
+    weekDay: ScheduledBroadcastWeekDay;
+    scheduledTime: string;
 }

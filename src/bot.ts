@@ -724,6 +724,21 @@ bot.callbackQuery('admin_broadcast_confirm', (ctx) =>
     if (!isCallbackQueryExpiredError(err)) throw err;
   }),
 );
+bot.callbackQuery('admin_broadcast_send_now', (ctx) =>
+  ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  }),
+);
+bot.callbackQuery('admin_broadcast_weekly', (ctx) =>
+  ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  }),
+);
+bot.callbackQuery(/^admin_broadcast_weekday:\d$/, (ctx) =>
+  ctx.answerCallbackQuery().catch((err) => {
+    if (!isCallbackQueryExpiredError(err)) throw err;
+  }),
+);
 bot.callbackQuery('start_passport_conv', async (ctx) => {
   if (ctx.callbackQuery) {
     await ctx.answerCallbackQuery().catch((err) => {
