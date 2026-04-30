@@ -11,6 +11,11 @@ const parseBoolean = (value: string | undefined, defaultValue: boolean): boolean
   return ['1', 'true', 'yes', 'on'].includes(normalized);
 };
 
+const parsePositiveInteger = (value: string | undefined, defaultValue: number): number => {
+  const parsed = parseInt(value || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+};
+
 const isLoopbackHost = (host: string): boolean => {
   const normalized = host.trim().toLowerCase();
   return (
@@ -36,6 +41,15 @@ export const config = {
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
+  SAP_REDIS_CACHE_ENABLED: parseBoolean(process.env.SAP_REDIS_CACHE_ENABLED, true),
+  SAP_REDIS_CACHE_TTL_SECONDS: parsePositiveInteger(
+    process.env.SAP_REDIS_CACHE_TTL_SECONDS,
+    60 * 60,
+  ),
+  SAP_REDIS_VOLATILE_CACHE_TTL_SECONDS: parsePositiveInteger(
+    process.env.SAP_REDIS_VOLATILE_CACHE_TTL_SECONDS,
+    5 * 60,
+  ),
 
   // SMS Configuration
   SMS_API_URL: process.env.SMS_API_URL || '',
@@ -72,7 +86,8 @@ export const config = {
     parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS || '60000', 10) || 60000,
   ),
   GEMINI_TEXT_MODEL: process.env.GEMINI_TEXT_MODEL || 'gemini-3.1-flash-lite-preview',
-  GEMINI_SUPPORT_AGENT_MODEL: process.env.GEMINI_SUPPORT_AGENT_MODEL || 'gemini-3.1-flash-lite-preview',
+  GEMINI_SUPPORT_AGENT_MODEL:
+    process.env.GEMINI_SUPPORT_AGENT_MODEL || 'gemini-3.1-flash-lite-preview',
   GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2-preview',
   FAQ_EMBEDDING_DIM: parseInt(process.env.FAQ_EMBEDDING_DIM || '1536', 10),
   FAQ_SIMILAR_LIMIT: parseInt(process.env.FAQ_SIMILAR_LIMIT || '5', 10),

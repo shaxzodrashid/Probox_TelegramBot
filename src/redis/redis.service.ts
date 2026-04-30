@@ -25,7 +25,6 @@ class RedisService {
     });
   }
 
-
   async set(key: string, value: unknown, expireTime?: number): Promise<'OK'> {
     const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
     if (expireTime) {
@@ -84,7 +83,6 @@ class RedisService {
     return parsedData;
   }
 
-
   async deleteHash(key: string, field: string): Promise<number> {
     return this.redis.hdel(key, field);
   }
@@ -99,6 +97,10 @@ class RedisService {
 
   getClient(): Redis {
     return this.redis;
+  }
+
+  isReady(): boolean {
+    return this.redis.status === 'ready';
   }
 
   async disconnect(): Promise<void> {

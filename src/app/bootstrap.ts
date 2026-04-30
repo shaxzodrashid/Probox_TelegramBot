@@ -9,6 +9,7 @@ import { startBot } from './start-bot';
 import { redisService } from '../redis/redis.service';
 import { SapSyncCron } from '../cron/sap-sync.cron';
 import { PaymentReminderCron } from '../cron/payment-reminder.cron';
+import { SapService } from '../sap/sap-hana.service';
 
 type RuntimeResources = {
   apiServer: FastifyInstance | null;
@@ -35,14 +36,15 @@ export const bootstrap = async (): Promise<RuntimeResources> => {
 
     if (bot) {
       bot.stop();
-
-      await redisService.disconnect();
     }
 
+    await redisService.disconnect();
     await db.destroy();
   };
 
   try {
+    SapService.configureDefaultCache(redisService);
+
     await validateDatabaseSchema();
     apiServer = await startApi();
     bot = await startBot();

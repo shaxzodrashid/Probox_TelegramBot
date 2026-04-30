@@ -52,6 +52,20 @@ interface PreloadedDeviceCatalogContext {
   result: DeviceCatalogLookupResult;
 }
 
+type InstallmentCalculationResult = Awaited<
+  ReturnType<typeof SupportInstallmentService.calculateMonthlyInstallment>
+>;
+
+interface PreloadedInstallmentContext {
+  source: 'latest_message' | 'history_carryover';
+  months: number;
+  downPayment: number;
+  itemCode: string | null;
+  imei: string | null;
+  result?: InstallmentCalculationResult;
+  error?: string;
+}
+
 export interface SupportAgentReply {
   replyText: string;
   shouldEscalate: boolean;
@@ -85,6 +99,7 @@ const SUPPORT_AGENT_SYSTEM_INSTRUCTIONS = [
   '<language>Reply in the user’s preferred language unless the latest message clearly switches language.</language>',
   '<grounding>',
   'Use only grounded information from the provided context, transcript, inventory pre-check, alternative inventory suggestions, device catalog pre-check, and tool results from this conversation.',
+  'Treat assistant/bot messages in the transcript as conversation history, not as ground truth for policies, availability, prices, or installment eligibility. If a prior assistant message conflicts with SAP data, tool output, or explicit context, trust the grounded data/tool output.',
   'Never hallucinate availability, price, branch, exchange rate, delivery timing, or policy details.',
   'Never do manual arithmetic for prices, currency conversions, installment payments, discounts, or totals. Use verified tool results from this conversation; if the required tool is unavailable or fails, ask for clarification or escalate instead of estimating.',
   'If a fact is not grounded, say you cannot confirm it yet or escalate instead of guessing.',
@@ -110,7 +125,7 @@ const SUPPORT_AGENT_SYSTEM_INSTRUCTIONS = [
   'Do not use inventory pre-check results or call lookup_store_items to answer an ambiguous product request before these details are clarified. If a pre-check already exists for an ambiguous request, treat it as background only and ask the needed clarification instead of presenting stock.',
   '</product_clarification>',
   '<tool_policy>',
-  'Tools available in some turns: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount, calculate_installment_price.',
+  'Tools available in every turn: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount, calculate_installment_price.',
   'Before any tool call, first check whether the transcript, inventory pre-check, alternative inventory suggestions, device catalog pre-check, or prior tool results already answer the question.',
   'Use at most 3 tool iterations total. Prefer 0–1 if grounded context already answers.',
   'Never repeat the same tool call just to confirm the same fact.',
@@ -235,16 +250,20 @@ const FOLLOW_UP_MODEL_REGEX = /\b(\d{1,2}|air|se)\b|\bpro(?:\s*max)?\b|\bplus\b|
 const MEMORY_OPTION_REGEX = /\b\d+\s*(?:gb|tb)\b/i;
 const COLOR_OPTION_REGEX =
   /\b(white|black|blue|natural|gold|silver|green|pink|purple|yellow|red|orange|titanium)\b/i;
-const EXCHANGE_RATE_INTENT_REGEX = /\b(kurs\w*|rate\w*|exchange\s+rate|курс\w*|обмен\w*)\b/i;
-const CURRENCY_SIGNAL_REGEX =
-  /\b(usd|uzs|eur|rub|dollar\w*|euro|rubl\w*|so['’`]?m|sum|сум|доллар\w*|евро|руб)\b/i;
-const CURRENCY_CONVERSION_REFERENCE_REGEX =
-  /\b(this|that|bu|shu|mana\s*shu|mana\s*bu|эт[оа]|эта|эту|его)\b/i;
-const NUMERIC_AMOUNT_REGEX = /\b\d[\d\s.,]*\b/;
 const INSTALLMENT_DURATION_REGEX =
   /\b(?:[1-9]|1[0-5])\s*(?:oy|oyga|oylik|month|months|мес|месяц|месяцев)\b/i;
+const INSTALLMENT_DURATION_CAPTURE_REGEX =
+  /\b([1-9]|1[0-5])\s*(?:oy|oyga|oylik|month|months|мес|месяц|месяцев)\b/i;
+const INSTALLMENT_DURATION_UNIT_AFTER_NUMBER_REGEX =
+  /^\s*(?:oy|oyga|oylik|month|months|мес|месяц|месяцев)\b/i;
 const INSTALLMENT_INTENT_REGEX =
   /\b(rassrochka|рассрочк\w*|muddatli|bo['’`]?lib\s+to['’`]?lash|bo['’`]?lib|oyiga|oylik|installments?|instalments?|monthly\s+payment|boshlang['’`]?ich\s+to['’`]?lov|boshiga|boshidan|avans|первоначальн\w*\s+взнос)\b/i;
+const INSTALLMENT_CARRYOVER_REFERENCE_REGEX =
+  /\b(yana|qayta|balki|tekshir\w*|tekshirib\w*|qarab\s+ko['’`]?r\w*|o['’`]?sha|osha|shu|shuni|mana\s+shu|bo['’`]?lgani\s+yaxshi|variant\w*)\b/i;
+const DOWN_PAYMENT_CAPTURE_REGEX =
+  /\b(?:boshiga|boshidan|boshlang['’`]?ich\s+to['’`]?lov|avans|первоначальн\w*\s+взнос)\D{0,40}(\d+(?:[\s.,]\d+)*)\s*(mln|million|milliondan|млн|ming|тыс|k)?/i;
+const LEADING_DOWN_PAYMENT_CAPTURE_REGEX =
+  /\b(\d+(?:[\s.,]\d+)*)\s*(mln|million|milliondan|млн|ming|тыс|k)?\s+(?:boshiga|boshidan|boshlang['’`]?ich\s+to['’`]?lov|avans|первоначальн\w*\s+взнос)\b/i;
 
 const hasInstallmentIntent = (latestUserMessage: string): boolean => {
   const normalizedLatest = normalizeGenericSupportText(latestUserMessage);
@@ -252,6 +271,29 @@ const hasInstallmentIntent = (latestUserMessage: string): boolean => {
     INSTALLMENT_INTENT_REGEX.test(normalizedLatest) ||
     INSTALLMENT_DURATION_REGEX.test(normalizedLatest)
   );
+};
+
+const isInstallmentCarryoverReference = (latestUserMessage: string): boolean =>
+  INSTALLMENT_CARRYOVER_REFERENCE_REGEX.test(normalizeGenericSupportText(latestUserMessage));
+
+const hasInstallmentCarryoverIntent = (
+  latestUserMessage: string,
+  history: SupportTicketMessage[],
+): boolean => {
+  if (hasInstallmentIntent(latestUserMessage)) {
+    return true;
+  }
+
+  if (!isInstallmentCarryoverReference(latestUserMessage)) {
+    return false;
+  }
+
+  return history
+    .slice(-8)
+    .some(
+      (message) =>
+        message.sender_type === 'user' && hasInstallmentIntent(message.message_text),
+    );
 };
 
 const hasInventoryIntent = (
@@ -551,6 +593,160 @@ const preloadInventoryContext = async (
   }
 };
 
+const parseInstallmentMonths = (value: string): number | null => {
+  const match = normalizeGenericSupportText(value).match(INSTALLMENT_DURATION_CAPTURE_REGEX);
+  const months = match ? Number(match[1]) : Number.NaN;
+  return Number.isFinite(months) && months > 0 ? months : null;
+};
+
+const parseDownPaymentAmount = (value: string): number | null => {
+  const normalized = normalizeGenericSupportText(value);
+  const match =
+    normalized.match(LEADING_DOWN_PAYMENT_CAPTURE_REGEX) ||
+    normalized.match(DOWN_PAYMENT_CAPTURE_REGEX);
+  if (!match) {
+    return null;
+  }
+
+  const afterAmount = normalized.slice(match.index! + match[0].length);
+  if (INSTALLMENT_DURATION_UNIT_AFTER_NUMBER_REGEX.test(afterAmount)) {
+    return null;
+  }
+
+  const rawAmount = match[1].replace(/\s+/g, '').replace(',', '.');
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  const unit = match[2]?.toLowerCase() || '';
+  if (unit === 'mln' || unit.startsWith('million') || unit === 'млн') {
+    return Math.round(amount * 1_000_000);
+  }
+
+  if (unit === 'ming' || unit === 'тыс' || unit === 'k') {
+    return Math.round(amount * 1_000);
+  }
+
+  return Math.round(amount);
+};
+
+const extractInstallmentTerms = (
+  latestUserMessage: string,
+  history: SupportTicketMessage[],
+): { source: 'latest_message' | 'history_carryover'; months: number; downPayment: number } | null => {
+  const latestMonths = parseInstallmentMonths(latestUserMessage);
+  if (latestMonths) {
+    return {
+      source: 'latest_message',
+      months: latestMonths,
+      downPayment:
+        parseDownPaymentAmount(latestUserMessage) || MIN_INSTALLMENT_DOWN_PAYMENT_UZS,
+    };
+  }
+
+  if (!isInstallmentCarryoverReference(latestUserMessage)) {
+    return null;
+  }
+
+  for (const message of [...history].reverse()) {
+    if (message.sender_type !== 'user') {
+      continue;
+    }
+
+    const months = parseInstallmentMonths(message.message_text);
+    if (!months) {
+      continue;
+    }
+
+    return {
+      source: 'history_carryover',
+      months,
+      downPayment:
+        parseDownPaymentAmount(message.message_text) || MIN_INSTALLMENT_DOWN_PAYMENT_UZS,
+    };
+  }
+
+  return null;
+};
+
+const preloadInstallmentContext = async (
+  latestUserMessage: string,
+  history: SupportTicketMessage[],
+  inventoryPrecheck: PreloadedInventoryContext | null,
+): Promise<PreloadedInstallmentContext | null> => {
+  if (!hasInstallmentCarryoverIntent(latestUserMessage, history)) {
+    return null;
+  }
+
+  const terms = extractInstallmentTerms(latestUserMessage, history);
+  const item = inventoryPrecheck?.result?.items[0] || null;
+
+  if (!terms || !item) {
+    logger.info('[SUPPORT_AGENT] Skipping installment pre-check because context is incomplete', {
+      latestUserMessage: previewSupportMessage(latestUserMessage),
+      hasTerms: Boolean(terms),
+      hasInventoryItem: Boolean(item),
+    });
+    return null;
+  }
+
+  try {
+    logger.info('[SUPPORT_AGENT] Running installment pre-check before Gemini reply generation', {
+      latestUserMessage: previewSupportMessage(latestUserMessage),
+      source: terms.source,
+      itemCode: item.item_code,
+      hasImei: Boolean(item.imei),
+      months: terms.months,
+      downPayment: terms.downPayment,
+    });
+
+    const result = await SupportInstallmentService.calculateMonthlyInstallment({
+      imei: item.imei,
+      itemCode: item.item_code,
+      months: terms.months,
+      downPayment: terms.downPayment,
+    });
+
+    logger.info('[SUPPORT_AGENT] Installment pre-check completed', {
+      ok: result.ok,
+      error: result.error,
+      itemCode: result.product?.item_code || item.item_code,
+      months: result.months,
+      downPayment: result.down_payment,
+      monthlyInstallment: result.monthly_installment,
+    });
+
+    return {
+      source: terms.source,
+      months: terms.months,
+      downPayment: terms.downPayment,
+      itemCode: item.item_code,
+      imei: item.imei,
+      result,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    logger.warn('[SUPPORT_AGENT] Installment pre-check failed', {
+      latestUserMessage: previewSupportMessage(latestUserMessage),
+      itemCode: item.item_code,
+      months: terms.months,
+      downPayment: terms.downPayment,
+      error: message,
+    });
+
+    return {
+      source: terms.source,
+      months: terms.months,
+      downPayment: terms.downPayment,
+      itemCode: item.item_code,
+      imei: item.imei,
+      error: message,
+    };
+  }
+};
+
 const preloadDeviceCatalogContext = async (
   latestUserMessage: string,
 ): Promise<PreloadedDeviceCatalogContext | null> => {
@@ -669,65 +865,13 @@ const formatTranscript = (messages: SupportTicketMessage[]): string => {
     .join('\n');
 };
 
-const hasExchangeRateIntent = (latestUserMessage: string): boolean => {
-  const normalizedLatest = normalizeGenericSupportText(latestUserMessage);
-
-  return (
-    EXCHANGE_RATE_INTENT_REGEX.test(normalizedLatest) &&
-    CURRENCY_SIGNAL_REGEX.test(normalizedLatest)
-  );
-};
-
-const hasCurrencyConversionIntent = (
-  latestUserMessage: string,
-  history: SupportTicketMessage[],
-): boolean => {
-  const normalizedLatest = normalizeGenericSupportText(latestUserMessage);
-  const mentionsCurrency = CURRENCY_SIGNAL_REGEX.test(normalizedLatest);
-  const mentionsAmount = NUMERIC_AMOUNT_REGEX.test(normalizedLatest);
-  const referencesPriorPrice = CURRENCY_CONVERSION_REFERENCE_REGEX.test(normalizedLatest);
-  const recentTranscriptHasPrice = history
-    .slice(-6)
-    .some((message) => NUMERIC_AMOUNT_REGEX.test(message.message_text));
-
-  return mentionsCurrency && (mentionsAmount || (referencesPriorPrice && recentTranscriptHasPrice));
-};
-
-const selectSupportTools = (params: {
-  latestUserMessage: string;
-  history: SupportTicketMessage[];
-}): GeminiTool[] => {
-  const inventoryIntent = hasInventoryIntent(params.latestUserMessage, params.history);
-  const catalogQuestion = isDeviceCatalogQuestion(params.latestUserMessage);
-  const exchangeRateIntent = hasExchangeRateIntent(params.latestUserMessage);
-  const currencyConversionIntent = hasCurrencyConversionIntent(
-    params.latestUserMessage,
-    params.history,
-  );
-  const installmentIntent = hasInstallmentIntent(params.latestUserMessage);
-
-  const selectedTools: GeminiTool[] = [];
-
-  if (catalogQuestion) {
-    selectedTools.push(lookupAvailableDevicesTool);
-  } else if (inventoryIntent) {
-    selectedTools.push(lookupStoreItemsTool);
-  }
-
-  if (exchangeRateIntent) {
-    selectedTools.push(lookupCurrencyRateTool);
-  }
-
-  if (currencyConversionIntent) {
-    selectedTools.push(convertCurrencyAmountTool);
-  }
-
-  if (installmentIntent) {
-    selectedTools.push(calculateInstallmentPriceTool);
-  }
-
-  return selectedTools;
-};
+const selectSupportTools = (): GeminiTool[] => [
+  lookupStoreItemsTool,
+  lookupAvailableDevicesTool,
+  lookupCurrencyRateTool,
+  convertCurrencyAmountTool,
+  calculateInstallmentPriceTool,
+];
 
 const assertAgentPayload = (payload: SupportAgentPayload): SupportAgentReply => {
   const shouldEscalate = payload.should_escalate === true;
@@ -1117,6 +1261,11 @@ export class SupportAgentService {
       params.latestUserMessage,
       params.history,
     );
+    const installmentPrecheck = await preloadInstallmentContext(
+      params.latestUserMessage,
+      params.history,
+      inventoryPrecheck,
+    );
     const catalogPrecheck = inventoryPrecheck
       ? null
       : await preloadDeviceCatalogContext(params.latestUserMessage);
@@ -1137,10 +1286,7 @@ export class SupportAgentService {
       return buildInventoryClarificationReply(params.user.language_code);
     }
 
-    const selectedTools = selectSupportTools({
-      latestUserMessage: params.latestUserMessage,
-      history: params.history,
-    });
+    const selectedTools = selectSupportTools();
     const selectedToolNames = selectedTools.map((tool) => tool.declaration.name);
 
     const prompt = [
@@ -1176,6 +1322,8 @@ export class SupportAgentService {
         2,
       )}`,
       '',
+      `Installment pre-check:\n${JSON.stringify(installmentPrecheck || null, null, 2)}`,
+      '',
       `Device catalog pre-check:\n${JSON.stringify(catalogPrecheck?.result || null, null, 2)}`,
       '',
       `Tools enabled for this turn: ${selectedToolNames.length > 0 ? selectedToolNames.join(', ') : 'none'}`,
@@ -1195,6 +1343,8 @@ export class SupportAgentService {
       'When calling inventory tools for a clarified product, always convert customer wording to official SAP-style naming first and send structured fields when known; use a normalized search string only for free-text, IMEI, or item-code searches.',
       'When calling lookup_store_items and the customer specified model, device type, memory, color, SIM type, or condition, pass those as structured fields so SAP can do exact matching.',
       'When the customer asks for monthly installment pricing, first ground the product from context or inventory; then call calculate_installment_price with the grounded imei/item_code, requested months, and at least 1000000 UZS down payment.',
+      'If the customer asks to re-check, says "o‘sha", "shu", "yana tekshirib ko‘ring", or otherwise refers back after an installment discussion, inherit the most recent grounded product, months, and down payment from the transcript/context. Use the installment pre-check result if present; otherwise call calculate_installment_price.',
+      'Do not repeat a previous assistant claim that installment is unavailable unless the installment pre-check or calculate_installment_price result confirms an error. A previous assistant message alone is not a policy source.',
       'If the customer did not provide a down payment, calculate installments with the default 1000000 UZS down payment first, then offer to recalculate with the customer’s own amount if it is at least 1000000 UZS.',
       'For installment replies, never include the total installment amount or any "jami qiymati"/total payable line. Answer with monthly payment, period, and down payment only.',
       'Never ask the customer for item_code or IMEI. Ask only normal product-choice questions when the selected product is unclear.',
@@ -1215,6 +1365,8 @@ export class SupportAgentService {
       hasInventoryPrecheck: Boolean(inventoryPrecheck?.result),
       inventoryPrecheckQuery: inventoryPrecheck?.query || null,
       inventoryPrecheckError: inventoryPrecheck?.error || null,
+      hasInstallmentPrecheck: Boolean(installmentPrecheck?.result),
+      installmentPrecheckError: installmentPrecheck?.error || null,
       hasAlternativeInventory: Boolean(inventoryPrecheck?.alternativeInventory),
       hasDeviceCatalogPrecheck: Boolean(catalogPrecheck?.result),
     });

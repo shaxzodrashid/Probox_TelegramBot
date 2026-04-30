@@ -29,6 +29,9 @@ const APPLE_VARIANT_REGEX = /\bpro[\s-]*max\b|\bpro\b|\bplus\b|\bmini\b/i;
 const IMPLICIT_IPHONE_CONTEXT_REGEX =
   /\b(silada|sizlarda|ularda|ulardan|bor\w*|bormi|mavjud\w*|narx\w*|qancha|qanchadan|olmoqch\w*|topamanmi|telefon\w*|phone\w*|model\w*|modellar\w*|seriya\w*|katalog\w*|catalog\w*|bo['’`]?vott[iu]|turibdi|turipti)\b/i;
 
+const INSTALLMENT_DURATION_AFTER_NUMBER_REGEX =
+  /\s*(?:oy|oyga|oylik|month|months|мес|месяц|месяцев)\b/i;
+
 export interface InventoryAlternativeQuery {
   query: string;
   strategy: 'drop_memory' | 'drop_variant' | 'product_family';
@@ -63,8 +66,13 @@ const inferImplicitIphoneQuery = (normalized: string): string | null => {
     return null;
   }
 
-  const seriesMatch = normalized.match(/\b(1[1-9]|20|se|air)\b/);
+  const seriesMatch = normalized.match(/\b(1[1-9]|20|se|air)\b/i);
   if (!seriesMatch) {
+    return null;
+  }
+
+  const afterSeries = normalized.slice(seriesMatch.index! + seriesMatch[0].length);
+  if (INSTALLMENT_DURATION_AFTER_NUMBER_REGEX.test(afterSeries)) {
     return null;
   }
 
@@ -83,6 +91,12 @@ const inferImplicitIphoneQuery = (normalized: string): string | null => {
   const memoryMatch = normalized.match(/\b(\d+)\s*(gb|tb)\b/);
   if (memoryMatch) {
     query += ` ${memoryMatch[1]}${memoryMatch[2]}`;
+  }
+
+  if (/\bused\b/.test(normalized)) {
+    query += ' used';
+  } else if (/\bnew\b/.test(normalized)) {
+    query += ' new';
   }
 
   return query;
@@ -221,6 +235,12 @@ export const extractInventoryLookupQuery = (message: string): string | null => {
     const memoryMatch = normalized.match(/\b(\d+)\s*(gb|tb)\b/);
     if (memoryMatch) {
       query += ` ${memoryMatch[1]}${memoryMatch[2]}`;
+    }
+
+    if (/\bused\b/.test(normalized)) {
+      query += ' used';
+    } else if (/\bnew\b/.test(normalized)) {
+      query += ' new';
     }
 
     return query;

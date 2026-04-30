@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { ISapItem } from '../interfaces/item.interface';
-import { SapService } from './sap-hana.service';
+import { SapCacheStore, SapService } from './sap-hana.service';
 
 type ExecuteCall = {
   query: string;
@@ -29,6 +29,36 @@ class MockHanaService {
   }
 }
 
+class MockCacheStore implements SapCacheStore {
+  public readonly getCalls: string[] = [];
+  public readonly setCalls: Array<{ key: string; value: unknown; expireTime?: number }> = [];
+  private readonly values = new Map<string, unknown>();
+
+  constructor(private readonly fallbackValue?: unknown) {}
+
+  async get<T>(key: string): Promise<T | null> {
+    this.getCalls.push(key);
+
+    if (this.fallbackValue !== undefined) {
+      return this.fallbackValue as T;
+    }
+
+    return this.values.has(key) ? (this.values.get(key) as T) : null;
+  }
+
+  async set(key: string, value: unknown, expireTime?: number): Promise<'OK'> {
+    this.setCalls.push({ key, value, expireTime });
+    this.values.set(key, value);
+    return 'OK';
+  }
+}
+
+const createCacheEnvelope = <T>(value: T) => ({
+  value,
+  cachedAt: '2026-04-30T00:00:00.000Z',
+  ttlSeconds: 3600,
+});
+
 const getItemQueries = (hana: MockHanaService) => {
   assert.equal(hana.calls.length, 2);
   return {
@@ -41,7 +71,7 @@ const createService = (resolver?: ConstructorParameters<typeof MockHanaService>[
   const hana = new MockHanaService(resolver);
   return {
     hana,
-    service: new SapService(hana as any),
+    service: new SapService(hana),
   };
 };
 
@@ -246,11 +276,13 @@ test('SapService getItems excludes zero stock by default and can include it when
   await defaultRun.service.getItems({});
   assert.match(getItemQueries(defaultRun.hana).dataQuery, /T0\."OnHand" > 0/);
   assert.match(getItemQueries(defaultRun.hana).dataQuery, /COALESCE\(PR\."Price", 0\) > 0/);
+  assert.match(getItemQueries(defaultRun.hana).dataQuery, /COALESCE\(RP\."CostTotal", 0\) > 0/);
 
   const includeZeroRun = createService();
   await includeZeroRun.service.getItems({ includeZeroOnHand: true });
   assert.doesNotMatch(getItemQueries(includeZeroRun.hana).dataQuery, /T0\."OnHand" > 0/);
   assert.match(getItemQueries(includeZeroRun.hana).dataQuery, /COALESCE\(PR\."Price", 0\) > 0/);
+  assert.match(getItemQueries(includeZeroRun.hana).dataQuery, /COALESCE\(RP\."CostTotal", 0\) > 0/);
 });
 
 test('SapService getItems filters by warehouse code and normalized store name', async () => {
@@ -300,10 +332,33 @@ test('SapService getItems enables IMEI mode for numeric searches with four or mo
   assert.match(dataQuery, /R\."DistNumber" LIKE '%123456789012345%'/);
   assert.match(dataQuery, /Q\."Quantity" > 0/);
   assert.match(dataQuery, /R\."DistNumber" AS "IMEI"/);
-  assert.match(dataQuery, /MAX\(R\."CostTotal"\) AS "PurchasePrice"/);
+  assert.match(dataQuery, /WHEN Q\."Quantity" > 0 THEN R\."CostTotal"/);
+  assert.match(dataQuery, /AS "PurchasePrice"/);
   assert.match(dataQuery, /GROUP BY[\s\S]*R\."DistNumber"/);
   assert.match(countQuery, /COUNT\(DISTINCT R\."DistNumber"\) AS "total"/);
   assert.doesNotMatch(dataQuery, /MAX\(PR\."Price"\) DESC/);
+});
+
+test('SapService getItems returns effective UZS sale prices for new and used products', async () => {
+  const { hana, service } = createService();
+
+  await service.getItems({
+    search: 'iphone 15 bu',
+    groupByWarehouse: true,
+  });
+
+  const { dataQuery } = getItemQueries(hana);
+
+  assert.match(
+    dataQuery,
+    /WHEN LOWER\(TRIM\(COALESCE\(MAX\(T1\."U_PROD_CONDITION"\), ''\)\)\) IN \('b\/u', 'b\\u'\)/,
+  );
+  assert.match(dataQuery, /SELECT MAX\(RP\."CostTotal"\)/);
+  assert.match(dataQuery, /FROM PROBOX_PROD_3\."ORTT" RT/);
+  assert.match(dataQuery, /WHERE RT\."Currency" = 'UZS'/);
+  assert.match(dataQuery, /ELSE MAX\(PR\."Price"\)/);
+  assert.match(dataQuery, /END\s+AS "SalePrice"/);
+  assert.match(dataQuery, /QP\."WhsCode" = T0\."WhsCode"/);
 });
 
 test('SapService getItems respects pagination and warehouse grouping flags', async () => {
@@ -352,7 +407,7 @@ test('SapService getItems uses fallback ranking and default condition ordering f
     dataQuery,
     /WHEN LOWER\(TRIM\(COALESCE\(MAX\(T1\."U_PROD_CONDITION"\), ''\)\)\) = 'b\/u' THEN 1/,
   );
-  assert.match(dataQuery, /MAX\(PR\."Price"\) DESC/);
+  assert.match(dataQuery, /END DESC, MAX\(T1\."ItemName"\) ASC/);
 });
 
 test('SapService getItems returns SAP rows together with the parsed total', async () => {
@@ -379,6 +434,80 @@ test('SapService getItems returns SAP rows together with the parsed total', asyn
     data: items,
     total: 4,
   });
+});
+
+test('SapService getItems returns a valuable Redis result without hitting SAP', async () => {
+  const cachedItems: ISapItem[] = [
+    {
+      ItemCode: 'IP16',
+      WhsCode: 'W01',
+      OnHand: 3,
+      ItemName: 'iPhone 16',
+      ItemGroupCode: 10,
+      ItemGroupName: 'Phones',
+      WhsName: 'Nurafshon',
+      SalePrice: 12_000_000,
+    },
+  ];
+  const cache = new MockCacheStore(
+    createCacheEnvelope({
+      data: cachedItems,
+      total: 1,
+    }),
+  );
+  const hana = new MockHanaService(async () => {
+    throw new Error('SAP should not be queried for a useful cache hit');
+  });
+  const service = new SapService(hana, cache, {
+    cachePrefix: 'test:sap',
+  });
+
+  const result = await service.getItems({ search: 'iphone 16' });
+
+  assert.deepEqual(result, {
+    data: cachedItems,
+    total: 1,
+  });
+  assert.equal(hana.calls.length, 0);
+  assert.equal(cache.getCalls.length, 1);
+  assert.equal(cache.setCalls.length, 0);
+});
+
+test('SapService getItems refreshes from SAP when Redis only has an empty result', async () => {
+  const items: ISapItem[] = [
+    {
+      ItemCode: 'IP16',
+      WhsCode: 'W01',
+      OnHand: 3,
+      ItemName: 'iPhone 16',
+      ItemGroupCode: 10,
+      ItemGroupName: 'Phones',
+      WhsName: 'Nurafshon',
+      SalePrice: 12_000_000,
+    },
+  ];
+  const cache = new MockCacheStore(
+    createCacheEnvelope({
+      data: [],
+      total: 0,
+    }),
+  );
+  const hana = new MockHanaService(createQueuedResolver(items, [{ total: '1' }]));
+  const service = new SapService(hana, cache, {
+    cachePrefix: 'test:sap',
+    cacheTtlSeconds: 42,
+  });
+
+  const result = await service.getItems({ search: 'iphone 16' });
+
+  assert.deepEqual(result, {
+    data: items,
+    total: 1,
+  });
+  assert.equal(hana.calls.length, 2);
+  assert.equal(cache.getCalls.length, 1);
+  assert.equal(cache.setCalls.length, 1);
+  assert.equal(cache.setCalls[0].expireTime, 42);
 });
 
 test('SapService getItems wraps HANA failures with a stable error message', async () => {

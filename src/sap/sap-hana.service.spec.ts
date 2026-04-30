@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
 import { IPurchaseInstallment } from '../interfaces/purchase.interface';
-import { SapService } from './sap-hana.service';
+import { SapCacheStore, SapService } from './sap-hana.service';
 
 type ExecuteCall = {
   query: string;
@@ -30,11 +30,34 @@ class MockHanaService {
   }
 }
 
+class MockCacheStore implements SapCacheStore {
+  public readonly getCalls: string[] = [];
+  public readonly setCalls: Array<{ key: string; value: unknown; expireTime?: number }> = [];
+  private readonly values = new Map<string, unknown>();
+
+  constructor(private readonly ready = true) {}
+
+  async get<T>(key: string): Promise<T | null> {
+    this.getCalls.push(key);
+    return this.values.has(key) ? (this.values.get(key) as T) : null;
+  }
+
+  async set(key: string, value: unknown, expireTime?: number): Promise<'OK'> {
+    this.setCalls.push({ key, value, expireTime });
+    this.values.set(key, value);
+    return 'OK';
+  }
+
+  isReady(): boolean {
+    return this.ready;
+  }
+}
+
 const createService = (resolver?: ConstructorParameters<typeof MockHanaService>[0]) => {
   const hana = new MockHanaService(resolver);
   return {
     hana,
-    service: new SapService(hana as any),
+    service: new SapService(hana),
   };
 };
 
@@ -43,9 +66,10 @@ test('SapService getBusinessPartnerByPhone normalizes the phone and passes it tw
     {
       CardCode: 'C001',
       CardName: 'Ali Valiyev',
+      CardType: 'C',
       Phone1: '998901234567',
-      Phone2: null as any,
-    } as IBusinessPartner,
+      Phone2: null,
+    },
   ];
 
   const { hana, service } = createService(async () => partners);
@@ -80,12 +104,22 @@ test('SapService getBusinessPartnerByJshshir trims the identifier before queryin
 test('SapService getBPpurchasesByCardCode forwards the card code to SAP', async () => {
   const purchases: IPurchaseInstallment[] = [
     {
-      DocEntry: 1 as any,
-      DocNum: 2 as any,
+      DocEntry: 1,
+      DocNum: 2,
       CardCode: 'C001',
       CardName: 'Ali',
+      DocDate: '2026-04-01',
+      DocDueDate: '2026-04-30',
+      DocCur: 'UZS',
+      Total: 100,
+      TotalPaid: 0,
+      InstlmntID: 1,
+      InstDueDate: '2026-04-30',
+      InstTotal: 100,
+      InstPaidToDate: 0,
+      InstStatus: 'open',
       itemsPairs: 'IP16::iPhone 16::100',
-    } as IPurchaseInstallment,
+    },
   ];
 
   const { hana, service } = createService(async () => purchases);
@@ -216,6 +250,51 @@ test('SapService getLatestExchangeRate returns only the numeric rate', async () 
   const result = await service.getLatestExchangeRate('usd');
 
   assert.equal(result, 12_700);
+});
+
+test('SapService caches useful exchange rates in Redis with the configured TTL', async () => {
+  const hana = new MockHanaService(async () => [
+    {
+      Currency: 'USD',
+      Rate: '12650.5',
+      RateDate: '2026-04-12T00:00:00.000Z',
+    },
+  ]);
+  const cache = new MockCacheStore();
+  const service = new SapService(hana, cache, {
+    cachePrefix: 'test:sap',
+    cacheTtlSeconds: 42,
+  });
+
+  const firstResult = await service.getLatestExchangeRateInfo('usd');
+  const secondResult = await service.getLatestExchangeRateInfo(' USD ');
+
+  assert.deepEqual(secondResult, firstResult);
+  assert.equal(hana.calls.length, 1);
+  assert.equal(cache.getCalls.length, 2);
+  assert.equal(cache.setCalls.length, 1);
+  assert.equal(cache.setCalls[0].expireTime, 42);
+});
+
+test('SapService bypasses Redis cache when the cache store is not ready', async () => {
+  const hana = new MockHanaService(async () => [
+    {
+      Currency: 'USD',
+      Rate: '12650.5',
+      RateDate: '2026-04-12T00:00:00.000Z',
+    },
+  ]);
+  const cache = new MockCacheStore(false);
+  const service = new SapService(hana, cache, {
+    cachePrefix: 'test:sap',
+  });
+
+  await service.getLatestExchangeRateInfo('usd');
+  await service.getLatestExchangeRateInfo('usd');
+
+  assert.equal(hana.calls.length, 2);
+  assert.equal(cache.getCalls.length, 0);
+  assert.equal(cache.setCalls.length, 0);
 });
 
 test('SapService getLatestExchangeRateInfo wraps SAP failures', async () => {

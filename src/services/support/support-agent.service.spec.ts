@@ -8,6 +8,14 @@ import { SupportInstallmentService } from './support-installment.service';
 import { SupportItemAvailabilityService } from './support-item-availability.service';
 import { User } from '../user.service';
 
+const ALL_SUPPORT_TOOL_NAMES = [
+  'lookup_store_items',
+  'lookup_available_devices',
+  'lookup_currency_rate',
+  'convert_currency_amount',
+  'calculate_installment_price',
+];
+
 const makeUser = (): User => ({
   id: 1,
   telegram_id: 55,
@@ -338,7 +346,7 @@ test('SupportAgentService accepts an empty reply when escalation is requested', 
   }
 });
 
-test('SupportAgentService passes system instructions, focused tool config, and schema to Gemini', async () => {
+test('SupportAgentService passes system instructions, all tool config, and schema to Gemini', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
 
   let capturedPrompt = '';
@@ -409,7 +417,7 @@ test('SupportAgentService passes system instructions, focused tool config, and s
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
-      /Tools available in some turns: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount, calculate_installment_price/i,
+      /Tools available in every turn: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount, calculate_installment_price/i,
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
@@ -456,7 +464,10 @@ test('SupportAgentService passes system instructions, focused tool config, and s
       /Set should_escalate=true only for unsupported actions, risky assumptions, missing grounding, or required manual confirmation/i,
     );
     assert.match(capturedPrompt, /<context>/i);
-    assert.match(capturedPrompt, /Tools enabled for this turn: convert_currency_amount/i);
+    assert.match(
+      capturedPrompt,
+      /Tools enabled for this turn: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount, calculate_installment_price/i,
+    );
     assert.match(capturedPrompt, /User profile:/);
     assert.match(capturedPrompt, /Conversation transcript:/);
     assert.match(capturedPrompt, /Narxi 18 467 000 so'm bo'ladi\./);
@@ -500,7 +511,7 @@ test('SupportAgentService passes system instructions, focused tool config, and s
       required: ['reply_text', 'should_escalate', 'escalation_reason'],
       propertyOrdering: ['reply_text', 'should_escalate', 'escalation_reason'],
     });
-    assert.deepEqual(capturedToolNames, ['convert_currency_amount']);
+    assert.deepEqual(capturedToolNames, ALL_SUPPORT_TOOL_NAMES);
     assert.equal(capturedMaxToolIterations, 3);
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
@@ -534,7 +545,7 @@ test('SupportAgentService strips total payable lines from installment replies', 
   }
 });
 
-test('SupportAgentService enables only the inventory tool for specific stock questions', async () => {
+test('SupportAgentService keeps all tools available for specific stock questions', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
   const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
 
@@ -562,14 +573,14 @@ test('SupportAgentService enables only the inventory tool for specific stock que
       latestUserMessage: 'silada 15 pro bomi',
     });
 
-    assert.deepEqual(capturedToolNames, ['lookup_store_items']);
+    assert.deepEqual(capturedToolNames, ALL_SUPPORT_TOOL_NAMES);
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
     SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
   }
 });
 
-test('SupportAgentService enables only the catalog tool for broad assortment questions', async () => {
+test('SupportAgentService keeps all tools available for broad assortment questions', async () => {
   const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
   const originalLookupAvailableDevices = SupportItemAvailabilityService.lookupAvailableDevices;
 
@@ -598,7 +609,7 @@ test('SupportAgentService enables only the catalog tool for broad assortment que
       latestUserMessage: 'Silada qanaqa telefonla bor',
     });
 
-    assert.deepEqual(capturedToolNames, ['lookup_available_devices']);
+    assert.deepEqual(capturedToolNames, ALL_SUPPORT_TOOL_NAMES);
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
     SupportItemAvailabilityService.lookupAvailableDevices = originalLookupAvailableDevices;
@@ -932,7 +943,7 @@ test('SupportAgentService exposes installment calculator with grounded item iden
     });
 
     assert.equal(result.replyText, '12 oyga oyiga 1 358 333 so‘mdan bo‘ladi.');
-    assert.deepEqual(capturedToolNames, ['lookup_store_items', 'calculate_installment_price']);
+    assert.deepEqual(capturedToolNames, ALL_SUPPORT_TOOL_NAMES);
     assert.deepEqual(calculatorCalls[0], {
       imei: '123456789012345',
       itemCode: 'IP16',
@@ -940,6 +951,12 @@ test('SupportAgentService exposes installment calculator with grounded item iden
       downPayment: 2000000,
     });
     assert.deepEqual(calculatorCalls[1], {
+      imei: '123456789012345',
+      itemCode: 'IP16',
+      months: 12,
+      downPayment: 2000000,
+    });
+    assert.deepEqual(calculatorCalls[2], {
       imei: '123456789012345',
       itemCode: 'IP16',
       months: 12,
@@ -1086,7 +1103,7 @@ test('SupportAgentService treats down-payment follow-up slang as installment int
       latestUserMessage: 'boshiga bermasda osa boladimi',
     });
 
-    assert.deepEqual(capturedToolNames, ['lookup_store_items', 'calculate_installment_price']);
+    assert.deepEqual(capturedToolNames, ALL_SUPPORT_TOOL_NAMES);
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
   }
@@ -1211,6 +1228,332 @@ test('SupportAgentService carries previous iPhone model into memory/color follow
   } finally {
     GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
     SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+  }
+});
+
+test('SupportAgentService reuses the previous exact phone for installment-duration follow-ups', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+  const originalCalculateMonthlyInstallment = SupportInstallmentService.calculateMonthlyInstallment;
+
+  const lookupQueries: string[] = [];
+  let capturedPrompt = '';
+  let capturedToolNames: string[] = [];
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => {
+    lookupQueries.push(params.query);
+
+    return {
+      ok: true,
+      search: params.query,
+      query: params.query,
+      store: null,
+      requested_filters: {
+        model: null,
+        device_type: null,
+        memory: null,
+        color: null,
+        sim_type: null,
+        condition: null,
+      },
+      exact_match: true,
+      no_exact_match: false,
+      no_exact_match_message: null,
+      total_matches: 1,
+      returned_matches: 1,
+      items: [
+        {
+          item_code: 'APPLE1886',
+          imei: null,
+          item_name: 'iPhone 15 Pro Max 256GB B/U',
+          store_code: '02',
+          store_name: 'Samarqand darboza sklad',
+          on_hand: 1,
+          sale_price: 1144,
+          item_group_name: 'Phones',
+          model: 'iPhone 15',
+          device_type: 'Pro Max',
+          color: null,
+          memory: '256GB',
+          condition: 'B/U',
+          sim_type: null,
+        },
+      ],
+      suggestions: null,
+    };
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  SupportInstallmentService.calculateMonthlyInstallment = (async (params) => ({
+    ok: true,
+    error: null,
+    lookup: {
+      imei: params.imei || null,
+      item_code: params.itemCode || null,
+      used: 'item_code',
+    },
+    months: params.months,
+    down_payment: params.downPayment || 0,
+    product: {
+      imei: params.imei || null,
+      item_code: params.itemCode || 'APPLE1886',
+      item_name: 'iPhone 15 Pro Max 256GB B/U',
+      store_code: '02',
+      store_name: 'Samarqand darboza sklad',
+      on_hand: 1,
+      sale_price: 1144,
+      purchase_price: 1144,
+      model: 'iPhone 15',
+      device_type: 'Pro Max',
+      memory: '256GB',
+      color: null,
+      sim_type: null,
+      condition: 'B/U',
+    },
+    percentage: 70,
+    sale_price: 1144,
+    purchase_price: 1144,
+    actual_price: 16000000,
+    price_source: 'PurchasePrice',
+    financed_amount: 11000000,
+    monthly_installment: 1246667,
+  })) as typeof SupportInstallmentService.calculateMonthlyInstallment;
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    capturedPrompt = params.prompt;
+    capturedToolNames = params.tools.map((tool) => tool.declaration.name);
+
+    return {
+      reply_text: "15 oyga oyiga to'lovni kalkulyator orqali tekshirib beraman.",
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      user: makeUser(),
+      history: [
+        {
+          id: 1,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text: 'iPhone 15 Pro Max B/U (ishlatilgan), xotirasi 256GB. Shunaqasi bormi?',
+          photo_file_id: null,
+          telegram_message_id: 111,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 2,
+          ticket_id: 99,
+          sender_type: 'agent',
+          message_text:
+            'Siz so‘ragan iPhone 15 Pro Max 256GB B/U modelimizdan 1 dona qolgan. Narxi: 1144 USD.',
+          photo_file_id: null,
+          telegram_message_id: 112,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 3,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text:
+            "Mana shu telefonni 15 oyga bo'lib to'lashga olsam, oyiga necha puldan to'lov qilaman ? Boshiga 5 mln. so'm beraman",
+          photo_file_id: null,
+          telegram_message_id: 113,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+      ],
+      latestUserMessage:
+        "Mana shu telefonni 15 oyga bo'lib to'lashga olsam, oyiga necha puldan to'lov qilaman ? Boshiga 5 mln. so'm beraman",
+    });
+
+    assert.deepEqual(lookupQueries, ['iphone 15 pro max 256gb used']);
+    assert.ok(capturedToolNames.includes('lookup_store_items'));
+    assert.ok(capturedToolNames.includes('calculate_installment_price'));
+    assert.match(capturedPrompt, /"query": "iphone 15 pro max 256gb used"/);
+    assert.match(capturedPrompt, /"item_code": "APPLE1886"/);
+    assert.doesNotMatch(capturedPrompt, /Alternative inventory suggestions:\n\{/);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+    SupportInstallmentService.calculateMonthlyInstallment = originalCalculateMonthlyInstallment;
+  }
+});
+
+test('SupportAgentService carries installment context into re-check reference follow-ups', async () => {
+  const originalGenerateJsonWithTools = GeminiService.generateJsonWithTools;
+  const originalLookupAvailableItems = SupportItemAvailabilityService.lookupAvailableItems;
+  const originalCalculateMonthlyInstallment = SupportInstallmentService.calculateMonthlyInstallment;
+
+  const lookupQueries: string[] = [];
+  const calculatorCalls: unknown[] = [];
+  let capturedPrompt = '';
+  let capturedToolNames: string[] = [];
+
+  SupportItemAvailabilityService.lookupAvailableItems = (async (params) => {
+    lookupQueries.push(params.query);
+
+    return {
+      ok: true,
+      search: params.query,
+      query: params.query,
+      store: null,
+      requested_filters: {
+        model: null,
+        device_type: null,
+        memory: null,
+        color: null,
+        sim_type: null,
+        condition: null,
+      },
+      exact_match: true,
+      no_exact_match: false,
+      no_exact_match_message: null,
+      total_matches: 1,
+      returned_matches: 1,
+      items: [
+        {
+          item_code: 'APPLE1886',
+          imei: null,
+          item_name: 'iPhone 15 Pro Max 256GB B/U',
+          store_code: '02',
+          store_name: 'Samarqand darboza sklad',
+          on_hand: 1,
+          sale_price: 1144,
+          item_group_name: 'Phones',
+          model: 'iPhone 15',
+          device_type: 'Pro Max',
+          color: null,
+          memory: '256GB',
+          condition: 'B/U',
+          sim_type: null,
+        },
+      ],
+      suggestions: null,
+    };
+  }) as typeof SupportItemAvailabilityService.lookupAvailableItems;
+
+  SupportInstallmentService.calculateMonthlyInstallment = (async (params) => {
+    calculatorCalls.push(params);
+
+    return {
+      ok: true,
+      error: null,
+      lookup: {
+        imei: params.imei || null,
+        item_code: params.itemCode || null,
+        used: 'item_code',
+      },
+      months: params.months,
+      down_payment: params.downPayment || 0,
+      product: {
+        imei: params.imei || null,
+        item_code: params.itemCode || 'APPLE1886',
+        item_name: 'iPhone 15 Pro Max 256GB B/U',
+        store_code: '02',
+        store_name: 'Samarqand darboza sklad',
+        on_hand: 1,
+        sale_price: 1144,
+        purchase_price: 1144,
+        model: 'iPhone 15',
+        device_type: 'Pro Max',
+        memory: '256GB',
+        color: null,
+        sim_type: null,
+        condition: 'B/U',
+      },
+      percentage: 70,
+      sale_price: 1144,
+      purchase_price: 1144,
+      actual_price: 16000000,
+      price_source: 'PurchasePrice',
+      financed_amount: 11000000,
+      monthly_installment: 1246667,
+    };
+  }) as typeof SupportInstallmentService.calculateMonthlyInstallment;
+
+  GeminiService.generateJsonWithTools = (async (params) => {
+    capturedPrompt = params.prompt;
+    capturedToolNames = params.tools.map((tool) => tool.declaration.name);
+
+    return {
+      reply_text:
+        "Yana tekshirdim: shu iPhone 15 Pro Max B/U uchun 15 oyga oylik to'lov 1 246 667 so'm.",
+      should_escalate: false,
+      escalation_reason: '',
+    };
+  }) as typeof GeminiService.generateJsonWithTools;
+
+  try {
+    await SupportAgentService.generateReply({
+      user: makeUser(),
+      history: [
+        {
+          id: 1,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text: 'iPhone 15 Pro Max B/U (ishlatilgan), xotirasi 256GB. Shunaqasi bormi ?',
+          photo_file_id: null,
+          telegram_message_id: 111,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 2,
+          ticket_id: 99,
+          sender_type: 'agent',
+          message_text:
+            'Siz so‘ragan iPhone 15 Pro Max 256GB B/U modelimizdan 1 dona qolgan. Narxi: 1144 USD.',
+          photo_file_id: null,
+          telegram_message_id: 112,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 3,
+          ticket_id: 99,
+          sender_type: 'user',
+          message_text:
+            "Mana shu telefonni 15 oyga bo'lib to'lashga olsam, oyiga necha puldan to'lov qilaman ? Boshiga 5 mln. so'm beraman",
+          photo_file_id: null,
+          telegram_message_id: 113,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+        {
+          id: 4,
+          ticket_id: 99,
+          sender_type: 'agent',
+          message_text:
+            "Kechirasiz, B/U modelimiz bo‘yicha bo‘lib to‘lash imkoniyati hozircha mavjud emas. Yangi iPhone 17 Pro Max uchun 15 oy davomida boshlang'ich to'lov 1 000 000 so'm bo'lishi mumkin.",
+          photo_file_id: null,
+          telegram_message_id: 114,
+          group_message_id: null,
+          created_at: new Date(),
+        },
+      ],
+      latestUserMessage: "Balki yana bir tekshirib ko'rarsiz. O'sha bo'lgani yaxshi",
+    });
+
+    assert.deepEqual(lookupQueries, ['iphone 15 pro max 256gb used']);
+    assert.deepEqual(calculatorCalls[0], {
+      imei: null,
+      itemCode: 'APPLE1886',
+      months: 15,
+      downPayment: 5000000,
+    });
+    assert.ok(capturedToolNames.includes('calculate_installment_price'));
+    assert.match(capturedPrompt, /Installment pre-check:/);
+    assert.match(capturedPrompt, /"source": "history_carryover"/);
+    assert.match(capturedPrompt, /"monthly_installment": 1246667/);
+    assert.match(capturedPrompt, /previous assistant message alone is not a policy source/i);
+  } finally {
+    GeminiService.generateJsonWithTools = originalGenerateJsonWithTools;
+    SupportItemAvailabilityService.lookupAvailableItems = originalLookupAvailableItems;
+    SupportInstallmentService.calculateMonthlyInstallment = originalCalculateMonthlyInstallment;
   }
 });
 
