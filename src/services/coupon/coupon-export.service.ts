@@ -1,9 +1,9 @@
 import ExcelJS from 'exceljs';
-import { CouponService } from './coupon.service';
+import { CouponExportMode, CouponService } from './coupon.service';
 
 export class CouponExportService {
-  static async exportCouponsToExcel(): Promise<Buffer> {
-    const coupons = await CouponService.getCouponsForExport();
+  static async exportCouponsToExcel(mode: CouponExportMode = 'all'): Promise<Buffer> {
+    const coupons = await CouponService.getCouponsForExport(mode);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Probox Bot';
     workbook.created = new Date();

@@ -38,10 +38,12 @@ import {
     ADMIN_PROMOTION_TOGGLE_CALLBACK_PREFIX,
     ADMIN_PROMOTION_ASSIGN_COUPONS_TOGGLE_CALLBACK_PREFIX,
     ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX,
+    ADMIN_COUPON_EXPORT_CALLBACK_PREFIX,
+    getAdminCouponExportModeKeyboard,
     getAdminMissingPrizeKeyboard,
 } from '../keyboards/campaign.keyboards';
 import { CouponExportService } from '../services/coupon/coupon-export.service';
-import { CouponService } from '../services/coupon/coupon.service';
+import { CouponExportMode, CouponService } from '../services/coupon/coupon.service';
 import { BotNotificationService } from '../services/bot-notification.service';
 import { MessageTemplateService } from '../services/message-template.service';
 import { minioService } from '../services/minio.service';
@@ -1283,16 +1285,44 @@ export const adminCampaignCouponExportHandler = async (ctx: BotContext) => {
         if (!await requireAdmin(ctx)) return;
 
         const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_campaign_coupon_export_choose_mode'), {
+            reply_markup: getAdminCouponExportModeKeyboard(locale),
+        });
+    } catch (error) {
+        logger.error('Error in adminCampaignCouponExportHandler:', error);
+        const locale = getLocale(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_export_error'));
+    }
+};
+
+export const adminCampaignCouponExportModeHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+
+        const locale = getLocale(ctx);
+        const mode = ctx.callbackQuery?.data?.slice(ADMIN_COUPON_EXPORT_CALLBACK_PREFIX.length) as CouponExportMode | undefined;
+
+        if (mode !== 'all' && mode !== 'registered') {
+            await ctx.answerCallbackQuery({ text: i18n.t(locale, 'admin_error'), show_alert: true }).catch(() => undefined);
+            return;
+        }
+
+        await cleanupCallbackMessage(ctx);
         const statusMsg = await ctx.reply(i18n.t(locale, 'admin_export_generating'));
-        const buffer = await CouponExportService.exportCouponsToExcel();
+        const buffer = await CouponExportService.exportCouponsToExcel(mode);
 
         await ctx.api.deleteMessage(ctx.chat!.id, statusMsg.message_id).catch(() => undefined);
 
         await ctx.replyWithDocument(new InputFile(buffer, `coupons_${new Date().toISOString().slice(0, 10)}.xlsx`), {
-            caption: i18n.t(locale, 'admin_campaign_coupon_export_ready'),
+            caption: i18n.t(
+                locale,
+                mode === 'registered'
+                    ? 'admin_campaign_coupon_export_registered_ready'
+                    : 'admin_campaign_coupon_export_all_ready',
+            ),
         });
     } catch (error) {
-        logger.error('Error in adminCampaignCouponExportHandler:', error);
+        logger.error('Error in adminCampaignCouponExportModeHandler:', error);
         const locale = getLocale(ctx);
         await ctx.reply(i18n.t(locale, 'admin_export_error'));
     }

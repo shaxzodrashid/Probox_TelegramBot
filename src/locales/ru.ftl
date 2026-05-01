@@ -523,7 +523,12 @@ admin_campaign_coupon_not_found = Купон не найден.
 admin_campaign_coupon_detail_header = 🎟 Данные купона
 admin_campaign_mark_winner = 🏆 Сделать победителем
 admin_campaign_winner_marked = Купон помечен как выигравший, уведомление отправлено.
-admin_campaign_coupon_export_ready = Excel-файл со всеми купонами готов.
+admin_campaign_coupon_export_choose_mode = Выберите режим экспорта купонов:
+admin_campaign_coupon_export_all = 📤 Экспортировать все активные
+admin_campaign_coupon_export_registered = 👤 Только зарегистрированные
+admin_campaign_coupon_export_ready = Excel-файл с купонами готов.
+admin_campaign_coupon_export_all_ready = Excel-файл со всеми активными купонами готов.
+admin_campaign_coupon_export_registered_ready = Excel-файл с активными купонами зарегистрированных пользователей готов.
 
 # Message Templates Admin
 admin_campaign_templates = 📨 Шаблоны сообщений

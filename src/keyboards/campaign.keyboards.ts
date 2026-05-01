@@ -20,6 +20,7 @@ export const ADMIN_PRIZE_IMAGE_REMOVE_CALLBACK_PREFIX = 'aprir:';
 export const ADMIN_PRIZE_CREATE_CALLBACK = 'admin_prize_create';
 export const ADMIN_PRIZE_BACK_TO_LIST_CALLBACK = 'admin_prizes_back';
 export const ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX = 'awps:';
+export const ADMIN_COUPON_EXPORT_CALLBACK_PREFIX = 'ace:';
 
 export const getPromotionsKeyboard = (promotions: Promotion[], locale: string) => {
   const keyboard = new InlineKeyboard();
@@ -75,6 +76,17 @@ export const getCouponsKeyboard = (locale: string) => {
 export const getCouponAdminKeyboard = (code: string, locale: string) =>
   new InlineKeyboard()
     .text(i18n.t(locale, 'admin_campaign_mark_winner'), `admin_coupon_mark_winner:${code}`)
+    .row()
+    .text(i18n.t(locale, 'admin_back_to_menu'), 'admin_back_to_menu');
+
+export const getAdminCouponExportModeKeyboard = (locale: string) =>
+  new InlineKeyboard()
+    .text(i18n.t(locale, 'admin_campaign_coupon_export_all'), `${ADMIN_COUPON_EXPORT_CALLBACK_PREFIX}all`)
+    .row()
+    .text(
+      i18n.t(locale, 'admin_campaign_coupon_export_registered'),
+      `${ADMIN_COUPON_EXPORT_CALLBACK_PREFIX}registered`,
+    )
     .row()
     .text(i18n.t(locale, 'admin_back_to_menu'), 'admin_back_to_menu');
 

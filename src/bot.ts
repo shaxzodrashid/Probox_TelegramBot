@@ -108,6 +108,7 @@ import {
   adminTemplatePageHandler,
   adminCampaignCouponSearchHandler,
   adminCampaignCouponExportHandler,
+  adminCampaignCouponExportModeHandler,
   adminCouponMarkWinnerHandler,
   adminWinnerPrizeSelectHandler,
   adminFaqSectionHandler,
@@ -149,6 +150,7 @@ import {
   ADMIN_PROMOTION_TOGGLE_CALLBACK_PREFIX,
   ADMIN_PROMOTION_ASSIGN_COUPONS_TOGGLE_CALLBACK_PREFIX,
   ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX,
+  ADMIN_COUPON_EXPORT_CALLBACK_PREFIX,
 } from './keyboards/campaign.keyboards';
 import {
   ADMIN_BRANCH_DEACTIVATE_CALLBACK_PREFIX,
@@ -592,6 +594,10 @@ bot.callbackQuery(/^admin_coupon_mark_winner:.+$/, adminCouponMarkWinnerHandler)
 bot.callbackQuery(
   new RegExp(`^${ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX}.+`),
   adminWinnerPrizeSelectHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_COUPON_EXPORT_CALLBACK_PREFIX}(all|registered)$`),
+  adminCampaignCouponExportModeHandler,
 );
 bot.callbackQuery(/^promotion_detail:\d+$/, promotionDetailHandler);
 bot.callbackQuery('campaign_open_coupons', couponsHandler);

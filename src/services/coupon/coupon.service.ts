@@ -50,6 +50,8 @@ export interface CouponInstallmentPair {
   installmentId: number;
 }
 
+export type CouponExportMode = 'all' | 'registered';
+
 export interface RepairablePaymentOnTimeCoupon extends Coupon {
   user_id?: number | null;
 }
@@ -471,7 +473,7 @@ export class CouponService {
     return coupon || null;
   }
 
-  static async getCouponsForExport(): Promise<CouponExportRow[]> {
+  static async getCouponsForExport(mode: CouponExportMode = 'all'): Promise<CouponExportRow[]> {
     const schemaState = await this.getCouponPromotionSchemaState();
     const query = db('coupons')
       .leftJoin('coupon_user_mappings as mapping', 'mapping.coupon_id', 'coupons.id')
@@ -502,6 +504,12 @@ export class CouponService {
       );
     }
 
-    return query.whereNot('coupons.status', 'expired').orderBy('coupons.created_at', 'desc');
+    query.where('coupons.status', 'active').andWhere('coupons.is_active', true);
+
+    if (mode === 'registered') {
+      query.whereNotNull('users.id');
+    }
+
+    return query.orderBy('coupons.created_at', 'desc');
   }
 }
