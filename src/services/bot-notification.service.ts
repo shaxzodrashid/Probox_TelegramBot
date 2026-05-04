@@ -138,4 +138,38 @@ export class BotNotificationService {
       return { delivered: false, dispatchLogId, error: errorMessage };
     }
   }
+
+  static async sendDirectMessage(params: {
+    user: User;
+    text: string;
+    dispatchType: string;
+  }): Promise<NotificationResult> {
+    try {
+      const bot = await this.getBot();
+      await bot.api.sendMessage(params.user.telegram_id, params.text, { parse_mode: 'HTML' });
+      await UserService.unblockUserIfBlocked(params.user.telegram_id);
+
+      const dispatchLogId = await this.writeDispatchLog({
+        userId: params.user.id,
+        dispatchType: params.dispatchType,
+        status: 'sent',
+      });
+
+      return { delivered: true, dispatchLogId };
+    } catch (error) {
+      if (isUserBlockedError(error)) {
+        await UserService.markUserAsBlocked(params.user.telegram_id);
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const dispatchLogId = await this.writeDispatchLog({
+        userId: params.user.id,
+        dispatchType: params.dispatchType,
+        status: 'failed',
+        errorMessage,
+      });
+
+      return { delivered: false, dispatchLogId, error: errorMessage };
+    }
+  }
 }

@@ -38,6 +38,24 @@ export function normalizeUzPhoneOrNull(phone: string | null | undefined): string
 }
 
 /**
+ * Strictly normalize Uzbekistan phone number to +998XXXXXXXXX format.
+ * Throws error if format is invalid.
+ */
+export function strictNormalizeUzPhone(phone: string): string {
+  const digits = extractDigits(phone);
+
+  if (digits.length === 9) {
+    return `+998${digits}`;
+  }
+
+  if (digits.length === 12 && digits.startsWith('998')) {
+    return `+${digits}`;
+  }
+
+  throw new Error('Invalid Uzbekistan phone number');
+}
+
+/**
  * Format phone number to +998XXXXXXXXX schema
  */
 export function formatUzPhone(phone: string | null | undefined): string {

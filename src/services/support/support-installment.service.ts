@@ -36,6 +36,8 @@ const normalizeOptionalText = (value: unknown): string | null => {
 
 const roundMoney = (value: number): number => Math.round(value);
 
+const roundToNearestThousand = (value: number): number => Math.round(value / 1000) * 1000;
+
 const getUsedProductPriceAdjustmentPercentage = (priceUsd: number): number => {
   if (priceUsd <= 500) {
     return 10;
@@ -273,7 +275,7 @@ export class SupportInstallmentService {
       actual_price: actualPrice,
       price_source: priceSource,
       financed_amount: roundMoney(financedAmount),
-      monthly_installment: roundMoney(monthlyInstallment),
+      monthly_installment: roundToNearestThousand(monthlyInstallment),
     };
   }
 

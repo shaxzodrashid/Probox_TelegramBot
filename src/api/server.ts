@@ -6,6 +6,7 @@ import { registerApiErrorHandlers } from './errors/error-handler';
 import { requireApiKey } from './middlewares/api-key.middleware';
 import { couponRoutes } from './routes/coupons.routes';
 import { purchasePdfDeliveryRoutes } from './routes/purchase-pdf-delivery.routes';
+import { botRoutes } from './routes/bot.routes';
 
 const parseCorsOrigin = (value: string): true | string[] | undefined => {
   const trimmed = value.trim();
@@ -47,6 +48,7 @@ export const createApiServer = async (): Promise<FastifyInstance> => {
 
         await protectedApi.register(couponRoutes, { prefix: '/coupons' });
         await protectedApi.register(purchasePdfDeliveryRoutes, { prefix: '/purchase-pdfs' });
+        await protectedApi.register(botRoutes, { prefix: '/bot' });
       });
     },
     { prefix: config.API_PREFIX },
