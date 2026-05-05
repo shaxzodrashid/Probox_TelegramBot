@@ -16,6 +16,25 @@ export const LOCAL_CURRENCY = 'UZS';
 export const normalizeCurrencyCode = (currency: string | null | undefined): string =>
   currency?.trim().toUpperCase() || LOCAL_CURRENCY;
 
+export const getDocumentTotalByCurrency = (
+  currency: string | null | undefined,
+  docTotal?: number | string | null,
+  docTotalFC?: number | string | null,
+  fallbackTotal?: number | string | null,
+): number => {
+  const normalizedCurrency = normalizeCurrencyCode(currency);
+
+  if (normalizedCurrency === LOCAL_CURRENCY && docTotalFC !== null && docTotalFC !== undefined) {
+    return parseNumericAmount(docTotalFC);
+  }
+
+  if (normalizedCurrency === 'USD' && docTotal !== null && docTotal !== undefined) {
+    return parseNumericAmount(docTotal);
+  }
+
+  return parseNumericAmount(fallbackTotal);
+};
+
 export const getInstallmentDisplayCurrency = (
   documentCurrency: string,
   installmentAmount?: number | string | null,

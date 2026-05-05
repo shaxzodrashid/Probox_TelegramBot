@@ -3,6 +3,7 @@ import { HanaService } from '../sap/hana.service';
 import { formatItemsList } from '../utils/formatting/items-formatter.util';
 import { Contract } from '../data/contracts.mock';
 import {
+  getDocumentTotalByCurrency,
   getInstallmentDisplayCurrency,
   normalizeCurrencyCode,
   parseNumericAmount,
@@ -42,8 +43,13 @@ export class ContractService {
 
     for (const inst of installments) {
       const sourceCurrency = normalizeCurrencyCode(inst.DocCur);
-      const documentCurrencyAmount = parseNumericAmount(inst.Total);
       const documentCurrency = normalizeCurrencyCode(inst.TotalCurrency || sourceCurrency);
+      const documentCurrencyAmount = getDocumentTotalByCurrency(
+        documentCurrency,
+        inst.DocTotal,
+        inst.DocTotalFC,
+        inst.Total,
+      );
       const totalPaid = parseNumericAmount(inst.TotalPaid);
       const totalPaidCurrency = normalizeCurrencyCode(inst.TotalPaidCurrency || documentCurrency);
 

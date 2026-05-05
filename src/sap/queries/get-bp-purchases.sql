@@ -37,6 +37,7 @@ inv_base AS (
     I."DocTotalFC",
     I."PaidToDate",
     I."PaidFC",
+    I."PaidSys",
     I."CANCELED"
   FROM {{schema}}."OINV" I
   WHERE I."CANCELED" = 'N'
@@ -127,18 +128,31 @@ SELECT
   B."DocCur",
   B."DocTotal"    AS "DocTotal",
   B."DocTotalFC"  AS "DocTotalFC",
-  B."DocTotal"    AS "Total",
+  CASE
+    WHEN UPPER(TRIM(B."DocCur")) = 'UZS' THEN COALESCE(B."DocTotalFC", B."DocTotal")
+    WHEN UPPER(TRIM(B."DocCur")) = 'USD' THEN B."DocTotal"
+    ELSE B."DocTotal"
+  END             AS "Total",
   B."DocCur"      AS "TotalCurrency",
-  B."PaidToDate"  AS "TotalPaid",
+  CASE
+    WHEN UPPER(TRIM(B."DocCur")) = 'UZS' THEN COALESCE(B."PaidFC", B."PaidSys", B."PaidToDate")
+    ELSE B."PaidToDate"
+  END             AS "TotalPaid",
   B."DocCur"      AS "TotalPaidCurrency",
 
   -- Installment info (INV6)
   S."InstlmntID",
   S."DueDate"     AS "InstDueDate",
-  S."InsTotal"    AS "InstTotal",
+  CASE
+    WHEN UPPER(TRIM(B."DocCur")) = 'UZS' THEN COALESCE(S."InsTotalFC", S."InsTotalSy", S."InsTotal")
+    ELSE S."InsTotal"
+  END             AS "InstTotal",
   B."DocCur"      AS "InstCurrency",
 
-  S."PaidToDate"  AS "InstPaidToDate",
+  CASE
+    WHEN UPPER(TRIM(B."DocCur")) = 'UZS' THEN COALESCE(S."PaidFC", S."PaidSys", S."PaidToDate")
+    ELSE S."PaidToDate"
+  END             AS "InstPaidToDate",
   S."Status"      AS "InstStatus",
   PAY."FullyPaidDate" AS "InstFullyPaidDate",
 

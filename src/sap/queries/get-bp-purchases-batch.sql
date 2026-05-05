@@ -57,15 +57,28 @@ SELECT
   OINV."DocCur" AS "DocCur",
   OINV."DocTotal" AS "DocTotal",
   OINV."DocTotalFC" AS "DocTotalFC",
-  OINV."DocTotal" AS "Total",
+  CASE
+    WHEN UPPER(TRIM(OINV."DocCur")) = 'UZS' THEN COALESCE(OINV."DocTotalFC", OINV."DocTotal")
+    WHEN UPPER(TRIM(OINV."DocCur")) = 'USD' THEN OINV."DocTotal"
+    ELSE OINV."DocTotal"
+  END AS "Total",
   OINV."DocCur" AS "TotalCurrency",
-  OINV."PaidToDate" AS "TotalPaid",
+  CASE
+    WHEN UPPER(TRIM(OINV."DocCur")) = 'UZS' THEN COALESCE(OINV."PaidFC", OINV."PaidSys", OINV."PaidToDate")
+    ELSE OINV."PaidToDate"
+  END AS "TotalPaid",
   OINV."DocCur" AS "TotalPaidCurrency",
   INV6."InstlmntID" AS "InstlmntID",
   INV6."DueDate" AS "InstDueDate",
-  INV6."InsTotal" AS "InstTotal",
+  CASE
+    WHEN UPPER(TRIM(OINV."DocCur")) = 'UZS' THEN COALESCE(INV6."InsTotalFC", INV6."InsTotalSy", INV6."InsTotal")
+    ELSE INV6."InsTotal"
+  END AS "InstTotal",
   OINV."DocCur" AS "InstCurrency",
-  INV6."PaidToDate" AS "InstPaidToDate",
+  CASE
+    WHEN UPPER(TRIM(OINV."DocCur")) = 'UZS' THEN COALESCE(INV6."PaidFC", INV6."PaidSys", INV6."PaidToDate")
+    ELSE INV6."PaidToDate"
+  END AS "InstPaidToDate",
   INV6."Status" AS "InstStatus",
   PAY."FullyPaidDate" AS "InstFullyPaidDate",
   COALESCE(items."itemsPairs", '') AS "itemsPairs"

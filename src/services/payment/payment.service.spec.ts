@@ -320,6 +320,75 @@ test('PaymentService maps docTotal and docTotalFC', { concurrency: false }, asyn
   }
 });
 
+test('PaymentService chooses display total from DocTotalFC for UZS and DocTotal for USD', {
+  concurrency: false,
+}, async () => {
+  const paymentServiceClass = PaymentService as unknown as {
+    sapService: {
+      getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
+      getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+    };
+  };
+  const originalGetPurchases = paymentServiceClass.sapService.getBPpurchasesByCardCode;
+  const originalGetLatestExchangeRate = paymentServiceClass.sapService.getLatestExchangeRate;
+
+  try {
+    paymentServiceClass.sapService.getBPpurchasesByCardCode = async () => [
+      {
+        DocEntry: 101,
+        DocNum: 901,
+        CardCode: 'C001',
+        CardName: 'UZS Buyer',
+        DocDate: '2026-04-01',
+        DocDueDate: '2026-05-01',
+        DocCur: 'UZS',
+        DocTotal: 12_500_000,
+        DocTotalFC: 1_000,
+        Total: 12_500_000,
+        TotalPaid: 0,
+        InstlmntID: 1,
+        InstDueDate: '2026-05-01',
+        InstTotal: 1_000,
+        InstPaidSys: 0,
+        InstStatus: 'O',
+        itemsPairs: 'IT01::Item::1000',
+      },
+      {
+        DocEntry: 102,
+        DocNum: 902,
+        CardCode: 'C001',
+        CardName: 'USD Buyer',
+        DocDate: '2026-04-01',
+        DocDueDate: '2026-05-01',
+        DocCur: 'USD',
+        DocTotal: 2_000,
+        DocTotalFC: 25_000_000,
+        Total: 25_000_000,
+        TotalPaid: 0,
+        InstlmntID: 1,
+        InstDueDate: '2026-05-01',
+        InstTotal: 2_000,
+        InstPaidSys: 0,
+        InstStatus: 'O',
+        itemsPairs: 'IT02::Item::2000',
+      },
+    ];
+    paymentServiceClass.sapService.getLatestExchangeRate = async () => 12_500;
+
+    const payments = await PaymentService.getPaymentsByCardCode('C001');
+    const uzsPayment = payments.find((payment) => payment.id === '101');
+    const usdPayment = payments.find((payment) => payment.id === '102');
+
+    assert.equal(uzsPayment?.total, 1_000);
+    assert.equal(uzsPayment?.currency, 'UZS');
+    assert.equal(usdPayment?.total, 2_000);
+    assert.equal(usdPayment?.currency, 'USD');
+  } finally {
+    paymentServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
+    paymentServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
+  }
+});
+
 test(
   'PaymentService keeps USD contracts in SAP document currency for paid totals and installments',
   { concurrency: false },

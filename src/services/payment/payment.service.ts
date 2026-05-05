@@ -2,6 +2,7 @@ import { SapService } from '../../sap/sap-hana.service';
 import { HanaService } from '../../sap/hana.service';
 import { PaymentContract, PaymentItem } from '../../interfaces/payment.interface';
 import {
+  getDocumentTotalByCurrency,
   getInstallmentDisplayCurrency,
   normalizeCurrencyCode,
   parseNumericAmount,
@@ -118,8 +119,13 @@ export class PaymentService {
 
     for (const inst of installments) {
       const sourceCurrency = normalizeCurrencyCode(inst.DocCur);
-      const documentCurrencyAmount = parseNumericAmount(inst.Total);
       const documentCurrency = normalizeCurrencyCode(inst.TotalCurrency || sourceCurrency);
+      const documentCurrencyAmount = getDocumentTotalByCurrency(
+        documentCurrency,
+        inst.DocTotal,
+        inst.DocTotalFC,
+        inst.Total,
+      );
       const totalPaid = parseNumericAmount(inst.TotalPaid);
       const totalPaidCurrency = normalizeCurrencyCode(inst.TotalPaidCurrency || documentCurrency);
       const items = this.parseItemsPairs(inst.itemsPairs);

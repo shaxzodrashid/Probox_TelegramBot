@@ -26,7 +26,7 @@ async function main() {
 
         console.log(`\n--- 📦 [1/2] Fetching Installments for DocEntry: ${docEntry} ---`);
         const testInstSql = `
-            SELECT T0."InstlmntID", T0."DueDate" as "InstDueDate", T0."InsTotalSy" as "InstTotal", T0."PaidSys" as "InstPaidSys", T0."Status" as "InstStatus", T1."DocCur" as "Currency"
+            SELECT T0."InstlmntID", T0."DueDate" as "InstDueDate", T0."InsTotalSy" as "InstTotal", T0."PaidSys" as "InstPaidSys", T0."Status" as "InstStatus", T1."DocCur" as "Currency", T1."DocTotalFC", T1."DocTotal"
             FROM ${schema}."INV6" T0
             INNER JOIN ${schema}."OINV" T1 ON T0."DocEntry" = T1."DocEntry"
             WHERE T0."DocEntry" = ?

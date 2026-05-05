@@ -153,6 +153,75 @@ test('ContractService leaves non-USD contracts unchanged', { concurrency: false 
   }
 });
 
+test('ContractService chooses display total from DocTotalFC for UZS and DocTotal for USD', {
+  concurrency: false,
+}, async () => {
+  const contractServiceClass = ContractService as unknown as {
+    sapService: {
+      getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
+      getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+    };
+  };
+  const originalGetPurchases = contractServiceClass.sapService.getBPpurchasesByCardCode;
+  const originalGetLatestExchangeRate = contractServiceClass.sapService.getLatestExchangeRate;
+
+  try {
+    contractServiceClass.sapService.getBPpurchasesByCardCode = async () => [
+      {
+        DocEntry: 25,
+        DocNum: 6025,
+        CardCode: 'C012',
+        CardName: 'UZS Contract Buyer',
+        DocDate: '2026-04-01',
+        DocDueDate: '2026-05-01',
+        DocCur: 'UZS',
+        DocTotal: 12_500_000,
+        DocTotalFC: 1_000,
+        Total: 12_500_000,
+        TotalPaid: 0,
+        InstlmntID: 1,
+        InstDueDate: '2026-05-01',
+        InstTotal: 1_000,
+        InstPaidSys: 0,
+        InstStatus: 'O',
+        itemsPairs: 'TV01::TV::1000',
+      },
+      {
+        DocEntry: 26,
+        DocNum: 6026,
+        CardCode: 'C012',
+        CardName: 'USD Contract Buyer',
+        DocDate: '2026-04-01',
+        DocDueDate: '2026-05-01',
+        DocCur: 'USD',
+        DocTotal: 2_000,
+        DocTotalFC: 25_000_000,
+        Total: 25_000_000,
+        TotalPaid: 0,
+        InstlmntID: 1,
+        InstDueDate: '2026-05-01',
+        InstTotal: 2_000,
+        InstPaidSys: 0,
+        InstStatus: 'O',
+        itemsPairs: 'TV02::TV::2000',
+      },
+    ];
+    contractServiceClass.sapService.getLatestExchangeRate = async () => 12_500;
+
+    const contracts = await ContractService.getContractsByCardCode('C012');
+    const uzsContract = contracts.find((contract) => contract.id === '25');
+    const usdContract = contracts.find((contract) => contract.id === '26');
+
+    assert.equal(uzsContract?.totalAmount, 1_000);
+    assert.equal(uzsContract?.currency, 'UZS');
+    assert.equal(usdContract?.totalAmount, 2_000);
+    assert.equal(usdContract?.currency, 'USD');
+  } finally {
+    contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
+    contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
+  }
+});
+
 test(
   'ContractService prefers jshshir lookup when it is available',
   { concurrency: false },

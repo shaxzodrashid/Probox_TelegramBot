@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getInstallmentDisplayCurrency, parseNumericAmount } from './currency-conversion.util';
+import {
+  getDocumentTotalByCurrency,
+  getInstallmentDisplayCurrency,
+  parseNumericAmount,
+} from './currency-conversion.util';
 
 test('parseNumericAmount keeps valid numeric amounts', () => {
   assert.equal(parseNumericAmount(100), 100);
@@ -28,4 +32,12 @@ test('getInstallmentDisplayCurrency preserves document currency for document-sca
 
 test('getInstallmentDisplayCurrency falls back to UZS for local-scale USD installment amounts', () => {
   assert.equal(getInstallmentDisplayCurrency('USD', 1_250_000, 100), 'UZS');
+});
+
+test('getDocumentTotalByCurrency uses DocTotalFC for UZS documents', () => {
+  assert.equal(getDocumentTotalByCurrency('UZS', 12_500_000, 1_000, 12_500_000), 1_000);
+});
+
+test('getDocumentTotalByCurrency uses DocTotal for USD documents', () => {
+  assert.equal(getDocumentTotalByCurrency('USD', 1_000, 12_500_000, 12_500_000), 1_000);
 });
