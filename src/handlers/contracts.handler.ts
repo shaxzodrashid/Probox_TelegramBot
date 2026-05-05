@@ -159,6 +159,9 @@ const buildContractDetailMessage = async (contract: Contract, locale: string) =>
   }
 
   const keyboard = new InlineKeyboard();
+  logger.info(
+    `[CONTRACTS] Resolving purchase PDF for contract id=${contract.id}, contractNumber=${contract.contractNumber}`,
+  );
   const pdfUrl = await PurchasePdfService.getPurchasePdfUrl(contract.contractNumber);
 
   if (pdfUrl) {
