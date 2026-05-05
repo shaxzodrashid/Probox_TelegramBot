@@ -159,7 +159,7 @@ const buildContractDetailMessage = async (contract: Contract, locale: string) =>
   }
 
   const keyboard = new InlineKeyboard();
-  const pdfUrl = await PurchasePdfService.getPurchasePdfUrl(contract.id);
+  const pdfUrl = await PurchasePdfService.getPurchasePdfUrl(contract.contractNumber);
 
   if (pdfUrl) {
     keyboard.url(i18n.t(locale, 'contracts_download_pdf'), pdfUrl);
