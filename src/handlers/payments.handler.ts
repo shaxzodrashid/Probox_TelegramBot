@@ -32,6 +32,11 @@ const getStatusEmoji = (status: 'paid' | 'incomplete' | 'overdue' | 'future'): s
   }
 };
 
+const getDocumentTotalForDisplay = (payment: PaymentContract) => ({
+  amount: payment.total,
+  currency: payment.currency,
+});
+
 /**
  * Builds the payment detail message
  */
@@ -63,20 +68,25 @@ const buildPaymentDetailMessage = (payment: PaymentContract, locale: string) => 
     '\n\n';
 
   // Totals
+  const documentTotal = getDocumentTotalForDisplay(payment);
+
   text +=
     i18n.t(locale, 'payments_total_label', {
-      amount: escapeHtml(formatCurrency(payment.total, payment.currency)),
+      amount: escapeHtml(formatCurrency(documentTotal.amount, documentTotal.currency)),
     }) + '\n';
   text +=
     i18n.t(locale, 'payments_paid_label', {
-      amount: escapeHtml(formatCurrency(payment.totalPaid, payment.currency)),
+      amount: escapeHtml(formatCurrency(payment.totalPaid, payment.totalPaidCurrency)),
     }) + '\n';
 
-  const remaining = payment.total - payment.totalPaid;
+  const remaining =
+    documentTotal.currency === payment.totalPaidCurrency
+      ? documentTotal.amount - payment.totalPaid
+      : 0;
   if (remaining > 0) {
     text +=
       i18n.t(locale, 'payments_remaining_label', {
-        amount: escapeHtml(formatCurrency(remaining, payment.currency)),
+        amount: escapeHtml(formatCurrency(remaining, payment.totalPaidCurrency)),
       }) + '\n';
   }
 
@@ -89,12 +99,12 @@ const buildPaymentDetailMessage = (payment: PaymentContract, locale: string) => 
   payment.installments.forEach((inst, index) => {
     const emoji = getStatusEmoji(inst.status);
     const date = formatDate(inst.dueDate);
-    const total = formatCurrency(inst.total, payment.currency);
+    const total = formatCurrency(inst.total, inst.currency);
 
     let line = `${emoji} ${index + 1}. ${date} — `;
 
     if (inst.status === 'incomplete') {
-      const paid = formatCurrency(inst.paid, payment.currency);
+      const paid = formatCurrency(inst.paid, inst.currency);
       line += `${paid} / ${total}`;
     } else {
       line += `${total}`;

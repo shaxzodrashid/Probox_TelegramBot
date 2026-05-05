@@ -116,7 +116,7 @@ test('SapService getBPpurchasesByCardCode forwards the card code to SAP', async 
       InstlmntID: 1,
       InstDueDate: '2026-04-30',
       InstTotal: 100,
-      InstPaidToDate: 0,
+      InstPaidSys: 0,
       InstStatus: 'open',
       itemsPairs: 'IP16::iPhone 16::100',
     },

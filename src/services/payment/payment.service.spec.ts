@@ -3,7 +3,7 @@ import test from 'node:test';
 import { PaymentService } from './payment.service';
 
 test(
-  'PaymentService converts USD contracts to UZS display amounts',
+  'PaymentService preserves USD display currency without exchange-rate conversion',
   { concurrency: false },
   async () => {
     const paymentServiceClass = PaymentService as unknown as {
@@ -40,14 +40,16 @@ test(
       const payments = await PaymentService.getPaymentsByCardCode('C001');
 
       assert.equal(payments.length, 1);
-      assert.equal(payments[0].currency, 'UZS');
-      assert.equal(payments[0].displayCurrency, 'UZS');
+      assert.equal(payments[0].currency, 'USD');
+      assert.equal(payments[0].displayCurrency, 'USD');
       assert.equal(payments[0].sourceCurrency, 'USD');
-      assert.equal(payments[0].total, 1_250_000);
-      assert.equal(payments[0].totalPaid, 312_500);
-      assert.equal(payments[0].allItems[0].price, 1_250_000);
-      assert.equal(payments[0].installments[0].total, 1_250_000);
-      assert.equal(payments[0].installments[0].paid, 312_500);
+      assert.equal(payments[0].total, 100);
+      assert.equal(payments[0].totalPaid, 25);
+      assert.equal(payments[0].totalPaidCurrency, 'USD');
+      assert.equal(payments[0].allItems[0].price, 100);
+      assert.equal(payments[0].installments[0].total, 100);
+      assert.equal(payments[0].installments[0].paid, 25);
+      assert.equal(payments[0].installments[0].currency, 'USD');
     } finally {
       paymentServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
       paymentServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
@@ -83,7 +85,7 @@ test(
           InstlmntID: 1,
           InstDueDate: '2026-05-01',
           InstTotal: 100,
-          InstPaidToDate: 0,
+          InstPaidSys: 0,
           InstStatus: 'O',
           itemsPairs: 'IP16::iPhone 16::100',
         },
@@ -130,7 +132,7 @@ test('PaymentService leaves non-USD contracts unchanged', { concurrency: false }
         InstlmntID: 1,
         InstDueDate: '2026-05-01',
         InstTotal: 500000,
-        InstPaidToDate: 200000,
+        InstPaidSys: 200000,
         InstStatus: 'O',
         itemsPairs: 'TV01::TV::500000',
       },
@@ -143,7 +145,9 @@ test('PaymentService leaves non-USD contracts unchanged', { concurrency: false }
     assert.equal(payments[0].displayCurrency, 'UZS');
     assert.equal(payments[0].sourceCurrency, 'UZS');
     assert.equal(payments[0].total, 500000);
+    assert.equal(payments[0].totalPaidCurrency, 'UZS');
     assert.equal(payments[0].allItems[0].price, 500000);
+    assert.equal(payments[0].installments[0].currency, 'UZS');
   } finally {
     paymentServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
     paymentServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
@@ -188,7 +192,7 @@ test(
             InstlmntID: 1,
             InstDueDate: '2026-05-01',
             InstTotal: 600000,
-            InstPaidToDate: 100000,
+            InstPaidSys: 100000,
             InstStatus: 'O',
             itemsPairs: 'TV02::TV::600000',
           },
@@ -248,7 +252,7 @@ test(
             InstlmntID: 1,
             InstDueDate: '2026-05-01',
             InstTotal: 800000,
-            InstPaidToDate: 300000,
+            InstPaidSys: 300000,
             InstStatus: 'O',
             itemsPairs: 'TV03::TV::800000',
           },
@@ -266,6 +270,108 @@ test(
       assert.equal(payments[0].id, '14');
     } finally {
       paymentServiceClass.sapService.getBusinessPartnerByJshshir = originalGetPartnerByJshshir;
+      paymentServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
+      paymentServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
+    }
+  },
+);
+
+test('PaymentService maps docTotal and docTotalFC', { concurrency: false }, async () => {
+  const paymentServiceClass = PaymentService as unknown as {
+    sapService: {
+      getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
+      getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+    };
+  };
+  const originalGetPurchases = paymentServiceClass.sapService.getBPpurchasesByCardCode;
+  const originalGetLatestExchangeRate = paymentServiceClass.sapService.getLatestExchangeRate;
+
+  try {
+    paymentServiceClass.sapService.getBPpurchasesByCardCode = async () => [
+      {
+        DocEntry: 100,
+        DocNum: 900,
+        CardCode: 'C001',
+        CardName: 'Test Buyer',
+        DocDate: '2026-04-01',
+        DocDueDate: '2026-05-01',
+        DocCur: 'USD',
+        DocTotal: 1250000,
+        DocTotalFC: 100,
+        Total: 100,
+        TotalPaid: 25,
+        InstlmntID: 1,
+        InstDueDate: '2026-05-01',
+        InstTotal: 100,
+        InstPaidSys: 25,
+        InstStatus: 'O',
+        itemsPairs: 'IT01::Item::100',
+      },
+    ];
+    paymentServiceClass.sapService.getLatestExchangeRate = async () => 12500;
+
+    const payments = await PaymentService.getPaymentsByCardCode('C001');
+
+    assert.equal(payments[0].docTotal, 1250000);
+    assert.equal(payments[0].docTotalFC, 100);
+  } finally {
+    paymentServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
+    paymentServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
+  }
+});
+
+test(
+  'PaymentService keeps USD contracts in SAP document currency for paid totals and installments',
+  { concurrency: false },
+  async () => {
+    const paymentServiceClass = PaymentService as unknown as {
+      sapService: {
+        getBPpurchasesByCardCode: (cardCode: string) => Promise<unknown[]>;
+        getLatestExchangeRate: (currency?: string) => Promise<number | null>;
+      };
+    };
+    const originalGetPurchases = paymentServiceClass.sapService.getBPpurchasesByCardCode;
+    const originalGetLatestExchangeRate = paymentServiceClass.sapService.getLatestExchangeRate;
+
+    try {
+      paymentServiceClass.sapService.getBPpurchasesByCardCode = async () => [
+        {
+          DocEntry: 18673,
+          DocNum: 18673,
+          CardCode: 'C001',
+          CardName: 'Test Buyer',
+          DocDate: '2025-06-25',
+          DocDueDate: '2026-06-07',
+          DocCur: 'USD',
+          DocTotal: 1560,
+          DocTotalFC: 0,
+          Total: 1560,
+          TotalPaid: 1430,
+          InstlmntID: 1,
+          InstDueDate: '2025-07-07',
+          InstTotal: 130,
+          InstPaidToDate: 130,
+          InstPaidSys: 1625649.48,
+          InstStatus: 'C',
+          itemsPairs: 'MBP14::Macbook Pro M4 14-inch 16/512gb::1497.4',
+        },
+      ];
+      paymentServiceClass.sapService.getLatestExchangeRate = async () => 12513.351818496061;
+
+      const payments = await PaymentService.getPaymentsByCardCode('C001');
+
+      assert.equal(payments[0].sourceCurrency, 'USD');
+      assert.equal(payments[0].docTotal, 1560);
+      assert.equal(payments[0].currency, 'USD');
+      assert.equal(payments[0].displayCurrency, 'USD');
+      assert.equal(payments[0].total, 1560);
+      assert.equal(payments[0].totalPaid, 1430);
+      assert.equal(payments[0].totalPaidCurrency, 'USD');
+      assert.equal(payments[0].installments[0].total, 130);
+      assert.equal(payments[0].installments[0].paid, 130);
+      assert.equal(payments[0].installments[0].currency, 'USD');
+      assert.equal(payments[0].allItems[0].price, 1497.4);
+    } finally {
       paymentServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
       paymentServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
     }

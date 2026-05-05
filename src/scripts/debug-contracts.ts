@@ -151,7 +151,7 @@ async function main() {
         Total: row.Total,
         TotalPaid: row.TotalPaid,
         InstTotal: row.InstTotal,
-        InstPaidToDate: row.InstPaidToDate,
+        InstPaidSys: row.InstPaidSys,
       })),
     );
 

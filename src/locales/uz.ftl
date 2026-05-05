@@ -10,8 +10,10 @@ help_button = Yordam
 about_button = Bot haqida
 uz_button = 🇺🇿 O'zbekcha
 ru_button = 🇷🇺 Русский
-share_phone_button = 📱 Telefon raqamini yuborish
+share_phone_button = 📱 Telefon raqamni ulashish
 ask_phone = Davom etish uchun, iltimos, telefon raqamingizni yuboring.
+phone_share_only = Iltimos, telefon raqamingizni qo'lda yozmang. Pastdagi "{ $button }" tugmasidan foydalaning.
+phone_share_own_contact = Iltimos, faqat o'zingizning Telegram kontaktingizni ulashing. Pastdagi "{ $button }" tugmasini bosing.
 phone_saved = Rahmat! Telefon raqamingiz saqlandi.
 otp_sent = Tasdiqlash kodi telefon raqamingizga yuborildi.
 otp_sent_wait = Tasdiqlash kodi telefon raqamingizga yuborildi. Agar kod kelmasa, 1 daqiqadan so'ng qayta yuborish tugmasi paydo bo'ladi.
@@ -210,6 +212,7 @@ settings_enter_last_name = Iltimos, yangi familiyangizni kiriting:
 settings_enter_phone = Iltimos, yangi telefon raqamingizni kiriting (+998XXXXXXXXX):
 settings_name_updated = ✅ Ismingiz muvaffaqiyatli o'zgartirildi!
 settings_phone_updated = ✅ Telefon raqamingiz muvaffaqiyatli o'zgartirildi!
+settings_phone_unchanged = Kechirasiz, bu sizning hozirgi telefon raqamingiz. Agar telefon raqamingizni o'zgartirgan bo'lsangiz yoki yangi SIM karta olgan bo'lsangiz, avval Telegram akkauntingiz sozlamalarida telefon raqamingizni o'zgartiring.
 
 # Registration Prompt
 registration_required = ⚠️ Bu bo'limga kirish uchun ro'yxatdan o'tishingiz kerak. Ro'yxatdan o'tish uchun quyidagi tugmani bosing.

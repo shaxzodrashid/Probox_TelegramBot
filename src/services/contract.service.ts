@@ -2,7 +2,11 @@ import { SapService } from '../sap/sap-hana.service';
 import { HanaService } from '../sap/hana.service';
 import { formatItemsList } from '../utils/formatting/items-formatter.util';
 import { Contract } from '../data/contracts.mock';
-import { convertAmountForDisplay } from '../utils/currency-conversion.util';
+import {
+  getInstallmentDisplayCurrency,
+  normalizeCurrencyCode,
+  parseNumericAmount,
+} from '../utils/currency-conversion.util';
 import { logger } from '../utils/logger';
 
 interface SapLookupIdentifiers {
@@ -32,15 +36,16 @@ export class ContractService {
     jshshir,
   }: SapLookupIdentifiers): Promise<Contract[]> {
     const installments = await this.getInstallmentsByIdentifiers({ cardCode, jshshir });
-    const usdToUzsRate = await this.getUsdToUzsRate();
 
     // Group by DocEntry to get unique contracts
     const contractsMap = new Map<number, Contract>();
 
     for (const inst of installments) {
-      const sourceCurrency = (inst.DocCur || 'UZS').trim().toUpperCase();
-      const totalAmount = convertAmountForDisplay(inst.Total, sourceCurrency, usdToUzsRate);
-      const totalPaid = convertAmountForDisplay(inst.TotalPaid, sourceCurrency, usdToUzsRate);
+      const sourceCurrency = normalizeCurrencyCode(inst.DocCur);
+      const documentCurrencyAmount = parseNumericAmount(inst.Total);
+      const documentCurrency = normalizeCurrencyCode(inst.TotalCurrency || sourceCurrency);
+      const totalPaid = parseNumericAmount(inst.TotalPaid);
+      const totalPaidCurrency = normalizeCurrencyCode(inst.TotalPaidCurrency || documentCurrency);
 
       if (!contractsMap.has(inst.DocEntry)) {
         contractsMap.set(inst.DocEntry, {
@@ -49,32 +54,32 @@ export class ContractService {
           contractNumber: this.getContractNumber(inst),
           purchaseDate: inst.DocDate,
           dueDate: inst.DocDueDate,
-          totalAmount: totalAmount.amount,
-          totalPaid: totalPaid.amount,
+          totalAmount: documentCurrencyAmount,
+          totalPaid,
+          totalPaidCurrency,
           cardName: inst.CardName,
-          currency: totalAmount.currency,
+          currency: documentCurrency,
           sourceCurrency,
-          displayCurrency: totalAmount.currency,
+          displayCurrency: documentCurrency,
+          docTotal: inst.DocTotal,
+          docTotalFC: inst.DocTotalFC,
           installments: [],
         });
       }
 
-      const installmentTotal = convertAmountForDisplay(
-        inst.InstTotal,
-        sourceCurrency,
-        usdToUzsRate,
-      ).amount;
-      const installmentPaid = convertAmountForDisplay(
-        inst.InstPaidToDate,
-        sourceCurrency,
-        usdToUzsRate,
-      ).amount;
+      const installmentTotal = parseNumericAmount(inst.InstTotal);
+      const installmentPaid = parseNumericAmount(inst.InstPaidToDate ?? inst.InstPaidSys);
+      const installmentCurrency = normalizeCurrencyCode(
+        inst.InstCurrency ||
+          getInstallmentDisplayCurrency(sourceCurrency, installmentTotal, documentCurrencyAmount),
+      );
 
       contractsMap.get(inst.DocEntry)!.installments.push({
         id: inst.InstlmntID,
         dueDate: inst.InstDueDate,
         total: installmentTotal,
         paid: installmentPaid || 0,
+        currency: installmentCurrency,
         status: inst.InstStatus,
       });
     }
@@ -119,18 +124,6 @@ export class ContractService {
     }
 
     return this.sapService.getBPpurchasesByCardCode(normalizedCardCode);
-  }
-
-  private static async getUsdToUzsRate(): Promise<number | null> {
-    try {
-      return await this.sapService.getLatestExchangeRate('UZS');
-    } catch (error) {
-      this.logger.warn(
-        '⚠️ [CONTRACTS] Falling back to source currency because USD/UZS rate is unavailable',
-        error,
-      );
-      return null;
-    }
   }
 
   /**

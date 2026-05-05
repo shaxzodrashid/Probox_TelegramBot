@@ -34,7 +34,9 @@ inv_base AS (
     I."DocCur",
     I."DocRate",
     I."DocTotal",
+    I."DocTotalFC",
     I."PaidToDate",
+    I."PaidFC",
     I."CANCELED"
   FROM {{schema}}."OINV" I
   WHERE I."CANCELED" = 'N'
@@ -123,13 +125,18 @@ SELECT
   B."DocDate",
   B."DocDueDate",
   B."DocCur",
+  B."DocTotal"    AS "DocTotal",
+  B."DocTotalFC"  AS "DocTotalFC",
   B."DocTotal"    AS "Total",
+  B."DocCur"      AS "TotalCurrency",
   B."PaidToDate"  AS "TotalPaid",
+  B."DocCur"      AS "TotalPaidCurrency",
 
   -- Installment info (INV6)
   S."InstlmntID",
   S."DueDate"     AS "InstDueDate",
   S."InsTotal"    AS "InstTotal",
+  B."DocCur"      AS "InstCurrency",
 
   S."PaidToDate"  AS "InstPaidToDate",
   S."Status"      AS "InstStatus",

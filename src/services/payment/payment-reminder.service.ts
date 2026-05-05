@@ -128,13 +128,15 @@ export class PaymentReminderService {
   private static buildProcessingWindow(now: Date, rewardMonthOverride?: string): ProcessingWindow {
     const todayKey = getTashkentDateKey(now);
     const todayIndex = this.toDayIndex(todayKey);
-    const rewardMonth = rewardMonthOverride || process.env.PAYMENT_REWARD_TARGET_MONTH || this.toMonthKey(now);
+    const rewardMonth =
+      rewardMonthOverride || process.env.PAYMENT_REWARD_TARGET_MONTH || this.toMonthKey(now);
     const rewardBounds = this.getMonthBounds(rewardMonth);
     const reminderWindowStart = this.addDays(todayKey, -1);
     const reminderWindowEnd = this.addDays(todayKey, 2);
 
     return {
-      dueDateFrom: rewardBounds.start < reminderWindowStart ? rewardBounds.start : reminderWindowStart,
+      dueDateFrom:
+        rewardBounds.start < reminderWindowStart ? rewardBounds.start : reminderWindowStart,
       dueDateTo: rewardBounds.end > reminderWindowEnd ? rewardBounds.end : reminderWindowEnd,
       rewardMonth,
       rewardMonthStart: rewardBounds.start,
@@ -146,11 +148,11 @@ export class PaymentReminderService {
 
   private static isInstallmentFullyPaid(installment: IPurchaseInstallment): boolean {
     const total =
-      typeof installment.InstTotal === 'string' ? Number(installment.InstTotal) : installment.InstTotal;
-    const paid =
-      typeof installment.InstPaidToDate === 'string'
-        ? Number(installment.InstPaidToDate)
-        : installment.InstPaidToDate;
+      typeof installment.InstTotal === 'string'
+        ? Number(installment.InstTotal)
+        : installment.InstTotal;
+    const rawPaid = installment.InstPaidToDate ?? installment.InstPaidSys ?? 0;
+    const paid = typeof rawPaid === 'string' ? Number(rawPaid) : rawPaid;
 
     return paid >= total;
   }
@@ -213,8 +215,8 @@ export class PaymentReminderService {
     const paymentDateKey = this.getInstallmentFullyPaidDateKey(installment);
     return Boolean(
       paymentDateKey &&
-        paymentDateKey >= window.rewardMonthStart &&
-        paymentDateKey <= window.rewardMonthEnd,
+      paymentDateKey >= window.rewardMonthStart &&
+      paymentDateKey <= window.rewardMonthEnd,
     );
   }
 
@@ -228,7 +230,10 @@ export class PaymentReminderService {
 
       map.set(user.sap_card_code, {
         user,
-        fullName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.phone_number || 'Mijoz',
+        fullName:
+          [user.first_name, user.last_name].filter(Boolean).join(' ') ||
+          user.phone_number ||
+          'Mijoz',
         locale: user.language_code || 'uz',
       });
     }
@@ -260,7 +265,9 @@ export class PaymentReminderService {
     return '';
   }
 
-  private static async fetchInstallments(window: ProcessingWindow): Promise<IPurchaseInstallment[]> {
+  private static async fetchInstallments(
+    window: ProcessingWindow,
+  ): Promise<IPurchaseInstallment[]> {
     return this.sapService.getPaymentReminderInstallments({
       dueDateFrom: window.dueDateFrom,
       dueDateTo: window.dueDateTo,
@@ -320,7 +327,9 @@ export class PaymentReminderService {
     return existingCoupon || undefined;
   }
 
-  private static async notifyAdminsAboutMissingTemplates(missingTemplates: Set<string>): Promise<void> {
+  private static async notifyAdminsAboutMissingTemplates(
+    missingTemplates: Set<string>,
+  ): Promise<void> {
     if (missingTemplates.size === 0) {
       return;
     }
@@ -340,7 +349,10 @@ export class PaymentReminderService {
           },
         );
       } catch (error) {
-        logger.error(`Failed to send missing template warning to admin ${admin.telegram_id}`, error);
+        logger.error(
+          `Failed to send missing template warning to admin ${admin.telegram_id}`,
+          error,
+        );
       }
     }
   }
@@ -493,10 +505,15 @@ export class PaymentReminderService {
       return true;
     }
 
-    const templateType = reminderType === 'overdue' ? 'payment_overdue' : `payment_reminder_${reminderType}`;
+    const templateType =
+      reminderType === 'overdue' ? 'payment_overdue' : `payment_reminder_${reminderType}`;
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
-      templateType: templateType as 'payment_overdue' | 'payment_reminder_d2' | 'payment_reminder_d1' | 'payment_reminder_d0',
+      templateType: templateType as
+        | 'payment_overdue'
+        | 'payment_reminder_d2'
+        | 'payment_reminder_d1'
+        | 'payment_reminder_d0',
       placeholders: {
         customer_name: linkedUser.fullName,
         coupon_code: '',
@@ -552,7 +569,8 @@ export class PaymentReminderService {
       ]);
 
       const linkedUsersByCardCode = this.buildLinkedUserMap(users);
-      const checkedCardCodes = new Set(installments.map((installment) => installment.CardCode)).size;
+      const checkedCardCodes = new Set(installments.map((installment) => installment.CardCode))
+        .size;
       const missingTemplates = new Set<string>();
 
       let rewardCouponsIssued = 0;

@@ -32,6 +32,11 @@ const getSapLookupIdentifiers = (user?: Pick<User, 'jshshir' | 'sap_card_code'> 
   cardCode: user?.sap_card_code?.trim() || undefined,
 });
 
+const getDocumentTotalForDisplay = (contract: Contract) => ({
+  amount: contract.totalAmount,
+  currency: contract.currency,
+});
+
 /**
  * Build the contracts list message with inline keyboard
  */
@@ -117,13 +122,15 @@ const buildContractDetailMessage = async (contract: Contract, locale: string) =>
     i18n.t(locale, 'contracts_due_date_label', { date: escapeHtml(formatDate(contract.dueDate)) }) +
     '\n\n';
 
+  const documentTotal = getDocumentTotalForDisplay(contract);
+
   text +=
     i18n.t(locale, 'contracts_total_amount_label', {
-      amount: escapeHtml(formatCurrency(contract.totalAmount, contract.currency)),
+      amount: escapeHtml(formatCurrency(documentTotal.amount, documentTotal.currency)),
     }) + '\n';
   text +=
     i18n.t(locale, 'contracts_paid_label', {
-      amount: escapeHtml(formatCurrency(contract.totalPaid, contract.currency)),
+      amount: escapeHtml(formatCurrency(contract.totalPaid, contract.totalPaidCurrency)),
     }) + '\n\n';
 
   if (nextPayment) {
@@ -134,15 +141,15 @@ const buildContractDetailMessage = async (contract: Contract, locale: string) =>
       }) + '\n';
     text +=
       i18n.t(locale, 'contracts_amount_label', {
-        amount: escapeHtml(formatCurrency(nextPayment.total, contract.currency)),
+        amount: escapeHtml(formatCurrency(nextPayment.total, nextPayment.currency)),
       }) + '\n';
 
     const remainingForInst = nextPayment.total - nextPayment.paid;
     if (nextPayment.paid > 0) {
       text +=
         i18n.t(locale, 'contracts_payment_note_paid', {
-          paid: escapeHtml(formatCurrency(nextPayment.paid, contract.currency)),
-          remaining: escapeHtml(formatCurrency(remainingForInst, contract.currency)),
+          paid: escapeHtml(formatCurrency(nextPayment.paid, nextPayment.currency)),
+          remaining: escapeHtml(formatCurrency(remainingForInst, nextPayment.currency)),
         }) + '\n';
     } else {
       text += i18n.t(locale, 'contracts_payment_note_unpaid') + '\n';

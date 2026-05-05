@@ -1,9 +1,3 @@
-export interface DisplayAmount {
-  amount: number;
-  currency: string;
-  converted: boolean;
-}
-
 export const parseNumericAmount = (amount: number | string | null | undefined): number => {
   if (typeof amount === 'number') {
     return Number.isFinite(amount) ? amount : 0;
@@ -17,34 +11,26 @@ export const parseNumericAmount = (amount: number | string | null | undefined): 
   return 0;
 };
 
-export const convertAmountForDisplay = (
-  amount: number | string | null | undefined,
-  sourceCurrency: string,
-  usdToUzsRate?: number | null,
-): DisplayAmount => {
-  const numericAmount = parseNumericAmount(amount);
-  const normalizedCurrency = sourceCurrency?.trim().toUpperCase() || 'UZS';
+export const LOCAL_CURRENCY = 'UZS';
 
-  if (normalizedCurrency !== 'USD') {
-    return {
-      amount: numericAmount,
-      currency: normalizedCurrency,
-      converted: false,
-    };
+export const normalizeCurrencyCode = (currency: string | null | undefined): string =>
+  currency?.trim().toUpperCase() || LOCAL_CURRENCY;
+
+export const getInstallmentDisplayCurrency = (
+  documentCurrency: string,
+  installmentAmount?: number | string | null,
+  documentAmount?: number | string | null,
+): string => {
+  const normalizedCurrency = normalizeCurrencyCode(documentCurrency);
+  if (normalizedCurrency === LOCAL_CURRENCY) {
+    return LOCAL_CURRENCY;
   }
 
-  const rate = parseNumericAmount(usdToUzsRate);
-  if (rate <= 0) {
-    return {
-      amount: numericAmount,
-      currency: normalizedCurrency,
-      converted: false,
-    };
+  const installment = parseNumericAmount(installmentAmount);
+  const documentTotal = parseNumericAmount(documentAmount);
+  if (documentTotal > 0 && installment > documentTotal) {
+    return LOCAL_CURRENCY;
   }
 
-  return {
-    amount: numericAmount * rate,
-    currency: 'UZS',
-    converted: true,
-  };
+  return normalizedCurrency;
 };

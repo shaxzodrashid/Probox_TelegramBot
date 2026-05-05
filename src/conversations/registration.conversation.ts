@@ -17,7 +17,7 @@ import { HanaService } from '../sap/hana.service';
 import { IBusinessPartner } from '../interfaces/business-partner.interface';
 import { getLocaleFromConversation } from '../utils/locale';
 import { isCallbackQueryExpiredError } from '../utils/telegram/telegram-errors';
-import { formatUzPhone } from '../utils/uz-phone.util';
+import { strictNormalizeUzPhone } from '../utils/uz-phone.util';
 import { sanitizeName } from '../utils/formatting/formatter.util';
 import { redisService } from '../redis/redis.service';
 import { CouponRegistrationService } from '../services/coupon/coupon-registration.service';
@@ -44,15 +44,17 @@ export async function verifySapUser(phoneNumber: string): Promise<IBusinessPartn
 }
 
 /**
- * Requests phone number from the user until a valid one is provided or /start is called.
+ * Requests the user's own Telegram contact until a valid one is shared or /start is called.
  */
 async function requestPhoneNumber(
   conversation: BotConversation,
   ctx: BotContext,
   locale: string,
 ): Promise<{ phoneNumber: string; ctx: BotContext } | null> {
+  const telegramId = ctx.from?.id;
+  const sharePhoneButtonText = i18n.t(locale, 'share_phone_button');
   const sharePhoneKeyboard = new Keyboard()
-    .requestContact(i18n.t(locale, 'share_phone_button'))
+    .requestContact(sharePhoneButtonText)
     .resized()
     .oneTime();
 
@@ -68,19 +70,34 @@ async function requestPhoneNumber(
       return null;
     }
 
-    if (message?.contact) {
-      const normalized = formatUzPhone(message.contact.phone_number);
-      return { phoneNumber: normalized, ctx: messageContext };
-    }
+    const contact = message?.contact;
+    if (contact) {
+      if (!telegramId || contact.user_id !== telegramId) {
+        await messageContext.reply(i18n.t(locale, 'phone_share_own_contact', {
+          button: sharePhoneButtonText,
+        }), {
+          reply_markup: sharePhoneKeyboard,
+        });
+        continue;
+      }
 
-    if (message?.text) {
-      const normalized = formatUzPhone(message.text);
-      if (/^\+998\d{9}$/.test(normalized)) {
-        return { phoneNumber: normalized, ctx: messageContext };
+      try {
+        return {
+          phoneNumber: strictNormalizeUzPhone(contact.phone_number),
+          ctx: messageContext,
+        };
+      } catch (error) {
+        logger.warn('Invalid phone number received from Telegram contact sharing:', {
+          phoneNumber: contact.phone_number,
+          telegramId,
+          error,
+        });
       }
     }
 
-    await messageContext.reply(i18n.t(locale, 'ask_phone'), {
+    await messageContext.reply(i18n.t(locale, 'phone_share_only', {
+      button: sharePhoneButtonText,
+    }), {
       reply_markup: sharePhoneKeyboard,
     });
   }
@@ -275,18 +292,10 @@ export async function registrationConversation(conversation: BotConversation, ct
       ctx.session.user_phone = phoneNumber;
     }
 
-    const { verified, lastCtx } = await performOtpVerification(
-      conversation,
-      phoneCtx,
-      phoneNumber,
-      locale,
-    );
-    if (!verified) return;
-
-    const user = await registerOrUpdateUser(conversation, lastCtx, phoneNumber, locale);
+    const user = await registerOrUpdateUser(conversation, phoneCtx, phoneNumber, locale);
     if (!user) return;
 
-    await lastCtx.reply(i18n.t(locale, 'phone_saved'), {
+    await phoneCtx.reply(i18n.t(locale, 'phone_saved'), {
       reply_markup: { remove_keyboard: true },
     });
 
@@ -303,18 +312,18 @@ export async function registrationConversation(conversation: BotConversation, ct
         i18n.t(locale, 'application_continue_button'),
         'continue_to_application',
       );
-      await lastCtx.reply(i18n.t(locale, 'registration_success_continue'), {
+      await phoneCtx.reply(i18n.t(locale, 'registration_success_continue'), {
         reply_markup: continueKeyboard,
       });
       return;
     }
 
     if (user.is_admin) {
-      await lastCtx.reply(i18n.t(locale, 'admin_menu_header'), {
+      await phoneCtx.reply(i18n.t(locale, 'admin_menu_header'), {
         reply_markup: getAdminMenuKeyboard(locale),
       });
     } else {
-      await lastCtx.reply(i18n.t(locale, 'welcome_message'), {
+      await phoneCtx.reply(i18n.t(locale, 'welcome_message'), {
         reply_markup: getMainKeyboardByLocale(locale, false, true),
       });
     }

@@ -3,7 +3,7 @@ import test from 'node:test';
 import { ContractService } from './contract.service';
 
 test(
-  'ContractService converts USD contracts to UZS display amounts',
+  'ContractService preserves USD display currency without exchange-rate conversion',
   { concurrency: false },
   async () => {
     const contractServiceClass = ContractService as unknown as {
@@ -40,13 +40,15 @@ test(
       const contracts = await ContractService.getContractsByCardCode('C010');
 
       assert.equal(contracts.length, 1);
-      assert.equal(contracts[0].currency, 'UZS');
-      assert.equal(contracts[0].displayCurrency, 'UZS');
+      assert.equal(contracts[0].currency, 'USD');
+      assert.equal(contracts[0].displayCurrency, 'USD');
       assert.equal(contracts[0].sourceCurrency, 'USD');
-      assert.equal(contracts[0].totalAmount, 2_500_000);
-      assert.equal(contracts[0].totalPaid, 625_000);
-      assert.equal(contracts[0].installments[0].total, 2_500_000);
-      assert.equal(contracts[0].installments[0].paid, 625_000);
+      assert.equal(contracts[0].totalAmount, 200);
+      assert.equal(contracts[0].totalPaid, 50);
+      assert.equal(contracts[0].totalPaidCurrency, 'USD');
+      assert.equal(contracts[0].installments[0].total, 200);
+      assert.equal(contracts[0].installments[0].paid, 50);
+      assert.equal(contracts[0].installments[0].currency, 'USD');
     } finally {
       contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
       contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
@@ -82,7 +84,7 @@ test(
           InstlmntID: 1,
           InstDueDate: '2026-05-01',
           InstTotal: 200,
-          InstPaidToDate: 0,
+          InstPaidSys: 0,
           InstStatus: 'O',
           itemsPairs: 'IP16::iPhone 16::200',
         },
@@ -129,7 +131,7 @@ test('ContractService leaves non-USD contracts unchanged', { concurrency: false 
         InstlmntID: 1,
         InstDueDate: '2026-05-01',
         InstTotal: 700000,
-        InstPaidToDate: 300000,
+        InstPaidSys: 300000,
         InstStatus: 'O',
         itemsPairs: 'TV01::TV::700000',
       },
@@ -142,7 +144,9 @@ test('ContractService leaves non-USD contracts unchanged', { concurrency: false 
     assert.equal(contracts[0].displayCurrency, 'UZS');
     assert.equal(contracts[0].sourceCurrency, 'UZS');
     assert.equal(contracts[0].totalAmount, 700000);
+    assert.equal(contracts[0].totalPaidCurrency, 'UZS');
     assert.equal(contracts[0].installments[0].paid, 300000);
+    assert.equal(contracts[0].installments[0].currency, 'UZS');
   } finally {
     contractServiceClass.sapService.getBPpurchasesByCardCode = originalGetPurchases;
     contractServiceClass.sapService.getLatestExchangeRate = originalGetLatestExchangeRate;
@@ -187,7 +191,7 @@ test(
             InstlmntID: 1,
             InstDueDate: '2026-05-01',
             InstTotal: 900000,
-            InstPaidToDate: 100000,
+            InstPaidSys: 100000,
             InstStatus: 'O',
             itemsPairs: 'TV02::TV::900000',
           },
@@ -247,7 +251,7 @@ test(
             InstlmntID: 1,
             InstDueDate: '2026-05-01',
             InstTotal: 750000,
-            InstPaidToDate: 250000,
+            InstPaidSys: 250000,
             InstStatus: 'O',
             itemsPairs: 'TV03::TV::750000',
           },

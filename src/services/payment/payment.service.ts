@@ -1,7 +1,11 @@
 import { SapService } from '../../sap/sap-hana.service';
 import { HanaService } from '../../sap/hana.service';
 import { PaymentContract, PaymentItem } from '../../interfaces/payment.interface';
-import { convertAmountForDisplay, parseNumericAmount } from '../../utils/currency-conversion.util';
+import {
+  getInstallmentDisplayCurrency,
+  normalizeCurrencyCode,
+  parseNumericAmount,
+} from '../../utils/currency-conversion.util';
 import { logger } from '../../utils/logger';
 
 interface SapLookupIdentifiers {
@@ -63,11 +67,11 @@ export class PaymentService {
    */
   private static getPaymentStatus(
     instTotal: number,
-    instPaidToDate: number,
+    instPaidSys: number,
     instDueDate: string,
   ): 'paid' | 'incomplete' | 'overdue' | 'future' {
     const total = typeof instTotal === 'string' ? parseFloat(instTotal) : instTotal;
-    const paid = typeof instPaidToDate === 'string' ? parseFloat(instPaidToDate) : instPaidToDate;
+    const paid = typeof instPaidSys === 'string' ? parseFloat(instPaidSys) : instPaidSys;
 
     // Fully paid
     if (paid >= total) {
@@ -108,23 +112,17 @@ export class PaymentService {
     jshshir,
   }: SapLookupIdentifiers): Promise<PaymentContract[]> {
     const installments = await this.getInstallmentsByIdentifiers({ cardCode, jshshir });
-    const usdToUzsRate = await this.getUsdToUzsRate();
 
     // Group by DocEntry to get unique contracts
     const contractsMap = new Map<number, PaymentContract>();
 
     for (const inst of installments) {
-      const sourceCurrency = (inst.DocCur || 'UZS').trim().toUpperCase();
-      const totalDisplay = convertAmountForDisplay(inst.Total, sourceCurrency, usdToUzsRate);
-      const totalPaidDisplay = convertAmountForDisplay(
-        inst.TotalPaid,
-        sourceCurrency,
-        usdToUzsRate,
-      );
-      const items = this.parseItemsPairs(inst.itemsPairs).map((item) => ({
-        ...item,
-        price: convertAmountForDisplay(item.price, sourceCurrency, usdToUzsRate).amount,
-      }));
+      const sourceCurrency = normalizeCurrencyCode(inst.DocCur);
+      const documentCurrencyAmount = parseNumericAmount(inst.Total);
+      const documentCurrency = normalizeCurrencyCode(inst.TotalCurrency || sourceCurrency);
+      const totalPaid = parseNumericAmount(inst.TotalPaid);
+      const totalPaidCurrency = normalizeCurrencyCode(inst.TotalPaidCurrency || documentCurrency);
+      const items = this.parseItemsPairs(inst.itemsPairs);
 
       if (!contractsMap.has(inst.DocEntry)) {
         contractsMap.set(inst.DocEntry, {
@@ -135,25 +133,31 @@ export class PaymentService {
           cardName: inst.CardName,
           docDate: inst.DocDate,
           dueDate: inst.DocDueDate,
-          total: totalDisplay.amount,
-          totalPaid: totalPaidDisplay.amount,
-          currency: totalDisplay.currency,
+          total: documentCurrencyAmount,
+          totalPaid,
+          totalPaidCurrency,
+          currency: documentCurrency,
           sourceCurrency,
-          displayCurrency: totalDisplay.currency,
+          displayCurrency: documentCurrency,
+          docTotal: inst.DocTotal,
+          docTotalFC: inst.DocTotalFC,
           installments: [],
         });
       }
 
       const instTotalRaw = parseNumericAmount(inst.InstTotal);
-      const instPaidRaw = parseNumericAmount(inst.InstPaidToDate);
-      const instTotal = convertAmountForDisplay(instTotalRaw, sourceCurrency, usdToUzsRate).amount;
-      const instPaid = convertAmountForDisplay(instPaidRaw, sourceCurrency, usdToUzsRate).amount;
+      const instPaidRaw = parseNumericAmount(inst.InstPaidToDate ?? inst.InstPaidSys);
+      const installmentCurrency = normalizeCurrencyCode(
+        inst.InstCurrency ||
+          getInstallmentDisplayCurrency(sourceCurrency, instTotalRaw, documentCurrencyAmount),
+      );
 
       contractsMap.get(inst.DocEntry)!.installments.push({
         id: inst.InstlmntID,
         dueDate: inst.InstDueDate,
-        total: instTotal,
-        paid: instPaid || 0,
+        total: instTotalRaw,
+        paid: instPaidRaw || 0,
+        currency: installmentCurrency,
         status: this.getPaymentStatus(instTotalRaw, instPaidRaw, inst.InstDueDate),
       });
     }
@@ -206,17 +210,5 @@ export class PaymentService {
     }
 
     return this.sapService.getBPpurchasesByCardCode(normalizedCardCode);
-  }
-
-  private static async getUsdToUzsRate(): Promise<number | null> {
-    try {
-      return await this.sapService.getLatestExchangeRate('UZS');
-    } catch (error) {
-      this.logger.warn(
-        '⚠️ [PAYMENTS] Falling back to source currency because USD/UZS rate is unavailable',
-        error,
-      );
-      return null;
-    }
   }
 }

@@ -3,6 +3,7 @@ export interface Installment {
   dueDate: string;
   total: number;
   paid: number;
+  currency: string;
   status: string;
 }
 
@@ -14,10 +15,13 @@ export interface Contract {
   dueDate: string;
   totalAmount: number;
   totalPaid: number;
+  totalPaidCurrency: string;
   cardName: string;
   currency: string;
   sourceCurrency: string;
   displayCurrency: string;
+  docTotal?: number;
+  docTotalFC?: number;
   installments: Installment[];
 }
 

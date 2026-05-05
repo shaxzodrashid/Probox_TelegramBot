@@ -1,35 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { convertAmountForDisplay, parseNumericAmount } from './currency-conversion.util';
+import { getInstallmentDisplayCurrency, parseNumericAmount } from './currency-conversion.util';
 
-test('convertAmountForDisplay converts USD amounts to UZS using the latest rate', () => {
-  const result = convertAmountForDisplay(100, 'USD', 12_500);
-
-  assert.deepEqual(result, {
-    amount: 1_250_000,
-    currency: 'UZS',
-    converted: true,
-  });
+test('parseNumericAmount keeps valid numeric amounts', () => {
+  assert.equal(parseNumericAmount(100), 100);
+  assert.equal(parseNumericAmount('150000.5'), 150000.5);
 });
 
-test('convertAmountForDisplay leaves UZS amounts unchanged', () => {
-  const result = convertAmountForDisplay(150_000, 'UZS', 12_500);
-
-  assert.deepEqual(result, {
-    amount: 150_000,
-    currency: 'UZS',
-    converted: false,
-  });
-});
-
-test('convertAmountForDisplay keeps USD when the rate is missing', () => {
-  const result = convertAmountForDisplay(100, 'USD', null);
-
-  assert.deepEqual(result, {
-    amount: 100,
-    currency: 'USD',
-    converted: false,
-  });
+test('parseNumericAmount returns zero for missing or invalid amounts', () => {
+  assert.equal(parseNumericAmount(null), 0);
+  assert.equal(parseNumericAmount(undefined), 0);
+  assert.equal(parseNumericAmount('not-a-number'), 0);
 });
 
 test('parseNumericAmount safely handles invalid and empty values', () => {
@@ -37,4 +18,14 @@ test('parseNumericAmount safely handles invalid and empty values', () => {
   assert.equal(parseNumericAmount('12.5'), 12.5);
   assert.equal(parseNumericAmount('oops'), 0);
   assert.equal(parseNumericAmount(undefined), 0);
+});
+
+test('getInstallmentDisplayCurrency preserves document currency for document-scale amounts', () => {
+  assert.equal(getInstallmentDisplayCurrency('USD'), 'USD');
+  assert.equal(getInstallmentDisplayCurrency(' usd ', 130, 1560), 'USD');
+  assert.equal(getInstallmentDisplayCurrency('UZS'), 'UZS');
+});
+
+test('getInstallmentDisplayCurrency falls back to UZS for local-scale USD installment amounts', () => {
+  assert.equal(getInstallmentDisplayCurrency('USD', 1_250_000, 100), 'UZS');
 });

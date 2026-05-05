@@ -26,10 +26,11 @@ async function main() {
 
         console.log(`\n--- 📦 [1/2] Fetching Installments for DocEntry: ${docEntry} ---`);
         const testInstSql = `
-            SELECT "InstlmntID", "DueDate" as "InstDueDate", "InsTotal" as "InstTotal", "PaidToDate" as "InstPaidToDate", "Status" as "InstStatus"
-            FROM ${schema}."INV6"
-            WHERE "DocEntry" = ?
-            ORDER BY "InstlmntID" ASC
+            SELECT T0."InstlmntID", T0."DueDate" as "InstDueDate", T0."InsTotalSy" as "InstTotal", T0."PaidSys" as "InstPaidSys", T0."Status" as "InstStatus", T1."DocCur" as "Currency"
+            FROM ${schema}."INV6" T0
+            INNER JOIN ${schema}."OINV" T1 ON T0."DocEntry" = T1."DocEntry"
+            WHERE T0."DocEntry" = ?
+            ORDER BY T0."InstlmntID" ASC
         `;
         
         const installments: any[] = await hana.executeOnce(testInstSql, [docEntry]);
@@ -49,17 +50,17 @@ async function main() {
                 const pay = payments.find((p: any) => Number(p.RCT2InstID) === Number(inst.InstlmntID));
                 
                 const dueDate = new Date(inst.InstDueDate);
-                const isPaid = Number(inst.InstPaidToDate) >= Number(inst.InstTotal);
+                const isPaid = Number(inst.InstPaidSys) >= Number(inst.InstTotal);
                 
                 let result = '';
                 if (!isPaid) {
-                    result = '❌ UNPAID';
+                    result = `❌ UNPAID (${inst.InstPaidSys} / ${inst.InstTotal} ${inst.Currency})`;
                 } else if (!pay) {
-                    result = '⚠️ PAID (but payment link not found in RCT2)';
+                    result = `⚠️ PAID (but payment link not found in RCT2) - Total: ${inst.InstTotal} ${inst.Currency}`;
                 } else {
                     const payDate = new Date(pay.FullyPaidDate as string);
                     const onTime = payDate <= dueDate;
-                    result = onTime ? '✅ ON TIME' : `🚫 LATE (Paid: ${pay.FullyPaidDate})`;
+                    result = onTime ? `✅ ON TIME (${inst.InstTotal} ${inst.Currency})` : `🚫 LATE (Paid: ${pay.FullyPaidDate}, Total: ${inst.InstTotal} ${inst.Currency})`;
                 }
                 
                 console.log(`Installment #${inst.InstlmntID} (Due: ${inst.InstDueDate}): ${result}`);
