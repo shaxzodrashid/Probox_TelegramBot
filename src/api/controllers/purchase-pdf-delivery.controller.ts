@@ -6,6 +6,7 @@ import {
 } from '../../services/purchase-pdf-delivery.service';
 import { ApiError } from '../errors/api-error';
 import { hasAdminGroupChatId } from '../../utils/telegram/admin-group-chat.util';
+import { strictNormalizeUzPhone } from '../../utils/uz-phone.util';
 
 type RawPurchasePdfDeliveryBody = Record<string, unknown>;
 
@@ -32,13 +33,28 @@ const normalizeJshshir = (...values: unknown[]): string => {
 const normalizePayload = (body: RawPurchasePdfDeliveryBody): PurchasePdfDeliveryPayload => {
   const jshshir = normalizeJshshir(body.jshshir, body.JSHSHR, body.JSSHR);
   const cardCode = getFirstString(body.cardCode, body.CardCode);
+  const phoneNumber = getFirstString(body.phone_number, body.phoneNumber, body.phone);
   const pdfUrl = getFirstString(body.pdfUrl, body['pdf-url'], body.url);
   const fileName = getFirstString(body.fileName, body.filename);
   const docEntry = getFirstString(body.docEntry, body.DocEntry);
 
+  let normalizedPhoneNumber: string | undefined;
+  if (phoneNumber) {
+    try {
+      normalizedPhoneNumber = strictNormalizeUzPhone(phoneNumber);
+    } catch {
+      throw new ApiError(
+        400,
+        'phone_number must be a valid Uzbekistan phone number.',
+        'INVALID_PHONE_NUMBER',
+      );
+    }
+  }
+
   return {
     jshshir: jshshir || undefined,
     cardCode: cardCode || undefined,
+    phoneNumber: normalizedPhoneNumber,
     pdfUrl,
     fileName: fileName || undefined,
     docEntry: docEntry || undefined,
@@ -46,10 +62,10 @@ const normalizePayload = (body: RawPurchasePdfDeliveryBody): PurchasePdfDelivery
 };
 
 export const validatePurchasePdfDeliveryPayload = (payload: PurchasePdfDeliveryPayload): void => {
-  if (!payload.jshshir && !payload.cardCode) {
+  if (!payload.jshshir && !payload.cardCode && !payload.phoneNumber) {
     throw new ApiError(
       400,
-      'Either jshshir or cardCode must be provided.',
+      'Either jshshir, cardCode, or phone_number must be provided.',
       'MISSING_PURCHASE_PDF_IDENTIFIERS',
     );
   }

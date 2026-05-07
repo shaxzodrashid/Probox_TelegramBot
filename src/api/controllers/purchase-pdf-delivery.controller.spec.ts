@@ -58,7 +58,7 @@ test('validatePurchasePdfDeliveryPayload requires at least one identifier', { co
       validatePurchasePdfDeliveryPayload({
         pdfUrl: 'https://example.com/test.pdf',
       }),
-    /Either jshshir or cardCode must be provided/,
+    /Either jshshir, cardCode, or phone_number must be provided/,
   );
 });
 
@@ -73,6 +73,31 @@ test('validatePurchasePdfDeliveryPayload requires a 14-digit jshshir', { concurr
       }),
     /jshshir must contain exactly 14 digits/,
   );
+});
+
+test('POST /purchase-pdfs/deliver rejects invalid phone_number', { concurrency: false }, async () => {
+  const { createApiServer } = await getAppModule();
+  const app = await createApiServer();
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/purchase-pdfs/deliver',
+      headers: {
+        'x-api-key': 'test-api-key',
+      },
+      payload: {
+        phone_number: '123456',
+        pdfUrl: 'https://example.com/purchase.pdf',
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
+    const body = response.json();
+    assert.equal(body.code, 'INVALID_PHONE_NUMBER');
+  } finally {
+    await app.close();
+  }
 });
 
 test('POST /purchase-pdfs/deliver normalizes alias fields and returns service result', { concurrency: false }, async () => {
@@ -94,6 +119,7 @@ test('POST /purchase-pdfs/deliver normalizes alias fields and returns service re
       identifiers: {
         jshshir: payload.jshshir,
         cardCode: payload.cardCode,
+        phoneNumber: payload.phoneNumber,
         docEntry: payload.docEntry,
       },
       user: {
@@ -121,6 +147,7 @@ test('POST /purchase-pdfs/deliver normalizes alias fields and returns service re
       payload: {
         JSSHR: '1234 5678 9012 34',
         CardCode: 'C001',
+        phone_number: '90 123 45 67',
         'pdf-url': 'https://example.com/purchase.pdf',
         docEntry: 777,
       },
@@ -130,6 +157,7 @@ test('POST /purchase-pdfs/deliver normalizes alias fields and returns service re
     assert.deepEqual(capturedPayload, {
       jshshir: '12345678901234',
       cardCode: 'C001',
+      phoneNumber: '+998901234567',
       pdfUrl: 'https://example.com/purchase.pdf',
       fileName: undefined,
       docEntry: '777',
@@ -141,6 +169,7 @@ test('POST /purchase-pdfs/deliver normalizes alias fields and returns service re
     assert.equal(body.adminGroupDelivered, true);
     assert.equal(body.identifiers.jshshir, '12345678901234');
     assert.equal(body.identifiers.cardCode, 'C001');
+    assert.equal(body.identifiers.phoneNumber, '+998901234567');
     assert.equal(body.identifiers.docEntry, '777');
   } finally {
     serviceModule.PurchasePdfDeliveryService.process = originalProcess;
@@ -163,6 +192,7 @@ test('POST /purchase-pdfs/deliver returns 502 when admin group delivery fails', 
     identifiers: {
       jshshir: payload.jshshir,
       cardCode: payload.cardCode,
+      phoneNumber: payload.phoneNumber,
       docEntry: payload.docEntry,
     },
     user: null,

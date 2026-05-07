@@ -1,17 +1,25 @@
 import axios from 'axios';
 import { InputFile } from 'grammy';
 import { bot } from '../bot';
+import { HanaService } from '../sap/hana.service';
+import { SapService } from '../sap/sap-hana.service';
+import { sanitizeName } from '../utils/formatting/formatter.util';
 import { logger } from '../utils/logger';
+import {
+  isSapBusinessPartnerAdmin,
+  selectPreferredSapBusinessPartner,
+} from '../utils/sap-business-partner.util';
 import { hasAdminGroupChatId, withAdminGroupMigrationRetry } from '../utils/telegram/admin-group-chat.util';
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import { isUserBlockedError } from '../utils/telegram/telegram-errors';
 import { User, UserService } from './user.service';
 
-export type PurchasePdfMatchBy = 'jshshir' | 'cardCode' | null;
+export type PurchasePdfMatchBy = 'jshshir' | 'cardCode' | 'phone_number' | null;
 
 export interface PurchasePdfDeliveryPayload {
   jshshir?: string;
   cardCode?: string;
+  phoneNumber?: string;
   pdfUrl: string;
   fileName?: string;
   docEntry?: string;
@@ -27,6 +35,7 @@ export interface PurchasePdfDeliveryResult {
   identifiers: {
     jshshir?: string;
     cardCode?: string;
+    phoneNumber?: string;
     docEntry?: string;
   };
   user: {
@@ -68,6 +77,7 @@ type UserDeliveryAttempt = {
 
 export class PurchasePdfDeliveryService {
   private static readonly USER_CAPTION_MAX_LENGTH = 120;
+  private static readonly sapService = new SapService(new HanaService());
 
   private static trimValue(value: string | undefined, maxLength: number = this.USER_CAPTION_MAX_LENGTH): string {
     if (!value) {
@@ -121,7 +131,7 @@ export class PurchasePdfDeliveryService {
       // Validation happens earlier, so this is only a fallback.
     }
 
-    const suffix = payload.docEntry || payload.cardCode || payload.jshshir || Date.now().toString();
+    const suffix = payload.docEntry || payload.cardCode || payload.jshshir || payload.phoneNumber || Date.now().toString();
     return this.sanitizeFileName(`purchase-${suffix}`);
   }
 
@@ -169,7 +179,52 @@ export class PurchasePdfDeliveryService {
       }
     }
 
+    if (payload.phoneNumber) {
+      const user = await UserService.getUserByPhoneNumber(payload.phoneNumber);
+      if (user) {
+        const syncedUser = await this.syncUserFromSapByPhone(user, payload.phoneNumber);
+        return { user: syncedUser, matchedBy: 'phone_number' };
+      }
+    }
+
     return { user: null, matchedBy: null };
+  }
+
+  private static async syncUserFromSapByPhone(user: User, phoneNumber: string): Promise<User> {
+    try {
+      const partners = await this.sapService.getBusinessPartnerByPhone(phoneNumber);
+      const selectedPartner = selectPreferredSapBusinessPartner(partners);
+
+      if (!selectedPartner) {
+        logger.warn(
+          `[PURCHASE_PDF_DELIVERY] Phone fallback matched user ${user.telegram_id}, but SAP returned no partner for ${phoneNumber}`,
+        );
+        return user;
+      }
+
+      const [firstName = '', ...lastNameParts] = selectedPartner.CardName?.trim().split(/\s+/) ?? [];
+      const updateData: Partial<User> = {
+        sap_card_code: selectedPartner.CardCode || '',
+        is_admin: isSapBusinessPartnerAdmin(selectedPartner),
+        updated_at: new Date(),
+      };
+
+      if (firstName) {
+        updateData.first_name = sanitizeName(firstName);
+      }
+
+      if (lastNameParts.length > 0) {
+        updateData.last_name = sanitizeName(lastNameParts.join(' '));
+      }
+
+      return await UserService.updateUser(user.id, updateData);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(
+        `[PURCHASE_PDF_DELIVERY] Failed to sync user ${user.telegram_id} from SAP by phone ${phoneNumber}: ${message}`,
+      );
+      return user;
+    }
   }
 
   private static async sendPdfToUser(
@@ -211,7 +266,9 @@ export class PurchasePdfDeliveryService {
       ? 'JSHSHIR'
       : params.matchedBy === 'cardCode'
         ? 'CardCode'
-        : 'Topilmadi';
+        : params.matchedBy === 'phone_number'
+          ? 'Telefon'
+          : 'Topilmadi';
     const userDeliveryLabel = params.user
       ? params.userDelivered
         ? 'Yuborildi'
@@ -223,6 +280,7 @@ export class PurchasePdfDeliveryService {
       '',
       `<b>JSHSHIR:</b> <code>${escapeHtml(params.payload.jshshir || "Yo'q")}</code>`,
       `<b>CardCode:</b> <code>${escapeHtml(params.payload.cardCode || "Yo'q")}</code>`,
+      `<b>Telefon qidiruv:</b> <code>${escapeHtml(params.payload.phoneNumber || "Yo'q")}</code>`,
       params.payload.docEntry
         ? `<b>DocEntry:</b> <code>${escapeHtml(params.payload.docEntry)}</code>`
         : '',
@@ -296,6 +354,7 @@ export class PurchasePdfDeliveryService {
       identifiers: {
         jshshir: payload.jshshir,
         cardCode: payload.cardCode,
+        phoneNumber: payload.phoneNumber,
         docEntry: payload.docEntry,
       },
       user: resolvedUser.user

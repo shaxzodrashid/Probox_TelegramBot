@@ -14,6 +14,7 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "debug:contracts": "ts-node src/scripts/debug-contracts.ts",
+    "debug:business-partner": "ts-node src/scripts/get-business-partner.ts",
     "check:gemini": "ts-node src/scripts/check-gemini-key.ts",
     "debug:payment-reminder": "ts-node src/scripts/test-payment-reminder.ts",
     "run:payment-reminder": "ts-node src/scripts/run-payment-reminder.ts",
