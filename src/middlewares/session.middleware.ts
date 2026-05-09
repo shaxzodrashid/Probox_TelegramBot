@@ -15,8 +15,9 @@ export const sessionRestorerMiddleware = async (ctx: BotContext, next: NextFunct
         return next();
     }
 
-    // If we have a user and we haven't checked the database yet for this session
-    if (ctx.from && ctx.session.languageSelected === undefined) {
+    // If we have a user and we haven't checked the database yet for this session,
+    // or if the session is somehow marked as language selected but the language code is missing
+    if (ctx.from && (ctx.session.languageSelected === undefined || (ctx.session.languageSelected === true && !ctx.session.__language_code))) {
         const user = await UserService.getUserByTelegramId(ctx.from.id);
 
         if (user && user.language_code) {
