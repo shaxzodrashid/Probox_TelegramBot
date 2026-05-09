@@ -294,6 +294,6 @@ export async function addPassportDataConversation(conversation: BotConversation,
     });
   } catch (err) {
     logger.error('[Passport] UNHANDLED ERROR in conversation:', err);
-    await ctx.reply(`❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.`).catch(() => {});
+    await ctx.reply(ctx.t('admin_error_generic')).catch(() => {});
   }
 }

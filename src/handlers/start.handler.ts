@@ -126,6 +126,7 @@ export const startHandler = async (ctx: BotContext) => {
   // If user exists, set locale from their stored language_code and show welcome
   if (user) {
     if (user.language_code) {
+      ctx.session.__language_code = user.language_code;
       await ctx.i18n.setLocale(user.language_code);
       ctx.session.languageSelected = true;
     }
