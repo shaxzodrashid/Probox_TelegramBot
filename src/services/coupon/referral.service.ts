@@ -36,14 +36,14 @@ export class ReferralService {
   ): Promise<Referral | null> {
     const last9 = params.referredPhoneNumber.replace(/\D/g, '').slice(-9);
     const normalizedReferredPhone = `+998${last9}`;
-    
+
     if (params.referrerPhoneSnapshot) {
       const referrerLast9 = params.referrerPhoneSnapshot.replace(/\D/g, '').slice(-9);
       if (referrerLast9 === last9) {
         return null;
       }
     }
-    
+
     const [referral] = await executor<Referral>('referrals')
       .insert({
         referrer_user_id: params.referrerUserId,
@@ -76,7 +76,7 @@ export class ReferralService {
   ): Promise<Referral[]> {
     const last9 = referredPhoneNumber.replace(/\D/g, '').slice(-9);
     const normalized = `+998${last9}`;
-    
+
     return executor<Referral>('referrals')
       .where('referred_phone_number', normalized)
       .orderBy('created_at', 'asc');
