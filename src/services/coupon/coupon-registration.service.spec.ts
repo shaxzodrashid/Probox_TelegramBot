@@ -33,7 +33,7 @@ test('CouponRegistrationService rewards purchaser and all matched referrers on P
   const originalGetByIdentity = CouponRegistrationEventService.getByIdentity;
   const originalCreateEvent = CouponRegistrationEventService.create;
   const originalCreateCouponsForUser = CouponService.createCouponsForUser;
-  const originalCreateOrIgnore = ReferralService.createOrIgnore;
+  const originalBulkCreateOrIgnore = ReferralService.bulkCreateOrIgnore;
   const originalListByReferredPhoneNumber = ReferralService.listByReferredPhoneNumber;
   const originalHasRewardForEvent = ReferralService.hasRewardForEvent;
   const originalRecordReward = ReferralService.recordReward;
@@ -121,7 +121,7 @@ test('CouponRegistrationService rewards purchaser and all matched referrers on P
           updated_at: new Date(),
         },
       ] as Awaited<ReturnType<typeof CouponService.createCouponsForUser>>;
-    ReferralService.createOrIgnore = async () => null;
+    ReferralService.bulkCreateOrIgnore = async () => [];
     ReferralService.listByReferredPhoneNumber = async () =>
       [
         {
@@ -186,7 +186,7 @@ test('CouponRegistrationService rewards purchaser and all matched referrers on P
     CouponRegistrationEventService.getByIdentity = originalGetByIdentity;
     CouponRegistrationEventService.create = originalCreateEvent;
     CouponService.createCouponsForUser = originalCreateCouponsForUser;
-    ReferralService.createOrIgnore = originalCreateOrIgnore;
+    ReferralService.bulkCreateOrIgnore = originalBulkCreateOrIgnore;
     ReferralService.listByReferredPhoneNumber = originalListByReferredPhoneNumber;
     ReferralService.hasRewardForEvent = originalHasRewardForEvent;
     ReferralService.recordReward = originalRecordReward;
@@ -355,7 +355,7 @@ test('CouponRegistrationService claims pending coupons after user registration',
   const originalAssignPendingEventsToUser =
     CouponRegistrationEventService.assignPendingEventsToUser;
   const originalAssignPendingCouponsToUser = CouponService.assignPendingCouponsToUser;
-  const originalCreateOrIgnore = ReferralService.createOrIgnore;
+  const originalBulkCreateOrIgnore = ReferralService.bulkCreateOrIgnore;
   const originalSendTemplateMessage = BotNotificationService.sendTemplateMessage;
 
   const referralCalls: Array<{ referredPhoneNumber: string }> = [];
@@ -397,9 +397,11 @@ test('CouponRegistrationService claims pending coupons after user registration',
         updated_at: new Date(),
       },
     ];
-    ReferralService.createOrIgnore = async (params) => {
-      referralCalls.push({ referredPhoneNumber: params.referredPhoneNumber });
-      return null;
+    ReferralService.bulkCreateOrIgnore = async (paramsArray) => {
+      for (const params of paramsArray) {
+        referralCalls.push({ referredPhoneNumber: params.referredPhoneNumber });
+      }
+      return [];
     };
     BotNotificationService.sendTemplateMessage = async () => ({
       delivered: true,
@@ -424,7 +426,7 @@ test('CouponRegistrationService claims pending coupons after user registration',
     CouponRegistrationService.runInTransaction = originalRunInTransaction;
     CouponRegistrationEventService.assignPendingEventsToUser = originalAssignPendingEventsToUser;
     CouponService.assignPendingCouponsToUser = originalAssignPendingCouponsToUser;
-    ReferralService.createOrIgnore = originalCreateOrIgnore;
+    ReferralService.bulkCreateOrIgnore = originalBulkCreateOrIgnore;
     BotNotificationService.sendTemplateMessage = originalSendTemplateMessage;
   }
 });
@@ -469,7 +471,7 @@ test(
               InstDueDate: '2026-04-11',
               InstTotal: 10,
               InstPaidSys: 10,
-              InstStatus: 'C',
+              InstStatus: 'C', DocTotal: 0, DocTotalFC: 0,
               itemsPairs: 'APPLE0022::iPhone 14 Pro Max 128GB nano-SIM B/U::12500266.4',
             },
           ],
@@ -565,7 +567,7 @@ test(
               InstDueDate: '2026-04-11',
               InstTotal: 10,
               InstPaidSys: 10,
-              InstStatus: 'C',
+              InstStatus: 'C', DocTotal: 0, DocTotalFC: 0,
               itemsPairs: 'APPLE0022::iPhone 14 Pro Max 128GB nano-SIM B/U::12500266.4',
             },
           ],

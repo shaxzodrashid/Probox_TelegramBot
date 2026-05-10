@@ -24,6 +24,59 @@ export interface ReferralRewardLog {
 type DbExecutor = Knex | Knex.Transaction;
 
 export class ReferralService {
+
+  static async bulkCreateOrIgnore(
+    paramsArray: Array<{
+      referrerUserId: number;
+      createdFromEventId?: number | null;
+      referrerPhoneSnapshot?: string | null;
+      referrerFullNameSnapshot?: string | null;
+      referredPhoneNumber: string;
+    }>,
+    executor: DbExecutor = db,
+  ): Promise<Referral[]> {
+    if (!paramsArray.length) {
+      return [];
+    }
+
+    const bulkData = [];
+    for (const params of paramsArray) {
+      const last9 = params.referredPhoneNumber.replace(/\D/g, '').slice(-9);
+      const normalizedReferredPhone = `+998${last9}`;
+
+      let skip = false;
+      if (params.referrerPhoneSnapshot) {
+        const referrerLast9 = params.referrerPhoneSnapshot.replace(/\D/g, '').slice(-9);
+        if (referrerLast9 === last9) {
+          skip = true;
+        }
+      }
+
+      if (!skip) {
+        bulkData.push({
+          referrer_user_id: params.referrerUserId,
+          created_from_event_id: params.createdFromEventId || null,
+          referrer_phone_snapshot: params.referrerPhoneSnapshot || null,
+          referrer_full_name_snapshot: params.referrerFullNameSnapshot || null,
+          referred_phone_number: normalizedReferredPhone,
+        });
+      }
+    }
+
+    if (!bulkData.length) {
+      return [];
+    }
+
+    // Insert all non-skipped records and return only the inserted ones
+    const inserted = await executor<Referral>('referrals')
+      .insert(bulkData)
+      .onConflict(['referrer_user_id', 'referred_phone_number'])
+      .ignore()
+      .returning('*');
+
+    return inserted;
+  }
+
   static async createOrIgnore(
     params: {
       referrerUserId: number;
