@@ -5,6 +5,7 @@ import {
   getApplicationClientName,
   getMissingApplicationPayloadFields,
   isApplicationRegistrationComplete,
+  normalizePassportId,
 } from './application-payload.util';
 
 const baseUser = {
@@ -56,4 +57,13 @@ test('getMissingApplicationPayloadFields rejects incomplete application data', (
 test('isApplicationRegistrationComplete requires a real phone number', () => {
   assert.equal(isApplicationRegistrationComplete(baseUser), true);
   assert.equal(isApplicationRegistrationComplete({ ...baseUser, phone_number: null }), false);
+});
+
+test('normalizePassportId correctly normalizes the passport string', () => {
+  assert.equal(normalizePassportId('ab1234567'), 'AB1234567');
+  assert.equal(normalizePassportId(' a b 1 2 3 4 5 6 7 '), 'AB1234567');
+  assert.equal(normalizePassportId('ab\t123\n4567'), 'AB1234567');
+  assert.equal(normalizePassportId(null), '');
+  assert.equal(normalizePassportId(undefined), '');
+  assert.equal(normalizePassportId(''), '');
 });
