@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildApplicationPayload,
+  getApplicationClientName,
   getMissingApplicationPayloadFields,
   isApplicationRegistrationComplete,
 } from './application-payload.util';
@@ -14,6 +15,18 @@ const baseUser = {
   passport_series: 'ab1234567',
   address: 'Tashkent',
 };
+
+test('getApplicationClientName formats client name correctly', () => {
+  assert.equal(getApplicationClientName(baseUser), 'Ali Valiyev');
+  assert.equal(
+    getApplicationClientName({ ...baseUser, first_name: 'Ali ', last_name: ' Valiyev ' }),
+    'Ali Valiyev',
+  );
+  assert.equal(getApplicationClientName({ ...baseUser, last_name: null }), 'Ali');
+  assert.equal(getApplicationClientName({ ...baseUser, first_name: null }), 'Valiyev');
+  assert.equal(getApplicationClientName({ ...baseUser, first_name: null, last_name: null }), '');
+  assert.equal(getApplicationClientName({ ...baseUser, first_name: ' ', last_name: '   ' }), '');
+});
 
 test('buildApplicationPayload normalizes fields sent to CRM', () => {
   assert.deepEqual(buildApplicationPayload(baseUser), {
