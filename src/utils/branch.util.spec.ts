@@ -3,8 +3,27 @@ import assert from 'node:assert/strict';
 import {
   findBranchByNameCaseInsensitive,
   findNearestBranch,
+  normalizeBranchName,
   parseWorkTimeRange,
 } from './branch.util';
+
+test('normalizeBranchName trims leading and trailing whitespace', () => {
+  assert.equal(normalizeBranchName('  hello  '), 'hello');
+});
+
+test('normalizeBranchName replaces multiple internal spaces with a single space', () => {
+  assert.equal(normalizeBranchName('hello     world'), 'hello world');
+});
+
+test('normalizeBranchName converts string to lowercase', () => {
+  assert.equal(normalizeBranchName('HELLO WoRlD'), 'hello world');
+  assert.equal(normalizeBranchName(' YUNUSOBOD  '), 'yunusobod');
+});
+
+test('normalizeBranchName handles empty or whitespace-only strings', () => {
+  assert.equal(normalizeBranchName(''), '');
+  assert.equal(normalizeBranchName('   '), '');
+});
 
 test('parseWorkTimeRange accepts strict HH:MM-HH:MM format', () => {
   const result = parseWorkTimeRange('09:00-18:30');
@@ -22,10 +41,7 @@ test('parseWorkTimeRange rejects invalid values', () => {
 });
 
 test('findBranchByNameCaseInsensitive matches duplicate names regardless of case', () => {
-  const branches = [
-    { name: 'Yunusobod' },
-    { name: 'Chilonzor' },
-  ];
+  const branches = [{ name: 'Yunusobod' }, { name: 'Chilonzor' }];
 
   const match = findBranchByNameCaseInsensitive(branches, '  yunusobod ');
 
