@@ -33,7 +33,7 @@ test('CouponRegistrationService rewards purchaser and all matched referrers on P
   const originalGetByIdentity = CouponRegistrationEventService.getByIdentity;
   const originalCreateEvent = CouponRegistrationEventService.create;
   const originalCreateCouponsForUser = CouponService.createCouponsForUser;
-  const originalCreateOrIgnore = ReferralService.createOrIgnore;
+  const originalBulkCreateOrIgnore = ReferralService.bulkCreateOrIgnore;
   const originalListByReferredPhoneNumber = ReferralService.listByReferredPhoneNumber;
   const originalHasRewardForEvent = ReferralService.hasRewardForEvent;
   const originalRecordReward = ReferralService.recordReward;
@@ -121,7 +121,7 @@ test('CouponRegistrationService rewards purchaser and all matched referrers on P
           updated_at: new Date(),
         },
       ] as Awaited<ReturnType<typeof CouponService.createCouponsForUser>>;
-    ReferralService.createOrIgnore = async () => null;
+    ReferralService.bulkCreateOrIgnore = async () => [];
     ReferralService.listByReferredPhoneNumber = async () =>
       [
         {
@@ -186,7 +186,7 @@ test('CouponRegistrationService rewards purchaser and all matched referrers on P
     CouponRegistrationEventService.getByIdentity = originalGetByIdentity;
     CouponRegistrationEventService.create = originalCreateEvent;
     CouponService.createCouponsForUser = originalCreateCouponsForUser;
-    ReferralService.createOrIgnore = originalCreateOrIgnore;
+    ReferralService.bulkCreateOrIgnore = originalBulkCreateOrIgnore;
     ReferralService.listByReferredPhoneNumber = originalListByReferredPhoneNumber;
     ReferralService.hasRewardForEvent = originalHasRewardForEvent;
     ReferralService.recordReward = originalRecordReward;
@@ -355,7 +355,7 @@ test('CouponRegistrationService claims pending coupons after user registration',
   const originalAssignPendingEventsToUser =
     CouponRegistrationEventService.assignPendingEventsToUser;
   const originalAssignPendingCouponsToUser = CouponService.assignPendingCouponsToUser;
-  const originalCreateOrIgnore = ReferralService.createOrIgnore;
+  const originalBulkCreateOrIgnore = ReferralService.bulkCreateOrIgnore;
   const originalSendTemplateMessage = BotNotificationService.sendTemplateMessage;
 
   const referralCalls: Array<{ referredPhoneNumber: string }> = [];
@@ -397,9 +397,11 @@ test('CouponRegistrationService claims pending coupons after user registration',
         updated_at: new Date(),
       },
     ];
-    ReferralService.createOrIgnore = async (params) => {
-      referralCalls.push({ referredPhoneNumber: params.referredPhoneNumber });
-      return null;
+    ReferralService.bulkCreateOrIgnore = async (paramsArray) => {
+      for (const params of paramsArray) {
+        referralCalls.push({ referredPhoneNumber: params.referredPhoneNumber });
+      }
+      return [];
     };
     BotNotificationService.sendTemplateMessage = async () => ({
       delivered: true,
@@ -424,57 +426,157 @@ test('CouponRegistrationService claims pending coupons after user registration',
     CouponRegistrationService.runInTransaction = originalRunInTransaction;
     CouponRegistrationEventService.assignPendingEventsToUser = originalAssignPendingEventsToUser;
     CouponService.assignPendingCouponsToUser = originalAssignPendingCouponsToUser;
-    ReferralService.createOrIgnore = originalCreateOrIgnore;
+    ReferralService.bulkCreateOrIgnore = originalBulkCreateOrIgnore;
     BotNotificationService.sendTemplateMessage = originalSendTemplateMessage;
   }
 });
 
-test('CouponRegistrationService claims orphaned payment_on_time coupons by SAP installment ownership', async () => {
-  const originalRunInTransaction = CouponRegistrationService.runInTransaction;
-  const originalAssignPendingEventsToUser =
-    CouponRegistrationEventService.assignPendingEventsToUser;
-  const originalAssignPendingCouponsToUser = CouponService.assignPendingCouponsToUser;
-  const originalAssignPaymentOnTimeCouponsByInstallments =
-    CouponService.assignPaymentOnTimeCouponsByInstallments;
-  const originalGetOwnedInstallmentsByKey =
-    PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey;
-  const originalSendRecoveryNotificationsForUser =
-    PaymentOnTimeCouponRepairService.sendRecoveryNotificationsForUser;
+test(
+  'CouponRegistrationService claims orphaned payment_on_time coupons by SAP installment ownership',
+  async () => {
+    const originalRunInTransaction = CouponRegistrationService.runInTransaction;
+    const originalAssignPendingEventsToUser =
+      CouponRegistrationEventService.assignPendingEventsToUser;
+    const originalAssignPendingCouponsToUser = CouponService.assignPendingCouponsToUser;
+    const originalAssignPaymentOnTimeCouponsByInstallments =
+      CouponService.assignPaymentOnTimeCouponsByInstallments;
+    const originalGetOwnedInstallmentsByKey =
+      PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey;
+    const originalSendRecoveryNotificationsForUser =
+      PaymentOnTimeCouponRepairService.sendRecoveryNotificationsForUser;
+
+    const capturedPairs: Array<{ docEntry: number; installmentId: number }> = [];
+
+    try {
+      CouponRegistrationService.runInTransaction = async <T>(
+        callback: (trx: never) => Promise<T>,
+      ): Promise<T> => callback({} as never);
+      CouponRegistrationEventService.assignPendingEventsToUser = async () => [];
+      CouponService.assignPendingCouponsToUser = async () => [];
+      PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey = async () =>
+        new Map([
+          [
+            '24708:6',
+            {
+              DocEntry: 24708,
+              DocNum: 23474,
+              CardCode: 'BP251108133837G',
+              CardName: 'AMINJONOVA FERUZA',
+              DocDate: '2025-11-08',
+              DocDueDate: '2027-02-11',
+              DocCur: 'UZS',
+              Total: 100,
+              TotalPaid: 50,
+              InstlmntID: 6,
+              InstDueDate: '2026-04-11',
+              InstTotal: 10,
+              InstPaidSys: 10,
+              InstStatus: 'C', DocTotal: 0, DocTotalFC: 0,
+              itemsPairs: 'APPLE0022::iPhone 14 Pro Max 128GB nano-SIM B/U::12500266.4',
+            },
+          ],
+        ]);
+      CouponService.assignPaymentOnTimeCouponsByInstallments = async (params) => {
+        capturedPairs.push(...params.installmentPairs);
+        return [
+          {
+            id: 9301,
+            code: 'PRO9301234',
+            promotion_id: 5,
+            registration_event_id: null,
+            source_type: 'payment_on_time',
+            status: 'active',
+            issued_phone_snapshot: params.phoneNumber || '',
+            sap_doc_entry: 24708,
+            sap_installment_id: 6,
+            expires_at: new Date('2026-05-11T00:00:00.000Z'),
+            is_active: true,
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ];
+      };
+      PaymentOnTimeCouponRepairService.sendRecoveryNotificationsForUser = async () => [];
 
   const capturedPairs: Array<{ docEntry: number; installmentId: number }> = [];
 
-  try {
-    CouponRegistrationService.runInTransaction = async <T>(
-      callback: (trx: never) => Promise<T>,
-    ): Promise<T> => callback({} as never);
-    CouponRegistrationEventService.assignPendingEventsToUser = async () => [];
-    CouponService.assignPendingCouponsToUser = async () => [];
-    PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey = async () =>
-      new Map([
-        [
-          '24708:6',
-          {
-            DocEntry: 24708,
-            DocNum: 23474,
-            CardCode: 'BP251108133837G',
-            CardName: 'AMINJONOVA FERUZA',
-            DocDate: '2025-11-08',
-            DocDueDate: '2027-02-11',
-            DocCur: 'UZS',
-            Total: 100,
-            TotalPaid: 50,
-            InstlmntID: 6,
-            InstDueDate: '2026-04-11',
-            InstTotal: 10,
-            InstPaidSys: 10,
-            InstStatus: 'C',
-            itemsPairs: 'APPLE0022::iPhone 14 Pro Max 128GB nano-SIM B/U::12500266.4',
-          },
-        ],
-      ]);
-    CouponService.assignPaymentOnTimeCouponsByInstallments = async (params) => {
-      capturedPairs.push(...params.installmentPairs);
-      return [
+      assert.equal(result.coupons.length, 1);
+      assert.deepEqual(capturedPairs, [{ docEntry: 24708, installmentId: 6 }]);
+    } finally {
+      CouponRegistrationService.runInTransaction = originalRunInTransaction;
+      CouponRegistrationEventService.assignPendingEventsToUser = originalAssignPendingEventsToUser;
+      CouponService.assignPendingCouponsToUser = originalAssignPendingCouponsToUser;
+      CouponService.assignPaymentOnTimeCouponsByInstallments =
+        originalAssignPaymentOnTimeCouponsByInstallments;
+      PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey =
+        originalGetOwnedInstallmentsByKey;
+      PaymentOnTimeCouponRepairService.sendRecoveryNotificationsForUser =
+        originalSendRecoveryNotificationsForUser;
+    }
+  },
+);
+
+test(
+  'CouponRegistrationService sends one payment_on_time recovery notification and skips sent or inactive coupons',
+  async () => {
+    const originalRunInTransaction = CouponRegistrationService.runInTransaction;
+    const originalAssignPendingEventsToUser =
+      CouponRegistrationEventService.assignPendingEventsToUser;
+    const originalAssignPendingCouponsToUser = CouponService.assignPendingCouponsToUser;
+    const originalAssignPaymentOnTimeCouponsByInstallments =
+      CouponService.assignPaymentOnTimeCouponsByInstallments;
+    const originalGetOwnedInstallmentsByKey =
+      PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey;
+    const originalHasSuccessfulDispatch = CouponService.hasSuccessfulDispatch;
+    const originalSendTemplateMessage = BotNotificationService.sendTemplateMessage;
+
+    const notificationCalls: Array<{ couponId?: number; dispatchType: string }> = [];
+
+    try {
+      CouponRegistrationService.runInTransaction = async <T>(
+        callback: (trx: never) => Promise<T>,
+      ): Promise<T> => callback({} as never);
+      CouponRegistrationEventService.assignPendingEventsToUser = async () => [];
+      CouponService.assignPendingCouponsToUser = async () => [];
+      PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey = async () =>
+        new Map([
+          [
+            '24708:6',
+            {
+              DocEntry: 24708,
+              DocNum: 23474,
+              CardCode: 'BP251108133837G',
+              CardName: 'AMINJONOVA FERUZA',
+              DocDate: '2025-11-08',
+              DocDueDate: '2027-02-11',
+              DocCur: 'UZS',
+              Total: 100,
+              TotalPaid: 50,
+              InstlmntID: 6,
+              InstDueDate: '2026-04-11',
+              InstTotal: 10,
+              InstPaidSys: 10,
+              InstStatus: 'C', DocTotal: 0, DocTotalFC: 0,
+              itemsPairs: 'APPLE0022::iPhone 14 Pro Max 128GB nano-SIM B/U::12500266.4',
+            },
+          ],
+        ]);
+      CouponService.assignPaymentOnTimeCouponsByInstallments = async () => [
+        {
+          id: 9401,
+          code: 'PRO9401234',
+          promotion_id: 5,
+          registration_event_id: null,
+          source_type: 'payment_on_time',
+          status: 'active',
+          issued_phone_snapshot: '+998919791468',
+          sap_doc_entry: 24708,
+          sap_installment_id: 6,
+          expires_at: new Date('2026-05-11T00:00:00.000Z'),
+          is_active: true,
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
         {
           id: 9301,
           code: 'PRO9301234',

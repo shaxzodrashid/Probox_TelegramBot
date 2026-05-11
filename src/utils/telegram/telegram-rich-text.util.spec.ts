@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  escapeHtml,
   markdownToTelegramHtml,
   richTextToTelegramHtml,
   telegramMessageToHtml,
@@ -12,6 +13,21 @@ test('telegramMessageToHtml keeps plain text when there are no entities', () => 
   });
 
   assert.equal(result, 'Simple text');
+});
+
+test('escapeHtml leaves strings without special characters unchanged', () => {
+  const result = escapeHtml('Simple text without special characters');
+  assert.equal(result, 'Simple text without special characters');
+});
+
+test('escapeHtml escapes standard &, <, and > characters correctly', () => {
+  const result = escapeHtml('A & B < C > D');
+  assert.equal(result, 'A &amp; B &lt; C &gt; D');
+});
+
+test('escapeHtml handles multiple occurrences of special characters', () => {
+  const result = escapeHtml('<<&>>&&');
+  assert.equal(result, '&lt;&lt;&amp;&gt;&gt;&amp;&amp;');
 });
 
 test('telegramMessageToHtml converts nested formatting to Telegram HTML', () => {

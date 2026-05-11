@@ -233,7 +233,7 @@ bot.api.config.use((prev, method, payload, signal) => {
     'answerInlineQuery',
   ];
 
-  if (methodsWithParseMode.includes(method) && !('parse_mode' in (payload as any))) {
+  if (methodsWithParseMode.includes(method) && !('parse_mode' in payload)) {
     Object.assign(payload, { parse_mode: 'HTML' });
   }
 

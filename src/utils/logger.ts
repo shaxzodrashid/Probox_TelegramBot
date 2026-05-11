@@ -65,14 +65,14 @@ export const logger = {
   debug: (message: string, ...args: unknown[]) => {
     if (isDevelopment || logLevel === 'debug' || logLevel === 'extra-high') {
       const line = buildLine('DEBUG', message, args);
-      console.log(line);
+      console.debug(line);
       writeToFile(line);
     }
   },
 
   info: (message: string, ...args: unknown[]) => {
     const line = buildLine('INFO', message, args);
-    console.log(line);
+    console.info(line);
     writeToFile(line);
   },
 
