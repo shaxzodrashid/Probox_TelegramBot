@@ -93,8 +93,9 @@ export class CouponRegistrationService {
 
     if (user.sap_card_code) {
       try {
-        ownedInstallmentsByKey =
-          await PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey(user.sap_card_code);
+        ownedInstallmentsByKey = await PaymentOnTimeCouponRepairService.getOwnedInstallmentsByKey(
+          user.sap_card_code,
+        );
       } catch (error) {
         logger.warn(
           `[COUPON_REGISTRATION] Failed to load payment_on_time ownership for user ${user.id} (${user.sap_card_code})`,
@@ -200,13 +201,12 @@ export class CouponRegistrationService {
       });
     }
 
-    const recoveryDelivery = await PaymentOnTimeCouponRepairService.sendRecoveryNotificationsForUser(
-      {
+    const recoveryDelivery =
+      await PaymentOnTimeCouponRepairService.sendRecoveryNotificationsForUser({
         user,
         coupons: Array.from(claimedCouponsById.values()),
         installmentsByKey: ownedInstallmentsByKey,
-      },
-    );
+      });
     delivery.push(...recoveryDelivery);
 
     return {
