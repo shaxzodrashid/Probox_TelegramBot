@@ -13,23 +13,23 @@ export class OtpService {
   static async createOtp(phoneNumber: string): Promise<string> {
     const otp = this.generateOtp();
     const redisKey = `otp:${phoneNumber}`;
-    
+
     await redisService.set(redisKey, otp, this.OTP_EXPIRY);
-    
+
     await this.send_code(phoneNumber, otp);
-    
+
     return otp;
   }
 
   static async verifyOtp(phoneNumber: string, otp: string): Promise<boolean> {
     const redisKey = `otp:${phoneNumber}`;
     const storedOtp = await redisService.get<string>(redisKey);
-    
+
     if (storedOtp !== null && String(storedOtp) === String(otp)) {
       await redisService.delete(redisKey);
       return true;
     }
-    
+
     return false;
   }
 
@@ -63,8 +63,6 @@ export class OtpService {
         },
       },
     };
-
-    // if (['50', '55', '93', '94'].includes(phoneNumber.slice(-9, -7))) data_to_send.sms.originator = '3700';
 
     logger.info(`Data to send: ${JSON.stringify(data_to_send)}`);
 

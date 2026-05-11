@@ -19,7 +19,7 @@ export async function addPassportDataConversation(conversation: BotConversation,
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
 
-  const locale = (ctx.session as any)?.__language_code || 'uz';
+  const locale = ctx.session?.__language_code || 'uz';
   logger.debug(`[Passport] Conversation started. Locale: ${locale}, User: ${telegramId}`);
 
   try {
