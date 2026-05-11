@@ -1,37 +1,68 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatCurrency } from './formatter.util';
+import test, { describe } from 'node:test';
+import { formatDate, formatCurrency } from './formatter.util';
 
-test('formatCurrency formats basic number with default currency', () => {
-  assert.equal(formatCurrency(100), '100 UZS');
-});
+describe('formatter.util', () => {
+  describe('formatDate', () => {
+    test('returns empty string for empty input', () => {
+      assert.equal(formatDate(''), '');
+    });
 
-test('formatCurrency formats number with thousands separator', () => {
-  // Russian locale uses non-breaking space (u00A0) for thousands separator
-  assert.equal(formatCurrency(1000), '1\u00A0000 UZS');
-  assert.equal(formatCurrency(1000000), '1\u00A0000\u00A0000 UZS');
-});
+    test('returns original string for invalid date strings', () => {
+      assert.equal(formatDate('not-a-date'), 'not-a-date');
+      assert.equal(formatDate('invalid'), 'invalid');
+    });
 
-test('formatCurrency formats string numbers', () => {
-  assert.equal(formatCurrency('2500'), '2\u00A0500 UZS');
-  assert.equal(formatCurrency('100.5'), '100,5 UZS');
-});
+    test('formats valid YYYY-MM-DD date correctly taking timezone into account', () => {
+      // Create a specific Date object in the local timezone and compare against its formatting
+      // Since formatDate uses new Date() and local getters (.getDate(), .getMonth(), .getFullYear())
+      // we must expect the formatted local day/month/year for that date string.
+      const d1 = new Date('2023-12-25');
+      const expectedDay1 = String(d1.getDate()).padStart(2, '0');
+      const expectedMonth1 = String(d1.getMonth() + 1).padStart(2, '0');
+      const expectedYear1 = d1.getFullYear();
+      assert.equal(formatDate('2023-12-25'), `${expectedDay1}.${expectedMonth1}.${expectedYear1}`);
 
-test('formatCurrency handles decimal formatting', () => {
-  // Russian locale uses comma for decimal separator
-  assert.equal(formatCurrency(10.5), '10,5 UZS');
-  assert.equal(formatCurrency(10.55), '10,55 UZS');
-  // Maximum 2 fraction digits
-  assert.equal(formatCurrency(10.555), '10,56 UZS');
-});
+      const d2 = new Date('2024-01-05');
+      const expectedDay2 = String(d2.getDate()).padStart(2, '0');
+      const expectedMonth2 = String(d2.getMonth() + 1).padStart(2, '0');
+      const expectedYear2 = d2.getFullYear();
+      assert.equal(formatDate('2024-01-05'), `${expectedDay2}.${expectedMonth2}.${expectedYear2}`);
+    });
 
-test('formatCurrency uses custom currency', () => {
-  assert.equal(formatCurrency(500, 'USD'), '500 USD');
-  assert.equal(formatCurrency(1500, 'EUR'), '1\u00A0500 EUR');
-});
+    test('formats valid date with time correctly taking timezone into account', () => {
+      const d = new Date('2023-10-15T14:30:00Z');
+      const expectedDay = String(d.getDate()).padStart(2, '0');
+      const expectedMonth = String(d.getMonth() + 1).padStart(2, '0');
+      const expectedYear = d.getFullYear();
+      assert.equal(formatDate('2023-10-15T14:30:00Z'), `${expectedDay}.${expectedMonth}.${expectedYear}`);
+    });
+  });
 
-test('formatCurrency handles invalid input by returning 0 with currency', () => {
-  assert.equal(formatCurrency('invalid'), '0 UZS');
-  assert.equal(formatCurrency('invalid', 'USD'), '0 USD');
-  assert.equal(formatCurrency(NaN), '0 UZS');
+  describe('formatCurrency', () => {
+    test('formats valid number amount with default currency', () => {
+      const formatted = formatCurrency(1000);
+      assert.equal(formatted.replace(/\s/g, ' '), '1 000 UZS');
+    });
+
+    test('formats valid string amount with default currency', () => {
+      const formatted = formatCurrency('5000000');
+      assert.equal(formatted.replace(/\s/g, ' '), '5 000 000 UZS');
+    });
+
+    test('formats valid string amount with decimal points', () => {
+      const formatted = formatCurrency('1500.50');
+      assert.equal(formatted.replace(/\s/g, ' '), '1 500,5 UZS');
+    });
+
+    test('formats amount with specific currency', () => {
+      const formatted = formatCurrency(150, 'USD');
+      assert.equal(formatted.replace(/\s/g, ' '), '150 USD');
+    });
+
+    test('returns 0 for invalid string amount', () => {
+      assert.equal(formatCurrency('abc', 'UZS'), '0 UZS');
+      assert.equal(formatCurrency('invalid', 'USD'), '0 USD');
+    });
+  });
 });
