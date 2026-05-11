@@ -1,10 +1,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  LOCAL_CURRENCY,
   getDocumentTotalByCurrency,
   getInstallmentDisplayCurrency,
+  normalizeCurrencyCode,
   parseNumericAmount,
 } from './currency-conversion.util';
+
+test('normalizeCurrencyCode normalizes valid currency codes', () => {
+  assert.equal(normalizeCurrencyCode('usd'), 'USD');
+  assert.equal(normalizeCurrencyCode(' eur '), 'EUR');
+  assert.equal(normalizeCurrencyCode('UZS'), 'UZS');
+});
+
+test('normalizeCurrencyCode falls back to LOCAL_CURRENCY for falsy or empty inputs', () => {
+  assert.equal(normalizeCurrencyCode(null), LOCAL_CURRENCY);
+  assert.equal(normalizeCurrencyCode(undefined), LOCAL_CURRENCY);
+  assert.equal(normalizeCurrencyCode(''), LOCAL_CURRENCY);
+  assert.equal(normalizeCurrencyCode('   '), LOCAL_CURRENCY);
+});
 
 test('parseNumericAmount keeps valid numeric amounts', () => {
   assert.equal(parseNumericAmount(100), 100);

@@ -130,21 +130,11 @@ const getMissingColumns = async (
     logger.warn(`Missing table: ${tableName}`);
     return [...REQUIRED_COLUMNS[tableName]];
   }
-  
-  let existingColumns = new Set<string>();
-  try {
-    const cols = await db('information_schema.columns')
-      .select('column_name')
-      .where({ table_schema: 'public', table_name: tableName });
-    existingColumns = new Set(cols.map((row) => row.column_name));
-  } catch (err) {
-    logger.error(`Error fetching columns for table ${tableName}:`, err);
-    throw err;
-  }
 
   for (const columnName of REQUIRED_COLUMNS[tableName]) {
     try {
-      if (!existingColumns.has(columnName)) {
+      const exists = await db.schema.hasColumn(tableName, columnName);
+      if (!exists) {
         missing.push(columnName);
         logger.warn(`Missing column: ${tableName}.${columnName}`);
       }
