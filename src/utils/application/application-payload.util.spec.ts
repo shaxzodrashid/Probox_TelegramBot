@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildApplicationPayload,
+  getApplicationClientName,
   getMissingApplicationPayloadFields,
   isApplicationRegistrationComplete,
+  normalizePassportId,
 } from './application-payload.util';
 
 const baseUser = {
@@ -14,6 +16,18 @@ const baseUser = {
   passport_series: 'ab1234567',
   address: 'Tashkent',
 };
+
+test('getApplicationClientName formats client name correctly', () => {
+  assert.equal(getApplicationClientName(baseUser), 'Ali Valiyev');
+  assert.equal(
+    getApplicationClientName({ ...baseUser, first_name: 'Ali ', last_name: ' Valiyev ' }),
+    'Ali Valiyev',
+  );
+  assert.equal(getApplicationClientName({ ...baseUser, last_name: null }), 'Ali');
+  assert.equal(getApplicationClientName({ ...baseUser, first_name: null }), 'Valiyev');
+  assert.equal(getApplicationClientName({ ...baseUser, first_name: null, last_name: null }), '');
+  assert.equal(getApplicationClientName({ ...baseUser, first_name: ' ', last_name: '   ' }), '');
+});
 
 test('buildApplicationPayload normalizes fields sent to CRM', () => {
   assert.deepEqual(buildApplicationPayload(baseUser), {
@@ -43,4 +57,13 @@ test('getMissingApplicationPayloadFields rejects incomplete application data', (
 test('isApplicationRegistrationComplete requires a real phone number', () => {
   assert.equal(isApplicationRegistrationComplete(baseUser), true);
   assert.equal(isApplicationRegistrationComplete({ ...baseUser, phone_number: null }), false);
+});
+
+test('normalizePassportId correctly normalizes the passport string', () => {
+  assert.equal(normalizePassportId('ab1234567'), 'AB1234567');
+  assert.equal(normalizePassportId(' a b 1 2 3 4 5 6 7 '), 'AB1234567');
+  assert.equal(normalizePassportId('ab\t123\n4567'), 'AB1234567');
+  assert.equal(normalizePassportId(null), '');
+  assert.equal(normalizePassportId(undefined), '');
+  assert.equal(normalizePassportId(''), '');
 });

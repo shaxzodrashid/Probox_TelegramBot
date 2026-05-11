@@ -113,21 +113,23 @@ export class CouponRegistrationService {
             )
           : [];
 
+        const referralParams = [];
         for (const event of assignedEvents) {
           if (!event.referred_phone_number) {
             continue;
           }
 
-          await ReferralService.createOrIgnore(
-            {
-              referrerUserId: user.id,
-              createdFromEventId: event.id,
-              referrerPhoneSnapshot: user.phone_number,
-              referrerFullNameSnapshot: event.customer_full_name || this.buildName(user),
-              referredPhoneNumber: event.referred_phone_number,
-            },
-            trx,
-          );
+          referralParams.push({
+            referrerUserId: user.id,
+            createdFromEventId: event.id,
+            referrerPhoneSnapshot: user.phone_number,
+            referrerFullNameSnapshot: event.customer_full_name || this.buildName(user),
+            referredPhoneNumber: event.referred_phone_number,
+          });
+        }
+
+        if (referralParams.length > 0) {
+          await ReferralService.bulkCreateOrIgnore(referralParams, trx);
         }
 
         const assignedCoupons = user.phone_number

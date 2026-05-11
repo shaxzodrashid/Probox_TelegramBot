@@ -1,45 +1,68 @@
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { GrammyError } from 'grammy';
-import { isRateLimitError } from './telegram-errors';
+import { isUserBlockedError } from './telegram-errors';
 
-test('isRateLimitError returns true for a GrammyError with error_code 429', () => {
-  const error = new GrammyError(
-    'Too Many Requests: retry after 30',
-    {
-      ok: false,
-      error_code: 429,
-      description: 'Too Many Requests: retry after 30',
-    } as any,
-    'sendMessage',
-    {},
-  );
-  assert.equal(isRateLimitError(error), true);
-});
+// Helper to create GrammyError
+function createGrammyError(errorCode: number, description: string): GrammyError {
+    return new GrammyError("msg", { ok: false, error_code: errorCode, description } as any, "method", {});
+}
 
-test('isRateLimitError returns false for a GrammyError with error_code !== 429', () => {
-  const error = new GrammyError(
-    'Bad Request: chat not found',
-    {
-      ok: false,
-      error_code: 400,
-      description: 'Bad Request: chat not found',
-    } as any,
-    'sendMessage',
-    {},
-  );
-  assert.equal(isRateLimitError(error), false);
-});
+describe('isUserBlockedError', () => {
+    test('should return true for GrammyError with error_code 403', () => {
+        const error = createGrammyError(403, 'Forbidden: bot was blocked by the user');
+        assert.equal(isUserBlockedError(error), true);
+    });
 
-test('isRateLimitError returns false for a regular Error', () => {
-  const error = new Error('Some error');
-  assert.equal(isRateLimitError(error), false);
-});
+    test('should return true for GrammyError with error_code 400 and user deactivated description', () => {
+        const error = createGrammyError(400, 'Bad Request: user is deactivated');
+        assert.equal(isUserBlockedError(error), true);
+    });
 
-test('isRateLimitError returns false for other types of values', () => {
-  assert.equal(isRateLimitError(null), false);
-  assert.equal(isRateLimitError(undefined), false);
-  assert.equal(isRateLimitError('error'), false);
-  assert.equal(isRateLimitError(123), false);
-  assert.equal(isRateLimitError({}), false);
+    test('should return true for GrammyError with error_code 400 and chat not found description', () => {
+        const error = createGrammyError(400, 'Bad Request: chat not found');
+        assert.equal(isUserBlockedError(error), true);
+    });
+
+    test('should return false for GrammyError with error_code 400 and unrelated description', () => {
+        const error = createGrammyError(400, 'Bad Request: message is not modified');
+        assert.equal(isUserBlockedError(error), false);
+    });
+
+    test('should return false for GrammyError with other error codes', () => {
+        const error = createGrammyError(429, 'Too Many Requests: retry after 30');
+        assert.equal(isUserBlockedError(error), false);
+    });
+
+    test('should return true for generic Error with bot blocked message', () => {
+        const error = new Error('Some Error: bot was blocked by the user');
+        assert.equal(isUserBlockedError(error), true);
+    });
+
+    test('should return true for generic Error with user deactivated message', () => {
+        const error = new Error('Some Error: user is deactivated');
+        assert.equal(isUserBlockedError(error), true);
+    });
+
+    test('should return true for generic Error with chat not found message', () => {
+        const error = new Error('Some Error: chat not found');
+        assert.equal(isUserBlockedError(error), true);
+    });
+
+    test('should return true for generic Error with forbidden message', () => {
+        const error = new Error('Some Error: forbidden');
+        assert.equal(isUserBlockedError(error), true);
+    });
+
+    test('should return false for generic Error with unrelated message', () => {
+        const error = new Error('Some Error: something went wrong');
+        assert.equal(isUserBlockedError(error), false);
+    });
+
+    test('should return false for non-error objects', () => {
+        assert.equal(isUserBlockedError(null), false);
+        assert.equal(isUserBlockedError(undefined), false);
+        assert.equal(isUserBlockedError('string error'), false);
+        assert.equal(isUserBlockedError({ message: 'bot was blocked by the user' }), false);
+    });
 });
