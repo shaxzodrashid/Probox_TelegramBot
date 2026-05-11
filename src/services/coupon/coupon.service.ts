@@ -266,15 +266,10 @@ export class CouponService {
       .leftJoin('coupon_user_mappings as mapping', 'mapping.coupon_id', 'coupons.id')
       .where('coupons.source_type', 'payment_on_time')
       .whereNull('mapping.id')
-      .andWhere((query) => {
-        for (const pair of params.installmentPairs) {
-          query.orWhere((inner) => {
-            inner
-              .where('coupons.sap_doc_entry', pair.docEntry)
-              .andWhere('coupons.sap_installment_id', pair.installmentId);
-          });
-        }
-      })
+      .whereIn(
+        ['coupons.sap_doc_entry', 'coupons.sap_installment_id'],
+        params.installmentPairs.map((pair) => [pair.docEntry, pair.installmentId]),
+      )
       .select('coupons.*')
       .orderBy('coupons.created_at', 'asc');
 
@@ -291,12 +286,10 @@ export class CouponService {
       return false;
     }
 
-    const updatedCount = await executor<Coupon>('coupons')
-      .where('id', couponId)
-      .update({
-        issued_phone_snapshot: normalized,
-        updated_at: new Date(),
-      });
+    const updatedCount = await executor<Coupon>('coupons').where('id', couponId).update({
+      issued_phone_snapshot: normalized,
+      updated_at: new Date(),
+    });
 
     return updatedCount > 0;
   }
@@ -374,10 +367,7 @@ export class CouponService {
     return attachedCoupons;
   }
 
-  static async hasSuccessfulDispatch(
-    couponId: number,
-    dispatchTypes: string[],
-  ): Promise<boolean> {
+  static async hasSuccessfulDispatch(couponId: number, dispatchTypes: string[]): Promise<boolean> {
     if (dispatchTypes.length === 0) {
       return false;
     }
