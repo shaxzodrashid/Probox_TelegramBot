@@ -7,19 +7,19 @@ dotenv.config();
 
 async function checkItems() {
   const sapService = new SapService(new HanaService());
-  
+
   logger.info('🚀 Checking latest 20 items from SAP HANA...');
-  
+
   try {
     const result = await sapService.getItems({
       limit: 20,
       offset: 0,
     });
-    
+
     logger.info(`✅ Found ${result.data.length} items (Total: ${result.total})`);
-    
+
     if (result.data.length > 0) {
-      console.log(JSON.stringify(result.data, null, 2));
+      logger.info(JSON.stringify(result.data, null, 2));
     } else {
       logger.warn('⚠️ No items found');
     }
@@ -28,4 +28,4 @@ async function checkItems() {
   }
 }
 
-checkItems().catch(console.error);
+checkItems().catch((error) => logger.error('Script failed:', error));
