@@ -153,6 +153,9 @@ const SUPPORT_AGENT_SYSTEM_INSTRUCTIONS = [
   '</currency>',
   '<installments>',
   'For installment calculations, use calculate_installment_price only when the product is already grounded and months are known.',
+  'Standard installment duration is 3 to 15 months. If the customer asks for 3-15 months, use the calculator and provide the result.',
+  'If the customer asks for less than 3 months (1 or 2 months), inform them that this requires manual review by a specialist and set should_escalate=true with a short handoff reply.',
+  'If the customer asks for more than 15 months, politely inform them about the 3-15 month range.',
   'Never calculate, estimate, derive, round, or adjust installment prices manually from transcript prices, monthly amounts, percentages, months, or down payments. Only repeat amounts returned by calculate_installment_price for the exact requested months and down payment.',
   'Pass imei and item_code from grounded inventory context or lookup_store_items results. Prefer imei when available; include item_code too when available.',
   'Do not choose SalePrice or PurchasePrice yourself. The calculator checks U_PROD_CONDITION: Yangi uses SalePrice, B/U or B\\U uses PurchasePrice in USD, applies the used-product adjustment, then converts it to UZS.',
@@ -682,11 +685,12 @@ const preloadInstallmentContext = async (
   const terms = extractInstallmentTerms(latestUserMessage, history);
   const item = inventoryPrecheck?.result?.items[0] || null;
 
-  if (!terms || !item) {
-    logger.info('[SUPPORT_AGENT] Skipping installment pre-check because context is incomplete', {
+  if (!terms || !item || terms.months < 3) {
+    logger.info('[SUPPORT_AGENT] Skipping installment pre-check because context is incomplete or requires review', {
       latestUserMessage: previewSupportMessage(latestUserMessage),
       hasTerms: Boolean(terms),
       hasInventoryItem: Boolean(item),
+      months: terms?.months || null,
     });
     return null;
   }
@@ -1056,7 +1060,7 @@ const calculateInstallmentPriceTool: GeminiTool = {
         months: {
           type: 'integer',
           description:
-            'Requested installment duration in months. Must match a SAP @PERCENTAGE U_month row.',
+            'Requested installment duration in months. Must be between 3 and 15 inclusive to match standard SAP @PERCENTAGE U_month rows.',
         },
         down_payment: {
           type: ['number', 'null'],
@@ -1343,6 +1347,7 @@ export class SupportAgentService {
       'When calling inventory tools for a clarified product, always convert customer wording to official SAP-style naming first and send structured fields when known; use a normalized search string only for free-text, IMEI, or item-code searches.',
       'When calling lookup_store_items and the customer specified model, device type, memory, color, SIM type, or condition, pass those as structured fields so SAP can do exact matching.',
       'When the customer asks for monthly installment pricing, first ground the product from context or inventory; then call calculate_installment_price with the grounded imei/item_code, requested months, and at least 1000000 UZS down payment.',
+      'Enforce the installment duration policy: 3-15 months is the standard range for automated calculation. If the customer requests 1 or 2 months, explain it requires manual review and escalate. If they request > 15 months, inform them of the 3-15 month limit.',
       'If the customer asks to re-check, says "o‘sha", "shu", "yana tekshirib ko‘ring", or otherwise refers back after an installment discussion, inherit the most recent grounded product, months, and down payment from the transcript/context. Use the installment pre-check result if present; otherwise call calculate_installment_price.',
       'Do not repeat a previous assistant claim that installment is unavailable unless the installment pre-check or calculate_installment_price result confirms an error. A previous assistant message alone is not a policy source.',
       'If the customer did not provide a down payment, calculate installments with the default 1000000 UZS down payment first, then offer to recalculate with the customer’s own amount if it is at least 1000000 UZS.',
