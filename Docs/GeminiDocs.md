@@ -75,7 +75,7 @@ All Gemini 3 models are currently in preview.
 
 | Model ID | Context Window (In / Out) | Knowledge Cutoff | Pricing (Input / Output)\* |
 |---|---|---|---|
-| **gemini-3.1-flash-lite-preview** | 1M / 64k | Jan 2025 | $0.25 (text, image, video), $0.50 (audio) / $1.50 |
+| **gemini-3.1-flash-lite** | 1M / 64k | Jan 2025 | $0.25 (text, image, video), $0.50 (audio) / $1.50 |
 | **gemini-3.1-flash-image-preview** | 128k / 32k | Jan 2025 | $0.25 (Text Input) / $0.067 (Image Output)\*\* |
 | **gemini-3.1-pro-preview** | 1M / 64k | Jan 2025 | $2 / $12 (\<200k tokens) $4 / $18 (\>200k tokens) |
 | **gemini-3-flash-preview** | 1M / 64k | Jan 2025 | $0.50 / $3 |
@@ -1307,7 +1307,7 @@ Learn more about prompt design strategies in the [prompt engineering guide](http
    token input context window and up to 64k tokens of output.
 
 3. **Is there a free tier for Gemini 3?** Gemini 3 Flash
-   `gemini-3-flash-preview` and 3.1 Flash-Lite `gemini-3.1-flash-lite-preview` have
+   `gemini-3-flash-preview` and 3.1 Flash-Lite `gemini-3.1-flash-lite` have
    free tiers in the Gemini API. You can try Gemini 3.1 Pro and 3 Flash for free in
    Google AI Studio, but there is no free tier available for
    `gemini-3.1-pro-preview` in the Gemini API.

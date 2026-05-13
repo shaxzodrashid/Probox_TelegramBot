@@ -11,7 +11,7 @@ test('formatGeminiRequestFailure redacts Gemini API keys from Axios error detail
     response: undefined,
     config: {
       baseURL: 'https://generativelanguage.googleapis.com/v1beta/models',
-      url: '/gemini-3.1-flash-lite-preview:generateContent?key=SECRET_API_KEY',
+      url: '/gemini-3.1-flash-lite:generateContent?key=SECRET_API_KEY',
     },
   });
 
@@ -102,7 +102,7 @@ test('formatGeminiRequestFailureSummary keeps admin alerts concise', () => {
     },
     config: {
       baseURL: 'https://generativelanguage.googleapis.com/v1beta/models',
-      url: '/gemini-3.1-flash-lite-preview:generateContent?key=SECRET_API_KEY',
+      url: '/gemini-3.1-flash-lite:generateContent?key=SECRET_API_KEY',
       data: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: 'Do not include this prompt.' }] }],
       }),

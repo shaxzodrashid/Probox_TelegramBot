@@ -4,17 +4,17 @@ Our most cost-efficient multimodal model, offering the fastest performance for
 high-frequency, lightweight tasks. Gemini 3.1 Flash-Lite is best for high-volume
 agentic tasks, simple data extraction, and extremely low-latency applications
 where budget and speed are the primary constraints.
-[Try in Google AI Studio](https://aistudio.google.com/prompts/new_chat?model=gemini-3.1-flash-lite-preview)
+[Try in Google AI Studio](https://aistudio.google.com/prompts/new_chat?model=gemini-3.1-flash-lite)
 
-## gemini-3.1-flash-lite-preview
+## gemini-3.1-flash-lite
 
 | Property | Description |
 |---|---|
-| Model code | `gemini-3.1-flash-lite-preview` |
+| Model code | `gemini-3.1-flash-lite` |
 | Supported data types | **Inputs** Text, Image, Video, Audio, and PDF **Output** Text |
 | Token limits^[\[\*\]](https://ai.google.dev/gemini-api/docs/tokens)^ | **Input token limit** 1,048,576 **Output token limit** 65,536 |
 | Capabilities | **Audio generation** Not supported **Batch API** Supported **Caching** Supported **Code execution** Supported **Computer use** Not supported **File search** Supported **Flex inference** Supported **Function calling** Supported **Grounding with Google Maps** Supported **Image generation** Not supported **Live API** Not supported **Priority inference** Supported **Search grounding** Supported **Structured outputs** Supported **Thinking** Supported **URL context** Supported |
-| Versions | Read the [model version patterns](https://ai.google.dev/gemini-api/docs/models/gemini#model-versions) for more details. - `Preview: gemini-3.1-flash-lite-preview` |
+| Versions | Read the [model version patterns](https://ai.google.dev/gemini-api/docs/models/gemini#model-versions) for more details. - `Preview: gemini-3.1-flash-lite` |
 | Latest update | March 2026 |
 | Knowledge cutoff | January 2025 |
 
@@ -31,7 +31,7 @@ scale. Here are some use cases best suited for Gemini 3.1 Flash-Lite:
       text = "Hey, are you down to grab some pizza later? I'm starving!"
 
       response = client.models.generate_content(
-          model="gemini-3.1-flash-lite-preview",
+          model="gemini-3.1-flash-lite",
           config={
               "system_instruction": "Only output the translated text"
           },
@@ -53,7 +53,7 @@ scale. Here are some use cases best suited for Gemini 3.1 Flash-Lite:
       prompt = 'Generate a transcript of the audio.'
 
       response = client.models.generate_content(
-        model="gemini-3.1-flash-lite-preview",
+        model="gemini-3.1-flash-lite",
         contents=[prompt, uploaded_file]
       )
 
@@ -76,7 +76,7 @@ scale. Here are some use cases best suited for Gemini 3.1 Flash-Lite:
           is_return_risk: bool = Field(description="True if the user mentions returning the item")
 
       response = client.models.generate_content(
-          model="gemini-3.1-flash-lite-preview",
+          model="gemini-3.1-flash-lite",
           contents=[prompt, input_text],
           config={
               "response_mime_type": "application/json",
@@ -98,7 +98,7 @@ scale. Here are some use cases best suited for Gemini 3.1 Flash-Lite:
 
       prompt = "Summarize this document"
       response = client.models.generate_content(
-          model="gemini-3.1-flash-lite-preview",
+          model="gemini-3.1-flash-lite",
           contents=[
               types.Part.from_bytes(
                   data=doc_data,
@@ -150,7 +150,7 @@ scale. Here are some use cases best suited for Gemini 3.1 Flash-Lite:
       }
 
       response = client.models.generate_content(
-          model="gemini-3.1-flash-lite-preview",
+          model="gemini-3.1-flash-lite",
           contents=user_input,
           config={
               "system_instruction": CLASSIFIER_SYSTEM_PROMPT,
@@ -167,7 +167,7 @@ scale. Here are some use cases best suited for Gemini 3.1 Flash-Lite:
 
 ```python
       response = client.models.generate_content(
-          model="gemini-3.1-flash-lite-preview",
+          model="gemini-3.1-flash-lite",
           contents="How does AI work?",
           config=types.GenerateContentConfig(
               thinking_config=types.ThinkingConfig(thinking_level="high")

@@ -107,7 +107,7 @@ The system relied fully on prompting for non-repetitive wording without any mini
 
 ### 5. Default support model skewed toward cheaper throughput
 
-The support-agent default used `gemini-3.1-flash-lite-preview`, which is less aligned with a high-quality, grounded, multi-step support workflow than the more balanced `gemini-2.5-flash` default now recommended by Google for agentic use cases.
+The support-agent default used `gemini-3.1-flash-lite`, which is less aligned with a high-quality, grounded, multi-step support workflow than the more balanced `gemini-2.5-flash` default now recommended by Google for agentic use cases.
 
 ## Plan
 
