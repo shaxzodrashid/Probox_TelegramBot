@@ -10,6 +10,7 @@ import { logger } from '../../utils/logger';
 import { BotNotificationService } from '../bot-notification.service';
 import { Coupon, CouponService } from '../coupon/coupon.service';
 import { Promotion, PromotionService } from '../coupon/promotion.service';
+import { MessageTemplate, MessageTemplateService } from '../message-template.service';
 import { User, UserService } from '../user.service';
 import { formatItemsList } from '../../utils/formatting/items-formatter.util';
 
@@ -365,6 +366,8 @@ export class PaymentReminderService {
     dryRun: boolean;
     missingTemplates: Set<string>;
     existingCouponSet?: Set<string>;
+    deliveredMessagesSet?: Set<string>;
+    activeTemplatesMap?: Map<string, MessageTemplate>;
   }): Promise<{ couponIssued: boolean; notificationSent: boolean }> {
     const {
       installment,
@@ -374,6 +377,8 @@ export class PaymentReminderService {
       dryRun,
       missingTemplates,
       existingCouponSet,
+      deliveredMessagesSet,
+      activeTemplatesMap,
     } = params;
 
     if (!this.isPaymentInRewardMonth(installment, window)) {
@@ -418,9 +423,15 @@ export class PaymentReminderService {
       return { couponIssued: coupons.length > 0, notificationSent: false };
     }
 
+    const alreadyDelivered = deliveredMessagesSet?.has(`${linkedUser.user.id}:payment_on_time`);
+    if (alreadyDelivered) {
+      return { couponIssued: coupons.length > 0, notificationSent: false };
+    }
+
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
       templateType: 'payment_paid_on_time',
+      template: activeTemplatesMap?.get('payment_paid_on_time'),
       placeholders: {
         customer_name: linkedUser.fullName,
         coupon_code: firstCoupon.code,
@@ -446,8 +457,18 @@ export class PaymentReminderService {
     dryRun: boolean;
     missingTemplates: Set<string>;
     sentRemindersSet?: Set<string>;
+    deliveredMessagesSet?: Set<string>;
+    activeTemplatesMap?: Map<string, MessageTemplate>;
   }): Promise<boolean> {
-    const { installment, linkedUser, dryRun, missingTemplates, sentRemindersSet } = params;
+    const {
+      installment,
+      linkedUser,
+      dryRun,
+      missingTemplates,
+      sentRemindersSet,
+      deliveredMessagesSet,
+      activeTemplatesMap,
+    } = params;
     const alreadySent = sentRemindersSet
       ? sentRemindersSet.has(
           `${linkedUser.user.id}:${installment.DocEntry}:${installment.InstlmntID}:paid_late`,
@@ -467,9 +488,15 @@ export class PaymentReminderService {
       return true;
     }
 
+    const alreadyDelivered = deliveredMessagesSet?.has(`${linkedUser.user.id}:payment_paid_late`);
+    if (alreadyDelivered) {
+      return false;
+    }
+
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
       templateType: 'payment_paid_late',
+      template: activeTemplatesMap?.get('payment_paid_late'),
       placeholders: {
         customer_name: linkedUser.fullName,
         coupon_code: '',
@@ -506,6 +533,8 @@ export class PaymentReminderService {
     dryRun: boolean;
     missingTemplates: Set<string>;
     sentRemindersSet?: Set<string>;
+    deliveredMessagesSet?: Set<string>;
+    activeTemplatesMap?: Map<string, MessageTemplate>;
   }): Promise<boolean> {
     const {
       installment,
@@ -514,6 +543,8 @@ export class PaymentReminderService {
       dryRun,
       missingTemplates,
       sentRemindersSet,
+      deliveredMessagesSet,
+      activeTemplatesMap,
     } = params;
     const alreadySent = sentRemindersSet
       ? sentRemindersSet.has(
@@ -536,6 +567,12 @@ export class PaymentReminderService {
 
     const templateType =
       reminderType === 'overdue' ? 'payment_overdue' : `payment_reminder_${reminderType}`;
+
+    const alreadyDelivered = deliveredMessagesSet?.has(`${linkedUser.user.id}:${templateType}`);
+    if (alreadyDelivered) {
+      return false;
+    }
+
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
       templateType: templateType as
@@ -543,6 +580,7 @@ export class PaymentReminderService {
         | 'payment_reminder_d2'
         | 'payment_reminder_d1'
         | 'payment_reminder_d0',
+      template: activeTemplatesMap?.get(templateType),
       placeholders: {
         customer_name: linkedUser.fullName,
         coupon_code: '',
@@ -591,16 +629,18 @@ export class PaymentReminderService {
         await CouponService.expireStaleCoupons();
       }
 
-      const [users, promotion, installments] = await Promise.all([
+      const [users, promotion, installments, allTemplates] = await Promise.all([
         UserService.getUsersWithSapCardCode(),
         PromotionService.getCurrentPromotion(now),
         this.fetchInstallments(window),
+        MessageTemplateService.listTemplates(),
       ]);
 
       const linkedUsersByCardCode = this.buildLinkedUserMap(users);
 
       const couponLookupPairs: [number, number][] = [];
       const logLookupTuples: [number, number, number][] = [];
+      const userIds: number[] = [];
 
       for (const installment of installments) {
         const linkedUser = linkedUsersByCardCode.get(installment.CardCode);
@@ -610,17 +650,18 @@ export class PaymentReminderService {
         }
 
         if (linkedUser) {
-          logLookupTuples.push([
-            linkedUser.user.id,
-            installment.DocEntry,
-            installment.InstlmntID,
-          ]);
+          logLookupTuples.push([linkedUser.user.id, installment.DocEntry, installment.InstlmntID]);
+          userIds.push(linkedUser.user.id);
         }
       }
 
-      // TODO: Implement batching for message_dispatch_logs in BotNotificationService
-      // to further optimize N+1 checks for delivered messages.
-      const [existingLogs, existingCoupons] = await Promise.all([
+      const activeTemplatesMap = new Map<string, MessageTemplate>(
+        allTemplates
+          .filter((t) => t.is_active && t.channel === 'telegram_bot')
+          .map((t) => [t.template_type, t]),
+      );
+
+      const [existingLogs, existingCoupons, deliveredLogs] = await Promise.all([
         logLookupTuples.length > 0
           ? db('payment_reminder_logs').whereIn(
               ['user_id', 'doc_entry', 'installment_id'],
@@ -632,17 +673,33 @@ export class PaymentReminderService {
               .where('source_type', 'payment_on_time')
               .whereIn(['sap_doc_entry', 'sap_installment_id'], couponLookupPairs)
           : [],
+        userIds.length > 0
+          ? db('message_dispatch_logs')
+              .whereIn('user_id', userIds)
+              .whereIn('dispatch_type', [
+                'payment_paid_on_time',
+                'payment_paid_late',
+                'payment_overdue',
+                'payment_reminder_d2',
+                'payment_reminder_d1',
+                'payment_reminder_d0',
+              ])
+              .where('status', 'sent')
+          : [],
       ]);
 
       const sentRemindersSet = new Set(
         existingLogs.map(
-          (log) =>
-            `${log.user_id}:${log.doc_entry}:${log.installment_id}:${log.reminder_type}`,
+          (log) => `${log.user_id}:${log.doc_entry}:${log.installment_id}:${log.reminder_type}`,
         ),
       );
 
       const existingCouponSet = new Set(
         existingCoupons.map((c) => `${c.sap_doc_entry}:${c.sap_installment_id}`),
+      );
+
+      const deliveredMessagesSet = new Set(
+        deliveredLogs.map((log) => `${log.user_id}:${log.dispatch_type}`),
       );
 
       const checkedCardCodes = new Set(installments.map((installment) => installment.CardCode))
@@ -666,6 +723,8 @@ export class PaymentReminderService {
             dryRun,
             missingTemplates,
             existingCouponSet,
+            deliveredMessagesSet,
+            activeTemplatesMap,
           });
 
           if (rewardResult.couponIssued) {
@@ -692,6 +751,8 @@ export class PaymentReminderService {
               dryRun,
               missingTemplates,
               sentRemindersSet,
+              deliveredMessagesSet,
+              activeTemplatesMap,
             });
 
             if (delivered) {
@@ -715,6 +776,8 @@ export class PaymentReminderService {
           dryRun,
           missingTemplates,
           sentRemindersSet,
+          deliveredMessagesSet,
+          activeTemplatesMap,
         });
 
         if (delivered) {

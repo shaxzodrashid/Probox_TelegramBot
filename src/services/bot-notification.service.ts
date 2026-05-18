@@ -50,8 +50,9 @@ export class BotNotificationService {
     couponId?: number;
     dispatchType: string;
     photo?: NotificationPhoto | null;
+    template?: MessageTemplate;
   }): Promise<NotificationResult> {
-    const template = await MessageTemplateService.getActiveTemplateByType(params.templateType);
+    const template = params.template || await MessageTemplateService.getActiveTemplateByType(params.templateType);
 
     if (!template) {
       const dispatchLogId = await this.writeDispatchLog({
