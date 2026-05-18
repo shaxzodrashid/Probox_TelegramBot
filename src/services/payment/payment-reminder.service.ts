@@ -618,6 +618,8 @@ export class PaymentReminderService {
         }
       }
 
+      // TODO: Implement batching for message_dispatch_logs in BotNotificationService
+      // to further optimize N+1 checks for delivered messages.
       const [existingLogs, existingCoupons] = await Promise.all([
         logLookupTuples.length > 0
           ? db('payment_reminder_logs').whereIn(
