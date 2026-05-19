@@ -1,4 +1,4 @@
-import Ocr from '@gutenye/ocr-node';
+import Ocr, { Line } from '@gutenye/ocr-node';
 import { logger } from '../utils/logger';
 
 export interface PassportDataFields {
@@ -15,7 +15,7 @@ export interface OCRResult extends PassportDataFields {
 }
 
 export class OCRService {
-  private static ocrInstance: any = null;
+  private static ocrInstance: Ocr | null = null;
 
   static async getOcrInstance() {
     if (!this.ocrInstance) {
@@ -27,8 +27,14 @@ export class OCRService {
   static async recognizeText(imageBuffer: Buffer): Promise<string> {
     try {
       const ocr = await this.getOcrInstance();
-      const lines = await ocr.detect(imageBuffer as any);
-      return lines.map((l: any) => l.text).join('\n');
+      if (!ocr) {
+        throw new Error('OCR instance is not initialized');
+      }
+      // Ocr.detect can accept Buffer implicitly in Node environments, but to avoid TS errors
+      // if the type strictly expects a path string, we typecast it while keeping explicit types for lines
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lines: Line[] = await ocr.detect(imageBuffer as any);
+      return lines.map((l: Line) => l.text).join('\n');
     } catch (error) {
       logger.error('OCR recognition error:', error);
       throw error;
@@ -50,10 +56,16 @@ export class OCRService {
     const cleanText = text.replace(/[\s\r\n]+/g, '').toUpperCase();
 
     // Enhanced MRZ Regexes for full-text scan
-    const td3Regex = /([A-Z0-9<]{9})[A-Z0-9<]UZB[A-Z0-9<]{6}[A-Z0-9<][MF<][A-Z0-9<]{6}[A-Z0-9<]([A-Z0-9<]{14})/i;
+    const td3Regex =
+      /([A-Z0-9<]{9})[A-Z0-9<]UZB[A-Z0-9<]{6}[A-Z0-9<][MF<][A-Z0-9<]{6}[A-Z0-9<]([A-Z0-9<]{14})/i;
     const td1Regex = /[IAC][A-Z<]UZB([A-Z0-9<]{9})[A-Z0-9<]([A-Z0-9<]{14})/i;
 
-    const parseJshshir = (raw: string) => raw.replace(/[Oo]/g, '0').replace(/[Iil]/g, '1').replace(/[Ss]/g, '5').replace(/[^0-9]/g, '');
+    const parseJshshir = (raw: string) =>
+      raw
+        .replace(/[Oo]/g, '0')
+        .replace(/[Iil]/g, '1')
+        .replace(/[Ss]/g, '5')
+        .replace(/[^0-9]/g, '');
     const parseCard = (raw: string) => raw.replace(/</g, '').replace(/[^A-Z0-9]/gi, '');
 
     const setIfValid = (c: string, j: string) => {
@@ -179,7 +191,8 @@ export class OCRService {
     let firstName: string | null = null;
     let lastName: string | null = null;
 
-    const parseName = (raw: string) => raw.toUpperCase().replace(/0/g, 'O').replace(/1/g, 'I').replace(/5/g, 'S');
+    const parseName = (raw: string) =>
+      raw.toUpperCase().replace(/0/g, 'O').replace(/1/g, 'I').replace(/5/g, 'S');
 
     const mrzIdCardMatch = text.match(/\b([A-Z0-9]+)<<([A-Z0-9]+)<{2,}\b/i);
     if (mrzIdCardMatch) {
