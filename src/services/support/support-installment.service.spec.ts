@@ -83,10 +83,10 @@ test('SupportInstallmentService calculates used-product monthly installment from
 
       assert.equal(result.ok, true);
       assert.equal(result.price_source, 'PurchasePrice');
-      assert.equal(result.actual_price, 11_925_000);
+      assert.equal(result.actual_price, 11_700_000);
       assert.equal(result.down_payment, 1_000_000);
-      assert.equal(result.financed_amount, 10_925_000);
-      assert.equal(result.monthly_installment, 2_513_000);
+      assert.equal(result.financed_amount, 10_700_000);
+      assert.equal(result.monthly_installment, 2_461_000);
       assert.equal('total_after_percentage' in result, false);
     },
   );
@@ -126,9 +126,9 @@ test('SupportInstallmentService defaults missing or zero down payment to minimum
 
 test('SupportInstallmentService applies used-product USD adjustment tiers before UZS conversion', async () => {
   const cases = [
-    { purchasePrice: '500', expectedActualPrice: 6_875_000, expectedMonthly: 5_875_000 },
-    { purchasePrice: '1000', expectedActualPrice: 13_250_000, expectedMonthly: 12_250_000 },
-    { purchasePrice: '1001', expectedActualPrice: 12_887_875, expectedMonthly: 11_888_000 },
+    { purchasePrice: '500', expectedActualPrice: 6_625_000, expectedMonthly: 5_625_000 },
+    { purchasePrice: '1000', expectedActualPrice: 13_000_000, expectedMonthly: 12_000_000 },
+    { purchasePrice: '1001', expectedActualPrice: 12_762_750, expectedMonthly: 11_763_000 },
   ];
 
   for (const item of cases) {

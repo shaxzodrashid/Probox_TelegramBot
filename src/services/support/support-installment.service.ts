@@ -40,14 +40,14 @@ const roundToNearestThousand = (value: number): number => Math.round(value / 100
 
 const getUsedProductPriceAdjustmentPercentage = (priceUsd: number): number => {
   if (priceUsd <= 500) {
-    return 10;
-  }
-
-  if (priceUsd <= 1000) {
     return 6;
   }
 
-  return 3;
+  if (priceUsd <= 1000) {
+    return 4;
+  }
+
+  return 2;
 };
 
 const normalizeCondition = (value: string | null): 'new' | 'used' | 'unknown' => {
