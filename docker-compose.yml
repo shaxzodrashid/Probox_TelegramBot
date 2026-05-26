@@ -50,7 +50,7 @@ services:
       S3_PATH: "backups"
       S3_S3V4: "yes" # MinIO requires S3v4
       # Database Configuration
-      POSTGRES_DATABASE: "${DB_NAME:-probox_bot_db}"
+      POSTGRES_DB: "${DB_NAME:-probox_bot_db}"
       POSTGRES_HOST: "postgres"
       POSTGRES_USER: "${DB_USER:-postgres}"
       POSTGRES_PASSWORD: "${DB_PASS:-azm2shA08}"
