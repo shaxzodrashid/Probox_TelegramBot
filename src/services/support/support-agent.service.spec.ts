@@ -417,6 +417,10 @@ test('SupportAgentService passes system instructions, all tool config, and schem
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
+      /When giving Call-Center contacts, provide these phone numbers exactly: \+998781134774 and \+998555134774/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
       /Tools available in every turn: lookup_store_items, lookup_available_devices, lookup_currency_rate, convert_currency_amount, calculate_installment_price/i,
     );
     assert.match(
