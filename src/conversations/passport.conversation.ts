@@ -294,6 +294,6 @@ export async function addPassportDataConversation(conversation: BotConversation,
     });
   } catch (err) {
     logger.error('[Passport] UNHANDLED ERROR in conversation:', err);
-    await ctx.reply(ctx.t('admin_error_generic')).catch(() => {});
+    await ctx.reply(i18n.t(locale, 'admin_error_generic')).catch(() => {});
   }
 }
