@@ -35,11 +35,20 @@ const REGISTRATION_ACTIVE_TTL_SECONDS = 60 * 60;
 export async function verifySapUser(phoneNumber: string): Promise<IBusinessPartner | undefined> {
   const hanaService = new HanaService();
   const sapService = new SapService(hanaService);
-  const partners = await sapService.getBusinessPartnerByPhone(phoneNumber);
 
-  if (partners && partners.length > 0) {
-    return selectPreferredSapBusinessPartner(partners);
+  try {
+    const partners = await sapService.getBusinessPartnerByPhone(phoneNumber);
+
+    if (partners && partners.length > 0) {
+      return selectPreferredSapBusinessPartner(partners);
+    }
+  } catch (error) {
+    logger.warn('[REGISTRATION] SAP phone lookup failed; continuing without SAP profile', {
+      phoneNumber,
+      error,
+    });
   }
+
   return undefined;
 }
 

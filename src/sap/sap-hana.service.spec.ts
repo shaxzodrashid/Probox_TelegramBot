@@ -111,6 +111,8 @@ test('SapService getBPpurchasesByCardCode forwards the card code to SAP', async 
       DocDate: '2026-04-01',
       DocDueDate: '2026-04-30',
       DocCur: 'UZS',
+      DocTotal: 100,
+      DocTotalFC: 0,
       Total: 100,
       TotalPaid: 0,
       InstlmntID: 1,
