@@ -31,6 +31,13 @@ test('resolveUiTextAction matches current menu texts across locales', () => {
   });
 });
 
+test('resolveUiTextAction recognizes scheduled broadcast management', () => {
+  assert.deepEqual(resolveUiTextAction('🗓 Rejalashtirilgan xabarlar'), {
+    action: 'admin_scheduled_broadcasts',
+    scope: 'global',
+  });
+});
+
 test('resolveUiTextAction matches legacy main-menu aliases', () => {
   const result = resolveUiTextAction('📲 Главное меню');
 

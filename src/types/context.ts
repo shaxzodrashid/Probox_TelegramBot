@@ -60,6 +60,10 @@ export interface SessionData {
   adminReplyTicketId?: number;
   // Admin send message target
   adminSendTargetUser?: number;
+  adminScheduledBroadcastEditTarget?: {
+    broadcastId: number;
+    field: 'message' | 'schedule';
+  };
   adminPromotionListPage?: number;
   adminPromotionEditTarget?: {
     promotionId: number;

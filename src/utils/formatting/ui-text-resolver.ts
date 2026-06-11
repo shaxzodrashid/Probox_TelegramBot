@@ -25,6 +25,7 @@ import {
   adminUsersHandler,
   adminBranchesHandler,
   adminBroadcastHandler,
+  adminScheduledBroadcastsHandler,
   adminStatsHandler,
   adminExportHandler,
   adminBackToMainMenuHandler,
@@ -65,6 +66,7 @@ export type UiActionId =
   | 'admin_users'
   | 'admin_branches'
   | 'admin_broadcast'
+  | 'admin_scheduled_broadcasts'
   | 'admin_stats'
   | 'admin_campaign_promotions'
   | 'admin_campaign_prizes'
@@ -130,6 +132,11 @@ const TRANSLATION_ENTRIES: UiTextRegistryEntry[] = [
   { action: 'admin_users', scope: 'global', key: 'admin_users' },
   { action: 'admin_branches', scope: 'global', key: 'admin_branches' },
   { action: 'admin_broadcast', scope: 'global', key: 'admin_broadcast' },
+  {
+    action: 'admin_scheduled_broadcasts',
+    scope: 'global',
+    key: 'admin_scheduled_broadcasts',
+  },
   { action: 'admin_stats', scope: 'global', key: 'admin_stats' },
   {
     action: 'admin_campaign_promotions',
@@ -326,6 +333,9 @@ export async function routeUiTextAction(
       return;
     case 'admin_broadcast':
       await adminBroadcastHandler(ctx);
+      return;
+    case 'admin_scheduled_broadcasts':
+      await adminScheduledBroadcastsHandler(ctx);
       return;
     case 'admin_stats':
       await adminStatsHandler(ctx);

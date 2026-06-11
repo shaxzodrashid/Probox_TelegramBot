@@ -1,5 +1,9 @@
 import { BotConversation, BotContext } from '../types/context';
-import { ScheduledBroadcastWeekDay } from '../types/support.types';
+import {
+    ScheduledBroadcastScheduleType,
+    ScheduledBroadcastWeekDay,
+    UpdateScheduledBroadcastScheduleParams,
+} from '../types/support.types';
 import { BroadcastService } from '../services/broadcast.service';
 import { AdminService } from '../services/admin.service';
 import { BranchService } from '../services/branch.service';
@@ -9,6 +13,7 @@ import {
     getAdminMenuKeyboard,
     getBroadcastConfirmKeyboard,
     getBroadcastDeliveryModeKeyboard,
+    getBroadcastScheduleTypeKeyboard,
     getBroadcastTargetKeyboard,
     getBroadcastWeekDayKeyboard,
 } from '../keyboards/admin.keyboards';
@@ -19,6 +24,11 @@ import { logger } from '../utils/logger';
 import { formatUzPhone } from '../utils/uz-phone.util';
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import { parseWorkTimeRange } from '../utils/branch.util';
+import {
+    isValidScheduleDate,
+    parseMonthDay,
+    SCHEDULE_TYPES,
+} from '../utils/scheduled-broadcast.util';
 
 const BROADCAST_WEEKDAY_KEYS: Record<ScheduledBroadcastWeekDay, string> = {
     0: 'weekday_sunday',
@@ -40,6 +50,198 @@ const getBroadcastWeekDayLabel = (
     locale: string,
     weekDay: ScheduledBroadcastWeekDay
 ): string => i18n.t(locale, BROADCAST_WEEKDAY_KEYS[weekDay]);
+
+const isCancelText = (value: string, locale: string): boolean =>
+    value === i18n.t(locale, 'admin_cancel');
+
+const waitForScheduleText = async (
+    conversation: BotConversation,
+    ctx: BotContext,
+    locale: string,
+    prompt: string,
+    validator: (value: string) => boolean,
+    invalidMessage: string,
+): Promise<string | null> => {
+    await ctx.reply(prompt, { reply_markup: getAdminCancelKeyboard(locale) });
+
+    while (true) {
+        const inputCtx = await conversation.waitFor('message:text');
+        const value = inputCtx.message.text.trim();
+        if (isCancelText(value, locale)) return null;
+        if (validator(value)) return value;
+        await inputCtx.reply(invalidMessage, { reply_markup: getAdminCancelKeyboard(locale) });
+    }
+};
+
+const waitForScheduleWeekDay = async (
+    conversation: BotConversation,
+    ctx: BotContext,
+    locale: string,
+    prompt: string,
+): Promise<ScheduledBroadcastWeekDay | null> => {
+    await ctx.reply(prompt, { reply_markup: getBroadcastWeekDayKeyboard(locale) });
+    const weekdayCtx = await conversation.waitFor('callback_query:data');
+    const weekdayData = weekdayCtx.callbackQuery.data;
+    await weekdayCtx.answerCallbackQuery().catch((err) => {
+        if (!isCallbackQueryExpiredError(err)) throw err;
+    });
+
+    if (weekdayData === 'admin_cancel') return null;
+    const parsedWeekDay = Number(weekdayData.split(':')[1]);
+    if (!Number.isInteger(parsedWeekDay) || parsedWeekDay < 0 || parsedWeekDay > 6) return null;
+    return parsedWeekDay as ScheduledBroadcastWeekDay;
+};
+
+const collectBroadcastSchedule = async (
+    conversation: BotConversation,
+    ctx: BotContext,
+    locale: string,
+    initialScheduleType?: ScheduledBroadcastScheduleType,
+): Promise<UpdateScheduledBroadcastScheduleParams | null> => {
+    let scheduleType = initialScheduleType;
+
+    if (!scheduleType) {
+        await ctx.reply(i18n.t(locale, 'admin_broadcast_select_schedule_type'), {
+            reply_markup: getBroadcastScheduleTypeKeyboard(locale),
+        });
+        const typeCtx = await conversation.waitFor('callback_query:data');
+        const typeData = typeCtx.callbackQuery.data;
+        await typeCtx.answerCallbackQuery().catch((err) => {
+            if (!isCallbackQueryExpiredError(err)) throw err;
+        });
+
+        if (typeData === 'admin_cancel') return null;
+        const parsedType = typeData.split(':')[1] as ScheduledBroadcastScheduleType;
+        if (!SCHEDULE_TYPES.includes(parsedType)) return null;
+        scheduleType = parsedType;
+    }
+
+    const schedule: UpdateScheduledBroadcastScheduleParams = {
+        scheduleType,
+        scheduledTime: '',
+    };
+
+    if (scheduleType === 'weekly' || scheduleType === 'twice_weekly') {
+        const firstWeekDay = await waitForScheduleWeekDay(
+            conversation,
+            ctx,
+            locale,
+            i18n.t(locale, 'admin_broadcast_select_weekday'),
+        );
+        if (firstWeekDay === null) return null;
+        schedule.weekDays = [firstWeekDay];
+
+        if (scheduleType === 'twice_weekly') {
+            let secondWeekDay: ScheduledBroadcastWeekDay | null = null;
+            while (secondWeekDay === null || secondWeekDay === firstWeekDay) {
+                secondWeekDay = await waitForScheduleWeekDay(
+                    conversation,
+                    ctx,
+                    locale,
+                    i18n.t(locale, 'admin_broadcast_select_second_weekday', {
+                        weekday: getBroadcastWeekDayLabel(locale, firstWeekDay),
+                    }),
+                );
+                if (secondWeekDay === null) return null;
+                if (secondWeekDay === firstWeekDay) {
+                    await ctx.reply(i18n.t(locale, 'admin_broadcast_weekdays_must_differ'));
+                }
+            }
+            schedule.weekDays.push(secondWeekDay);
+        }
+    }
+
+    if (scheduleType === 'once' || scheduleType === 'biweekly') {
+        const date = await waitForScheduleText(
+            conversation,
+            ctx,
+            locale,
+            i18n.t(
+                locale,
+                scheduleType === 'once'
+                    ? 'admin_broadcast_enter_once_date'
+                    : 'admin_broadcast_enter_biweekly_start_date',
+            ),
+            isValidScheduleDate,
+            i18n.t(locale, 'admin_broadcast_invalid_date'),
+        );
+        if (!date) return null;
+
+        if (scheduleType === 'once') {
+            schedule.scheduledDate = date;
+        } else {
+            schedule.startDate = date;
+            schedule.weekDays = [new Date(`${date}T12:00:00.000Z`).getUTCDay() as ScheduledBroadcastWeekDay];
+        }
+    }
+
+    if (scheduleType === 'monthly' || scheduleType === 'twice_monthly') {
+        const firstDayValue = await waitForScheduleText(
+            conversation,
+            ctx,
+            locale,
+            i18n.t(locale, 'admin_broadcast_enter_month_day'),
+            (value) => parseMonthDay(value) !== null,
+            i18n.t(locale, 'admin_broadcast_invalid_month_day'),
+        );
+        if (!firstDayValue) return null;
+        const firstDay = parseMonthDay(firstDayValue)!;
+        schedule.monthDays = [firstDay];
+
+        if (scheduleType === 'twice_monthly') {
+            let secondDay: number | null = null;
+            while (secondDay === null || secondDay === firstDay) {
+                const secondDayValue = await waitForScheduleText(
+                    conversation,
+                    ctx,
+                    locale,
+                    i18n.t(locale, 'admin_broadcast_enter_second_month_day', {
+                        day: firstDay.toString(),
+                    }),
+                    (value) => parseMonthDay(value) !== null,
+                    i18n.t(locale, 'admin_broadcast_invalid_month_day'),
+                );
+                if (!secondDayValue) return null;
+                secondDay = parseMonthDay(secondDayValue);
+                if (secondDay === firstDay) {
+                    await ctx.reply(i18n.t(locale, 'admin_broadcast_month_days_must_differ'));
+                }
+            }
+            schedule.monthDays.push(secondDay);
+        }
+    }
+
+    const time = await waitForScheduleText(
+        conversation,
+        ctx,
+        locale,
+        i18n.t(locale, 'admin_broadcast_enter_time_generic'),
+        (value) => parseBroadcastTime(value) !== null,
+        i18n.t(locale, 'admin_broadcast_invalid_time'),
+    );
+    if (!time) return null;
+    schedule.scheduledTime = time;
+    return schedule;
+};
+
+const formatScheduleSummary = (
+    locale: string,
+    schedule: UpdateScheduledBroadcastScheduleParams,
+): string => {
+    const values = {
+        time: schedule.scheduledTime,
+        date: schedule.scheduledDate || schedule.startDate || '',
+        weekday: schedule.weekDays?.[0] === undefined
+            ? ''
+            : getBroadcastWeekDayLabel(locale, schedule.weekDays[0]),
+        weekday2: schedule.weekDays?.[1] === undefined
+            ? ''
+            : getBroadcastWeekDayLabel(locale, schedule.weekDays[1]),
+        day: schedule.monthDays?.[0]?.toString() || '',
+        day2: schedule.monthDays?.[1]?.toString() || '',
+    };
+    return i18n.t(locale, `schedule_summary_${schedule.scheduleType}`, values);
+};
 
 /**
  * Admin Broadcast Conversation
@@ -218,85 +420,31 @@ export async function adminBroadcastConversation(
         return;
     }
 
-    const isWeeklySchedule = modeData === 'admin_broadcast_weekly';
-    let weekDay: ScheduledBroadcastWeekDay | undefined;
-    let scheduledTime: string | undefined;
+    const isScheduled = modeData !== 'admin_broadcast_send_now';
+    let schedule: UpdateScheduledBroadcastScheduleParams | null = null;
 
-    if (isWeeklySchedule) {
-        await modeCtx.editMessageText(
-            i18n.t(locale, 'admin_broadcast_select_weekday'),
-            { reply_markup: getBroadcastWeekDayKeyboard(locale) }
-        ).catch((err) => {
-            if (!isMessageToDeleteNotFoundError(err)) throw err;
-        });
-
-        const weekdayCtx = await conversation.waitFor('callback_query:data');
-        const weekdayData = weekdayCtx.callbackQuery.data;
-        await weekdayCtx.answerCallbackQuery().catch((err) => {
-            if (!isCallbackQueryExpiredError(err)) throw err;
-        });
-
-        if (weekdayData === 'admin_cancel') {
-            await weekdayCtx.editMessageText(i18n.t(locale, 'admin_cancelled')).catch((err) => {
-                if (!isMessageToDeleteNotFoundError(err)) throw err;
+    if (isScheduled) {
+        const parsedType = modeData.split(':')[1] as ScheduledBroadcastScheduleType;
+        if (!SCHEDULE_TYPES.includes(parsedType)) {
+            await ctx.reply(i18n.t(locale, 'admin_error'), {
+                reply_markup: getAdminMenuKeyboard(locale),
             });
             return;
         }
-
-        const parsedWeekDay = Number(weekdayData.split(':')[1]);
-        if (!Number.isInteger(parsedWeekDay) || parsedWeekDay < 0 || parsedWeekDay > 6) {
-            await ctx.reply(
-                i18n.t(locale, 'admin_broadcast_invalid_weekday'),
-                { reply_markup: getAdminMenuKeyboard(locale) }
-            );
+        schedule = await collectBroadcastSchedule(conversation, ctx, locale, parsedType);
+        if (!schedule) {
+            await ctx.reply(i18n.t(locale, 'admin_cancelled'), {
+                reply_markup: getAdminMenuKeyboard(locale),
+            });
             return;
-        }
-
-        weekDay = parsedWeekDay as ScheduledBroadcastWeekDay;
-
-        await weekdayCtx.editMessageText(
-            i18n.t(locale, 'admin_broadcast_enter_time', {
-                weekday: getBroadcastWeekDayLabel(locale, weekDay),
-            })
-        ).catch((err) => {
-            if (!isMessageToDeleteNotFoundError(err)) throw err;
-        });
-        await ctx.reply(
-            i18n.t(locale, 'admin_broadcast_enter_time_prompt'),
-            { reply_markup: getAdminCancelKeyboard(locale) }
-        );
-
-        while (!scheduledTime) {
-            const timeCtx = await conversation.waitFor('message:text');
-            const timeInput = timeCtx.message.text.trim();
-
-            if (timeInput === i18n.t(locale, 'admin_cancel')) {
-                await ctx.reply(
-                    i18n.t(locale, 'admin_cancelled'),
-                    { reply_markup: getAdminMenuKeyboard(locale) }
-                );
-                return;
-            }
-
-            const parsedTime = parseBroadcastTime(timeInput);
-            if (!parsedTime) {
-                await timeCtx.reply(
-                    i18n.t(locale, 'admin_broadcast_invalid_time'),
-                    { reply_markup: getAdminCancelKeyboard(locale) }
-                );
-                continue;
-            }
-
-            scheduledTime = parsedTime;
         }
     }
 
     // Show confirmation
-    const confirmMessage = isWeeklySchedule
+    const confirmMessage = schedule
         ? i18n.t(locale, 'admin_broadcast_schedule_confirm', {
             count: userCount.toString(),
-            weekday: getBroadcastWeekDayLabel(locale, weekDay!),
-            time: scheduledTime!,
+            schedule: formatScheduleSummary(locale, schedule),
         })
         : isAll
             ? i18n.t(locale, 'admin_broadcast_confirm', { count: userCount.toString() })
@@ -317,7 +465,7 @@ export async function adminBroadcastConversation(
         return;
     }
 
-    if (isWeeklySchedule) {
+    if (schedule) {
         await conversation.external(async () => {
             return await BroadcastService.createScheduledBroadcast({
                 adminTelegramId: adminId,
@@ -325,15 +473,13 @@ export async function adminBroadcastConversation(
                 photoFileId,
                 targetType: isAll ? 'all' : 'single',
                 targetUserId,
-                weekDay: weekDay!,
-                scheduledTime: scheduledTime!,
+                ...schedule!,
             });
         });
 
         await confirmCtx.editMessageText(
             i18n.t(locale, 'admin_broadcast_schedule_saved', {
-                weekday: getBroadcastWeekDayLabel(locale, weekDay!),
-                time: scheduledTime!,
+                schedule: formatScheduleSummary(locale, schedule),
             })
         ).catch((err) => {
             if (!isMessageToDeleteNotFoundError(err)) throw err;
@@ -417,6 +563,87 @@ export async function adminBroadcastConversation(
             );
         });
     }
+}
+
+export async function adminScheduledBroadcastEditConversation(
+    conversation: BotConversation,
+    ctx: BotContext,
+) {
+    const session = await conversation.external((c) => c.session);
+    const locale = session?.__language_code || 'uz';
+    const target = session?.adminScheduledBroadcastEditTarget;
+    await conversation.external((c) => {
+        if (c.session) c.session.adminScheduledBroadcastEditTarget = undefined;
+    });
+
+    if (!target) {
+        await ctx.reply(i18n.t(locale, 'admin_error'), {
+            reply_markup: getAdminMenuKeyboard(locale),
+        });
+        return;
+    }
+
+    const scheduledBroadcast = await conversation.external(() =>
+        BroadcastService.getScheduledBroadcastById(target.broadcastId),
+    );
+    if (!scheduledBroadcast) {
+        await ctx.reply(i18n.t(locale, 'admin_scheduled_not_found'), {
+            reply_markup: getAdminMenuKeyboard(locale),
+        });
+        return;
+    }
+
+    if (target.field === 'message') {
+        await ctx.reply(i18n.t(locale, 'admin_scheduled_enter_new_message'), {
+            reply_markup: getAdminCancelKeyboard(locale),
+        });
+        const messageCtx = await conversation.wait();
+        if (messageCtx.message?.text && isCancelText(messageCtx.message.text, locale)) {
+            await ctx.reply(i18n.t(locale, 'admin_cancelled'), {
+                reply_markup: getAdminMenuKeyboard(locale),
+            });
+            return;
+        }
+
+        const messageText = messageCtx.message?.text || messageCtx.message?.caption || '';
+        const photoFileId =
+            messageCtx.message?.photo?.[messageCtx.message.photo.length - 1]?.file_id;
+        if (!messageText && !photoFileId) {
+            await ctx.reply(i18n.t(locale, 'admin_broadcast_invalid_message'), {
+                reply_markup: getAdminMenuKeyboard(locale),
+            });
+            return;
+        }
+
+        await conversation.external(() =>
+            BroadcastService.updateScheduledBroadcastMessage(
+                target.broadcastId,
+                messageText,
+                photoFileId,
+            ),
+        );
+    } else {
+        const schedule = await collectBroadcastSchedule(conversation, ctx, locale);
+        if (!schedule) {
+            await ctx.reply(i18n.t(locale, 'admin_cancelled'), {
+                reply_markup: getAdminMenuKeyboard(locale),
+            });
+            return;
+        }
+        await conversation.external(() =>
+            BroadcastService.updateScheduledBroadcastSchedule(target.broadcastId, schedule),
+        );
+    }
+
+    await ctx.reply(
+        i18n.t(
+            locale,
+            target.field === 'message'
+                ? 'admin_scheduled_message_updated'
+                : 'admin_scheduled_schedule_updated',
+        ),
+        { reply_markup: getAdminMenuKeyboard(locale) },
+    );
 }
 
 /**

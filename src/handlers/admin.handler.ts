@@ -9,12 +9,20 @@ import { ExportService } from '../services/export.service';
 import { SupportService } from '../services/support/support.service';
 import { UserService } from '../services/user.service';
 import { BranchService } from '../services/branch.service';
+import { BroadcastService } from '../services/broadcast.service';
 import { PromotionService } from '../services/coupon/promotion.service';
 import { InputFile } from 'grammy';
 import {
     getAdminMenuKeyboard,
     getAdminUsersKeyboard,
     getAdminUserDetailKeyboard,
+    ADMIN_SCHEDULED_DETAIL_CALLBACK_PREFIX,
+    ADMIN_SCHEDULED_EDIT_MESSAGE_CALLBACK_PREFIX,
+    ADMIN_SCHEDULED_PAGE_CALLBACK_PREFIX,
+    ADMIN_SCHEDULED_RESCHEDULE_CALLBACK_PREFIX,
+    ADMIN_SCHEDULED_TOGGLE_CALLBACK_PREFIX,
+    getScheduledBroadcastDetailKeyboard,
+    getScheduledBroadcastsKeyboard,
 } from '../keyboards/admin.keyboards';
 import {
     getAdminBranchDeactivateConfirmKeyboard,
@@ -93,6 +101,11 @@ import { FaqService } from '../services/faq/faq.service';
 import { getFaqAgentToken } from '../utils/faq/faq-match.util';
 import { FaqRecord } from '../types/faq.types';
 import { formatDateTimeForLocale } from '../utils/time/tashkent-time.util';
+import {
+    ScheduledBroadcast,
+    ScheduledBroadcastWeekDay,
+} from '../types/support.types';
+import { normalizeNumberArray } from '../utils/scheduled-broadcast.util';
 
 /**
  * Check if user is an admin
@@ -129,6 +142,130 @@ const cleanupCallbackMessage = async (ctx: BotContext) => {
     });
     await ctx.deleteMessage().catch((err) => {
         if (!isMessageToDeleteNotFoundError(err)) throw err;
+    });
+};
+
+const SCHEDULE_WEEKDAY_KEYS: Record<ScheduledBroadcastWeekDay, string> = {
+    0: 'weekday_sunday',
+    1: 'weekday_monday',
+    2: 'weekday_tuesday',
+    3: 'weekday_wednesday',
+    4: 'weekday_thursday',
+    5: 'weekday_friday',
+    6: 'weekday_saturday',
+};
+
+const getScheduledBroadcastDescription = (
+    locale: string,
+    item: ScheduledBroadcast,
+): string => {
+    const weekDays = normalizeNumberArray(
+        item.week_days ?? (
+            item.week_day === null || item.week_day === undefined ? [] : [item.week_day]
+        ),
+    ) as ScheduledBroadcastWeekDay[];
+    const monthDays = normalizeNumberArray(item.month_days);
+    return i18n.t(locale, `schedule_summary_${item.schedule_type || 'weekly'}`, {
+        time: item.scheduled_time,
+        date: item.scheduled_date || item.start_date || '',
+        weekday: weekDays[0] === undefined ? '' : i18n.t(locale, SCHEDULE_WEEKDAY_KEYS[weekDays[0]]),
+        weekday2: weekDays[1] === undefined ? '' : i18n.t(locale, SCHEDULE_WEEKDAY_KEYS[weekDays[1]]),
+        day: monthDays[0]?.toString() || '',
+        day2: monthDays[1]?.toString() || '',
+    });
+};
+
+const buildScheduledBroadcastDetailText = (
+    locale: string,
+    item: ScheduledBroadcast,
+): string => {
+    const status = i18n.t(
+        locale,
+        item.is_active ? 'admin_scheduled_status_active' : 'admin_scheduled_status_inactive',
+    );
+    const target = item.target_type === 'all'
+        ? i18n.t(locale, 'admin_broadcast_all')
+        : i18n.t(locale, 'admin_scheduled_single_target', {
+            id: String(item.target_user_id || '-'),
+        });
+    const message = (item.message_text || i18n.t(locale, 'admin_scheduled_photo_only')).slice(0, 500);
+
+    return [
+        i18n.t(locale, 'admin_scheduled_detail_header', { id: String(item.id) }),
+        '',
+        `${i18n.t(locale, 'admin_scheduled_status_label')}: <b>${escapeHtml(status)}</b>`,
+        `${i18n.t(locale, 'admin_scheduled_target_label')}: ${escapeHtml(target)}`,
+        `${i18n.t(locale, 'admin_scheduled_schedule_label')}: ${escapeHtml(getScheduledBroadcastDescription(locale, item))}`,
+        `${i18n.t(locale, 'admin_scheduled_last_run_label')}: ${escapeHtml(formatDateTimeForLocale(item.last_run_at, locale))}`,
+        `${i18n.t(locale, 'admin_scheduled_has_photo_label')}: ${item.photo_file_id ? i18n.t(locale, 'admin_yes') : i18n.t(locale, 'admin_no')}`,
+        '',
+        `<b>${escapeHtml(i18n.t(locale, 'admin_scheduled_message_label'))}</b>`,
+        escapeHtml(message),
+    ].join('\n');
+};
+
+const showScheduledBroadcastsList = async (
+    ctx: BotContext,
+    locale: string,
+    page: number = 1,
+) => {
+    const result = await BroadcastService.listScheduledBroadcasts(page);
+    const lines = [i18n.t(locale, 'admin_scheduled_list_header')];
+
+    if (result.total === 0) {
+        lines.push('', i18n.t(locale, 'admin_scheduled_empty'));
+    } else {
+        lines.push('');
+        result.items.forEach((item) => {
+            const status = item.is_active ? '🟢' : '⚫';
+            lines.push(
+                `${status} <b>#${item.id}</b> ${escapeHtml(getScheduledBroadcastDescription(locale, item))}`,
+            );
+        });
+    }
+
+    await ctx.reply(lines.join('\n'), {
+        parse_mode: 'HTML',
+        reply_markup: getScheduledBroadcastsKeyboard(
+            result.items,
+            result.page,
+            result.totalPages,
+            locale,
+        ),
+    });
+};
+
+const showScheduledBroadcastDetail = async (
+    ctx: BotContext,
+    locale: string,
+    id: number,
+) => {
+    const item = await BroadcastService.getScheduledBroadcastById(id);
+    if (!item) {
+        await ctx.reply(i18n.t(locale, 'admin_scheduled_not_found'));
+        await showScheduledBroadcastsList(ctx, locale);
+        return;
+    }
+
+    const text = buildScheduledBroadcastDetailText(locale, item);
+    const replyMarkup = getScheduledBroadcastDetailKeyboard(item.id, item.is_active, locale);
+
+    if (item.photo_file_id) {
+        try {
+            await ctx.replyWithPhoto(item.photo_file_id, {
+                caption: text,
+                parse_mode: 'HTML',
+                reply_markup: replyMarkup,
+            });
+            return;
+        } catch (error) {
+            logger.warn(`Could not preview scheduled broadcast photo ${item.id}`, error);
+        }
+    }
+
+    await ctx.reply(text, {
+        parse_mode: 'HTML',
+        reply_markup: replyMarkup,
     });
 };
 
@@ -1726,6 +1863,122 @@ export const adminBroadcastHandler = async (ctx: BotContext) => {
         logger.error('Error in adminBroadcastHandler:', error);
         const locale = getLocale(ctx);
         await ctx.reply(i18n.t(locale, 'admin_error'));
+    }
+};
+
+export const adminScheduledBroadcastsHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+        const locale = getLocale(ctx);
+        if (ctx.callbackQuery) await cleanupCallbackMessage(ctx);
+        await showScheduledBroadcastsList(ctx, locale, 1);
+    } catch (error) {
+        logger.error('Error in adminScheduledBroadcastsHandler:', error);
+        await ctx.reply(i18n.t(getLocale(ctx), 'admin_error'));
+    }
+};
+
+export const adminScheduledBroadcastPageHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+        const locale = getLocale(ctx);
+        const page = Number(
+            ctx.callbackQuery?.data?.slice(ADMIN_SCHEDULED_PAGE_CALLBACK_PREFIX.length) || 1,
+        );
+        await cleanupCallbackMessage(ctx);
+        await showScheduledBroadcastsList(ctx, locale, page);
+    } catch (error) {
+        logger.error('Error in adminScheduledBroadcastPageHandler:', error);
+        await ctx.reply(i18n.t(getLocale(ctx), 'admin_error'));
+    }
+};
+
+export const adminScheduledBroadcastDetailHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+        const locale = getLocale(ctx);
+        const id = Number(
+            ctx.callbackQuery?.data?.slice(ADMIN_SCHEDULED_DETAIL_CALLBACK_PREFIX.length) || 0,
+        );
+        await cleanupCallbackMessage(ctx);
+        await showScheduledBroadcastDetail(ctx, locale, id);
+    } catch (error) {
+        logger.error('Error in adminScheduledBroadcastDetailHandler:', error);
+        await ctx.reply(i18n.t(getLocale(ctx), 'admin_error'));
+    }
+};
+
+const startScheduledBroadcastEdit = async (
+    ctx: BotContext,
+    prefix: string,
+    field: 'message' | 'schedule',
+) => {
+    if (!await requireAdmin(ctx)) return;
+    const id = Number(ctx.callbackQuery?.data?.slice(prefix.length) || 0);
+    const item = await BroadcastService.getScheduledBroadcastById(id);
+    if (!item) {
+        await ctx.answerCallbackQuery({
+            text: i18n.t(getLocale(ctx), 'admin_scheduled_not_found'),
+            show_alert: true,
+        }).catch(() => undefined);
+        return;
+    }
+
+    await cleanupCallbackMessage(ctx);
+    ctx.session.adminScheduledBroadcastEditTarget = { broadcastId: id, field };
+    await ctx.conversation.exitAll();
+    await ctx.conversation.enter('adminScheduledBroadcastEditConversation');
+};
+
+export const adminScheduledBroadcastEditMessageHandler = async (ctx: BotContext) => {
+    try {
+        await startScheduledBroadcastEdit(
+            ctx,
+            ADMIN_SCHEDULED_EDIT_MESSAGE_CALLBACK_PREFIX,
+            'message',
+        );
+    } catch (error) {
+        logger.error('Error in adminScheduledBroadcastEditMessageHandler:', error);
+        await ctx.reply(i18n.t(getLocale(ctx), 'admin_error'));
+    }
+};
+
+export const adminScheduledBroadcastRescheduleHandler = async (ctx: BotContext) => {
+    try {
+        await startScheduledBroadcastEdit(
+            ctx,
+            ADMIN_SCHEDULED_RESCHEDULE_CALLBACK_PREFIX,
+            'schedule',
+        );
+    } catch (error) {
+        logger.error('Error in adminScheduledBroadcastRescheduleHandler:', error);
+        await ctx.reply(i18n.t(getLocale(ctx), 'admin_error'));
+    }
+};
+
+export const adminScheduledBroadcastToggleHandler = async (ctx: BotContext) => {
+    try {
+        if (!await requireAdmin(ctx)) return;
+        const locale = getLocale(ctx);
+        const id = Number(
+            ctx.callbackQuery?.data?.slice(ADMIN_SCHEDULED_TOGGLE_CALLBACK_PREFIX.length) || 0,
+        );
+        const item = await BroadcastService.getScheduledBroadcastById(id);
+        if (!item) {
+            await ctx.answerCallbackQuery({
+                text: i18n.t(locale, 'admin_scheduled_not_found'),
+                show_alert: true,
+            }).catch(() => undefined);
+            return;
+        }
+
+        await BroadcastService.setScheduledBroadcastActive(id, !item.is_active);
+        await cleanupCallbackMessage(ctx);
+        await ctx.reply(i18n.t(locale, 'admin_scheduled_status_updated'));
+        await showScheduledBroadcastDetail(ctx, locale, id);
+    } catch (error) {
+        logger.error('Error in adminScheduledBroadcastToggleHandler:', error);
+        await ctx.reply(i18n.t(getLocale(ctx), 'admin_error'));
     }
 };
 

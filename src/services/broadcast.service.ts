@@ -6,6 +6,7 @@ import {
     CreateScheduledBroadcastParams,
     ScheduledBroadcast,
     BroadcastStatus,
+    UpdateScheduledBroadcastScheduleParams,
 } from '../types/support.types';
 import { AdminService } from './admin.service';
 import { UserService } from './user.service';
@@ -17,8 +18,11 @@ import { markdownToTelegramHtml } from '../utils/telegram/telegram-rich-text.uti
 import {
     getTashkentDateKey,
     getTashkentTimeKey,
-    getTashkentWeekDay,
 } from '../utils/time/tashkent-time.util';
+import {
+    getScheduleStorageValues,
+    isScheduledBroadcastDue,
+} from '../utils/scheduled-broadcast.util';
 
 /**
  * BroadcastService - Broadcasting logic for admin messages
@@ -80,6 +84,7 @@ export class BroadcastService {
     static async createScheduledBroadcast(
         params: CreateScheduledBroadcastParams
     ): Promise<ScheduledBroadcast> {
+        const scheduleValues = getScheduleStorageValues(params);
         const [result] = await db('scheduled_broadcasts')
             .insert({
                 admin_telegram_id: params.adminTelegramId,
@@ -87,17 +92,85 @@ export class BroadcastService {
                 photo_file_id: params.photoFileId,
                 target_type: params.targetType,
                 target_user_id: params.targetUserId,
-                week_day: params.weekDay,
-                scheduled_time: params.scheduledTime,
+                ...scheduleValues,
                 is_active: true,
             })
             .returning('*');
 
         logger.info(
-            `Scheduled weekly broadcast ${result.id} created by admin ${params.adminTelegramId} for ${params.targetType} at ${params.weekDay} ${params.scheduledTime}`,
+            `Scheduled broadcast ${result.id} created by admin ${params.adminTelegramId} for ${params.targetType}: ${params.scheduleType} at ${params.scheduledTime}`,
         );
 
         return result;
+    }
+
+    static async listScheduledBroadcasts(
+        page: number = 1,
+        pageSize: number = 8,
+    ): Promise<{ items: ScheduledBroadcast[]; total: number; page: number; totalPages: number }> {
+        const safePage = Math.max(1, page);
+        const [{ count }] = await db('scheduled_broadcasts').count('id as count');
+        const total = Number(count || 0);
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        const resolvedPage = Math.min(safePage, totalPages);
+        const items = await db('scheduled_broadcasts')
+            .orderBy('is_active', 'desc')
+            .orderBy('id', 'desc')
+            .limit(pageSize)
+            .offset((resolvedPage - 1) * pageSize);
+
+        return { items, total, page: resolvedPage, totalPages };
+    }
+
+    static async getScheduledBroadcastById(id: number): Promise<ScheduledBroadcast | null> {
+        const item = await db('scheduled_broadcasts').where({ id }).first();
+        return item || null;
+    }
+
+    static async updateScheduledBroadcastMessage(
+        id: number,
+        messageText?: string,
+        photoFileId?: string,
+    ): Promise<ScheduledBroadcast | null> {
+        const [item] = await db('scheduled_broadcasts')
+            .where({ id })
+            .update({
+                message_text: messageText || null,
+                photo_file_id: photoFileId || null,
+                updated_at: new Date(),
+            })
+            .returning('*');
+        return item || null;
+    }
+
+    static async updateScheduledBroadcastSchedule(
+        id: number,
+        schedule: UpdateScheduledBroadcastScheduleParams,
+    ): Promise<ScheduledBroadcast | null> {
+        const [item] = await db('scheduled_broadcasts')
+            .where({ id })
+            .update({
+                ...getScheduleStorageValues(schedule),
+                last_run_date: null,
+                last_run_at: null,
+                updated_at: new Date(),
+            })
+            .returning('*');
+        return item || null;
+    }
+
+    static async setScheduledBroadcastActive(
+        id: number,
+        isActive: boolean,
+    ): Promise<ScheduledBroadcast | null> {
+        const [item] = await db('scheduled_broadcasts')
+            .where({ id })
+            .update({
+                is_active: isActive,
+                updated_at: new Date(),
+            })
+            .returning('*');
+        return item || null;
     }
 
     /**
@@ -246,19 +319,19 @@ export class BroadcastService {
 
     static async getDueScheduledBroadcasts(now: Date = new Date()): Promise<ScheduledBroadcast[]> {
         const today = getTashkentDateKey(now);
-        const weekDay = getTashkentWeekDay(now);
         const time = getTashkentTimeKey(now);
 
-        return db('scheduled_broadcasts')
+        const candidates = await db('scheduled_broadcasts')
             .where({
                 is_active: true,
-                week_day: weekDay,
                 scheduled_time: time,
             })
             .where((builder) => {
                 builder.whereNull('last_run_date').orWhere('last_run_date', '<>', today);
             })
             .orderBy('id', 'asc');
+
+        return candidates.filter((item) => isScheduledBroadcastDue(item, now));
     }
 
     private static async claimScheduledBroadcastRun(
@@ -342,6 +415,10 @@ export class BroadcastService {
                     `[SCHEDULED_BROADCAST] Scheduled broadcast ${scheduledBroadcast.id} failed`,
                     error,
                 );
+            } finally {
+                if (scheduledBroadcast.schedule_type === 'once') {
+                    await this.setScheduledBroadcastActive(scheduledBroadcast.id, false);
+                }
             }
         }
 

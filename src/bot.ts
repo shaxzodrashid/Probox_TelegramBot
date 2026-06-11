@@ -34,6 +34,7 @@ import { supportConversation } from './conversations/support.conversation';
 import { adminReplyConversation } from './conversations/admin-reply.conversation';
 import {
   adminBroadcastConversation,
+  adminScheduledBroadcastEditConversation,
   adminSearchConversation,
   adminSendMessageConversation,
   adminAddBranchConversation,
@@ -73,6 +74,12 @@ import {
   adminBackToMenuHandler,
   adminBackToMainMenuHandler,
   adminBroadcastHandler,
+  adminScheduledBroadcastsHandler,
+  adminScheduledBroadcastPageHandler,
+  adminScheduledBroadcastDetailHandler,
+  adminScheduledBroadcastEditMessageHandler,
+  adminScheduledBroadcastRescheduleHandler,
+  adminScheduledBroadcastToggleHandler,
   adminSendMessageHandler,
   adminBranchesHandler,
   adminBranchDetailHandler,
@@ -122,6 +129,14 @@ import {
   adminFaqDeleteConfirmHandler,
   adminFaqDeleteCancelHandler,
 } from './handlers/admin.handler';
+import {
+  ADMIN_SCHEDULED_DETAIL_CALLBACK_PREFIX,
+  ADMIN_SCHEDULED_EDIT_MESSAGE_CALLBACK_PREFIX,
+  ADMIN_SCHEDULED_LIST_CALLBACK,
+  ADMIN_SCHEDULED_PAGE_CALLBACK_PREFIX,
+  ADMIN_SCHEDULED_RESCHEDULE_CALLBACK_PREFIX,
+  ADMIN_SCHEDULED_TOGGLE_CALLBACK_PREFIX,
+} from './keyboards/admin.keyboards';
 import {
   campaignBackToPromotionsHandler,
   campaignBackToMenuHandler,
@@ -266,6 +281,7 @@ bot.use(createConversation(changePhoneConversation));
 bot.use(createConversation(supportConversation));
 bot.use(createConversation(adminReplyConversation));
 bot.use(createConversation(adminBroadcastConversation));
+bot.use(createConversation(adminScheduledBroadcastEditConversation));
 bot.use(createConversation(adminSearchConversation));
 bot.use(createConversation(adminSendMessageConversation));
 bot.use(createConversation(adminAddBranchConversation));
@@ -451,6 +467,7 @@ bot.filter(hears('admin_menu'), adminMenuHandler);
 bot.filter(hears('admin_users'), adminUsersHandler);
 bot.filter(hears('admin_branches'), adminBranchesHandler);
 bot.filter(hears('admin_broadcast'), adminBroadcastHandler);
+bot.filter(hears('admin_scheduled_broadcasts'), adminScheduledBroadcastsHandler);
 bot.filter(hears('admin_stats'), adminStatsHandler);
 bot.filter(hears('admin_export'), adminExportHandler);
 bot.filter(hears('admin_campaign_promotions'), adminCampaignPromotionsHandler);
@@ -590,6 +607,27 @@ bot.callbackQuery(/^admin_user_detail:\d+$/, adminUserDetailHandler);
 bot.callbackQuery(/^admin_block_support:\d+$/, adminBlockSupportHandler);
 bot.callbackQuery(/^admin_unblock_support:\d+$/, adminUnblockSupportHandler);
 bot.callbackQuery(/^admin_send_message:\d+$/, adminSendMessageHandler);
+bot.callbackQuery(ADMIN_SCHEDULED_LIST_CALLBACK, adminScheduledBroadcastsHandler);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_SCHEDULED_PAGE_CALLBACK_PREFIX}\\d+$`),
+  adminScheduledBroadcastPageHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_SCHEDULED_DETAIL_CALLBACK_PREFIX}\\d+$`),
+  adminScheduledBroadcastDetailHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_SCHEDULED_EDIT_MESSAGE_CALLBACK_PREFIX}\\d+$`),
+  adminScheduledBroadcastEditMessageHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_SCHEDULED_RESCHEDULE_CALLBACK_PREFIX}\\d+$`),
+  adminScheduledBroadcastRescheduleHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${ADMIN_SCHEDULED_TOGGLE_CALLBACK_PREFIX}\\d+$`),
+  adminScheduledBroadcastToggleHandler,
+);
 bot.callbackQuery(/^admin_coupon_mark_winner:.+$/, adminCouponMarkWinnerHandler);
 bot.callbackQuery(
   new RegExp(`^${ADMIN_WINNER_PRIZE_SELECT_CALLBACK_PREFIX}.+`),
@@ -735,7 +773,7 @@ bot.callbackQuery('admin_broadcast_send_now', (ctx) =>
     if (!isCallbackQueryExpiredError(err)) throw err;
   }),
 );
-bot.callbackQuery('admin_broadcast_weekly', (ctx) =>
+bot.callbackQuery(/^admin_broadcast_schedule_type:[a-z_]+$/, (ctx) =>
   ctx.answerCallbackQuery().catch((err) => {
     if (!isCallbackQueryExpiredError(err)) throw err;
   }),

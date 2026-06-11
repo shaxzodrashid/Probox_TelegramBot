@@ -8,6 +8,15 @@ export type SupportMessageSenderType = 'user' | 'agent' | 'admin' | 'system';
 export type BroadcastStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 export type BroadcastTargetType = 'all' | 'single';
 export type ScheduledBroadcastWeekDay = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type ScheduledBroadcastScheduleType =
+    | 'once'
+    | 'daily'
+    | 'weekdays'
+    | 'weekly'
+    | 'twice_weekly'
+    | 'biweekly'
+    | 'monthly'
+    | 'twice_monthly';
 
 export interface SupportTicket {
     id: number;
@@ -78,7 +87,12 @@ export interface ScheduledBroadcast {
     photo_file_id?: string | null;
     target_type: BroadcastTargetType;
     target_user_id?: number | null;
-    week_day: ScheduledBroadcastWeekDay;
+    schedule_type: ScheduledBroadcastScheduleType;
+    week_day?: ScheduledBroadcastWeekDay | null;
+    week_days?: ScheduledBroadcastWeekDay[] | null;
+    month_days?: number[] | null;
+    scheduled_date?: string | null;
+    start_date?: string | null;
     scheduled_time: string;
     is_active: boolean;
     last_run_date?: string | null;
@@ -97,6 +111,19 @@ export interface CreateBroadcastParams {
 }
 
 export interface CreateScheduledBroadcastParams extends CreateBroadcastParams {
-    weekDay: ScheduledBroadcastWeekDay;
+    scheduleType: ScheduledBroadcastScheduleType;
+    weekDays?: ScheduledBroadcastWeekDay[];
+    monthDays?: number[];
+    scheduledDate?: string;
+    startDate?: string;
+    scheduledTime: string;
+}
+
+export interface UpdateScheduledBroadcastScheduleParams {
+    scheduleType: ScheduledBroadcastScheduleType;
+    weekDays?: ScheduledBroadcastWeekDay[];
+    monthDays?: number[];
+    scheduledDate?: string;
+    startDate?: string;
     scheduledTime: string;
 }

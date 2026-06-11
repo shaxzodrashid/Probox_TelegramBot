@@ -13,14 +13,15 @@ export const getAdminMenuKeyboard = (locale: string) => {
         .text(i18n.t(locale, 'admin_users'))
         .text(i18n.t(locale, 'admin_branches')).row()
         .text(i18n.t(locale, 'admin_broadcast'))
-        .text(i18n.t(locale, 'admin_stats')).row()
+        .text(i18n.t(locale, 'admin_scheduled_broadcasts')).row()
+        .text(i18n.t(locale, 'admin_stats'))
+        .text(i18n.t(locale, 'admin_export')).row()
         .text(i18n.t(locale, 'admin_campaign_promotions'))
         .text(i18n.t(locale, 'admin_campaign_prizes')).row()
         .text(i18n.t(locale, 'admin_campaign_templates'))
         .text(i18n.t(locale, 'admin_faqs')).row()
         .text(i18n.t(locale, 'admin_campaign_coupon_search'))
         .text(i18n.t(locale, 'admin_campaign_coupon_export')).row()
-        .text(i18n.t(locale, 'admin_export')).row()
         .text(i18n.t(locale, 'back_to_user_menu'))
         .resized();
 };
@@ -93,10 +94,30 @@ export const getBroadcastTargetKeyboard = (locale: string) => {
 };
 
 export const getBroadcastDeliveryModeKeyboard = (locale: string) => {
-    return new InlineKeyboard()
+    return getBroadcastScheduleTypeKeyboard(locale, true);
+};
+
+export const getBroadcastScheduleTypeKeyboard = (locale: string, includeSendNow: boolean = false) => {
+    const keyboard = new InlineKeyboard();
+
+    if (includeSendNow) {
+        keyboard
         .text(i18n.t(locale, 'admin_broadcast_send_now'), 'admin_broadcast_send_now')
+        .row();
+    }
+
+    return keyboard
+        .text(i18n.t(locale, 'schedule_once'), 'admin_broadcast_schedule_type:once')
+        .text(i18n.t(locale, 'schedule_daily'), 'admin_broadcast_schedule_type:daily')
         .row()
-        .text(i18n.t(locale, 'admin_broadcast_weekly'), 'admin_broadcast_weekly')
+        .text(i18n.t(locale, 'schedule_weekdays'), 'admin_broadcast_schedule_type:weekdays')
+        .text(i18n.t(locale, 'schedule_weekly'), 'admin_broadcast_schedule_type:weekly')
+        .row()
+        .text(i18n.t(locale, 'schedule_twice_weekly'), 'admin_broadcast_schedule_type:twice_weekly')
+        .text(i18n.t(locale, 'schedule_biweekly'), 'admin_broadcast_schedule_type:biweekly')
+        .row()
+        .text(i18n.t(locale, 'schedule_monthly'), 'admin_broadcast_schedule_type:monthly')
+        .text(i18n.t(locale, 'schedule_twice_monthly'), 'admin_broadcast_schedule_type:twice_monthly')
         .row()
         .text(i18n.t(locale, 'admin_cancel'), 'admin_cancel');
 };
@@ -125,6 +146,69 @@ export const getBroadcastConfirmKeyboard = (locale: string) => {
         .text(i18n.t(locale, 'admin_confirm_yes'), 'admin_broadcast_confirm')
         .text(i18n.t(locale, 'admin_confirm_no'), 'admin_cancel');
 };
+
+export const ADMIN_SCHEDULED_LIST_CALLBACK = 'admin_scheduled_list';
+export const ADMIN_SCHEDULED_PAGE_CALLBACK_PREFIX = 'admin_scheduled_page:';
+export const ADMIN_SCHEDULED_DETAIL_CALLBACK_PREFIX = 'admin_scheduled_detail:';
+export const ADMIN_SCHEDULED_EDIT_MESSAGE_CALLBACK_PREFIX = 'admin_scheduled_edit_message:';
+export const ADMIN_SCHEDULED_RESCHEDULE_CALLBACK_PREFIX = 'admin_scheduled_reschedule:';
+export const ADMIN_SCHEDULED_TOGGLE_CALLBACK_PREFIX = 'admin_scheduled_toggle:';
+
+export const getScheduledBroadcastsKeyboard = (
+    items: Array<{ id: number; is_active: boolean }>,
+    currentPage: number,
+    totalPages: number,
+    locale: string,
+) => {
+    const keyboard = new InlineKeyboard();
+
+    items.forEach((item) => {
+        const status = item.is_active ? '🟢' : '⚫';
+        keyboard.text(
+            `${status} #${item.id}`,
+            `${ADMIN_SCHEDULED_DETAIL_CALLBACK_PREFIX}${item.id}`,
+        ).row();
+    });
+
+    if (totalPages > 1) {
+        if (currentPage > 1) {
+            keyboard.text('⬅️', `${ADMIN_SCHEDULED_PAGE_CALLBACK_PREFIX}${currentPage - 1}`);
+        }
+        keyboard.text(`${currentPage}/${totalPages}`, 'noop');
+        if (currentPage < totalPages) {
+            keyboard.text('➡️', `${ADMIN_SCHEDULED_PAGE_CALLBACK_PREFIX}${currentPage + 1}`);
+        }
+        keyboard.row();
+    }
+
+    keyboard.text(i18n.t(locale, 'back'), 'admin_back_to_menu');
+    return keyboard;
+};
+
+export const getScheduledBroadcastDetailKeyboard = (
+    id: number,
+    isActive: boolean,
+    locale: string,
+) => new InlineKeyboard()
+    .text(
+        i18n.t(locale, 'admin_scheduled_edit_message'),
+        `${ADMIN_SCHEDULED_EDIT_MESSAGE_CALLBACK_PREFIX}${id}`,
+    )
+    .row()
+    .text(
+        i18n.t(locale, 'admin_scheduled_reschedule'),
+        `${ADMIN_SCHEDULED_RESCHEDULE_CALLBACK_PREFIX}${id}`,
+    )
+    .row()
+    .text(
+        i18n.t(
+            locale,
+            isActive ? 'admin_scheduled_make_inactive' : 'admin_scheduled_make_active',
+        ),
+        `${ADMIN_SCHEDULED_TOGGLE_CALLBACK_PREFIX}${id}`,
+    )
+    .row()
+    .text(i18n.t(locale, 'back'), ADMIN_SCHEDULED_LIST_CALLBACK);
 
 /**
  * Get cancel keyboard for conversations
