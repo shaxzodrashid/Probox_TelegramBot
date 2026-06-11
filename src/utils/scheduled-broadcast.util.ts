@@ -154,8 +154,8 @@ export const getScheduleStorageValues = (
 ): {
   schedule_type: ScheduledBroadcastScheduleType;
   week_day: ScheduledBroadcastWeekDay | null;
-  week_days: ScheduledBroadcastWeekDay[] | null;
-  month_days: number[] | null;
+  week_days: string | null;
+  month_days: string | null;
   scheduled_date: string | null;
   start_date: string | null;
   scheduled_time: string;
@@ -166,8 +166,8 @@ export const getScheduleStorageValues = (
   return {
     schedule_type: schedule.scheduleType,
     week_day: weekDays?.[0] ?? null,
-    week_days: weekDays,
-    month_days: monthDays,
+    week_days: weekDays ? JSON.stringify(weekDays) : null,
+    month_days: monthDays ? JSON.stringify(monthDays) : null,
     scheduled_date: schedule.scheduledDate || null,
     start_date: schedule.startDate || null,
     scheduled_time: schedule.scheduledTime,
