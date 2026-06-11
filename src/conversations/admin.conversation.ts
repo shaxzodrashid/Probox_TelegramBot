@@ -1,4 +1,5 @@
 import { BotConversation, BotContext } from '../types/context';
+import { InlineKeyboard } from 'grammy';
 import {
   ScheduledBroadcastScheduleType,
   ScheduledBroadcastWeekDay,
@@ -31,6 +32,7 @@ import {
   isValidScheduleDate,
   parseMonthDay,
   SCHEDULE_TYPES,
+  getOccurrencesLabel,
 } from '../utils/scheduled-broadcast.util';
 
 const BROADCAST_WEEKDAY_KEYS: Record<ScheduledBroadcastWeekDay, string> = {
@@ -91,6 +93,91 @@ const waitForScheduleWeekDay = async (
   const parsedWeekDay = Number(weekdayData.split(':')[1]);
   if (!Number.isInteger(parsedWeekDay) || parsedWeekDay < 0 || parsedWeekDay > 6) return null;
   return parsedWeekDay as ScheduledBroadcastWeekDay;
+};
+
+const getOccurrenceSelectionKeyboard = (locale: string, selected: number[]) => {
+  const getBtnText = (occ: number) => {
+    const isSelected = selected.includes(occ);
+    const checkmark = isSelected ? '✅ ' : '';
+    if (occ === -1) {
+      return checkmark + i18n.t(locale, 'occurrence_last_btn');
+    }
+    return checkmark + i18n.t(locale, `occurrence_${occ}`);
+  };
+
+  return new InlineKeyboard()
+    .text(getBtnText(1), 'admin_broadcast_occ:1')
+    .text(getBtnText(2), 'admin_broadcast_occ:2').row()
+    .text(getBtnText(3), 'admin_broadcast_occ:3')
+    .text(getBtnText(4), 'admin_broadcast_occ:4').row()
+    .text(getBtnText(5), 'admin_broadcast_occ:5')
+    .text(getBtnText(-1), 'admin_broadcast_occ:-1').row()
+    .text(i18n.t(locale, 'admin_confirm_yes'), 'admin_broadcast_occ_confirm').row()
+    .text(i18n.t(locale, 'admin_cancel'), 'admin_cancel');
+};
+
+const waitForScheduleOccurrences = async (
+  conversation: BotConversation,
+  ctx: BotContext,
+  locale: string,
+  prompt: string,
+): Promise<number[] | null> => {
+  const selected: number[] = [];
+  const message = await ctx.reply(prompt, {
+    reply_markup: getOccurrenceSelectionKeyboard(locale, selected),
+  });
+
+  try {
+    while (true) {
+      const occCtx = await conversation.waitFor('callback_query:data');
+      const data = occCtx.callbackQuery.data;
+
+      if (data === 'admin_cancel') {
+        await occCtx.answerCallbackQuery().catch((err) => {
+          if (!isCallbackQueryExpiredError(err)) throw err;
+        });
+        await occCtx.deleteMessage().catch(() => {});
+        return null;
+      }
+
+      if (data === 'admin_broadcast_occ_confirm') {
+        await occCtx.answerCallbackQuery().catch((err) => {
+          if (!isCallbackQueryExpiredError(err)) throw err;
+        });
+        if (selected.length === 0) {
+          await occCtx.reply(i18n.t(locale, 'admin_broadcast_select_at_least_one_occurrence'));
+          continue;
+        }
+        await occCtx.deleteMessage().catch(() => {});
+        return selected;
+      }
+
+      if (data.startsWith('admin_broadcast_occ:')) {
+        await occCtx.answerCallbackQuery().catch((err) => {
+          if (!isCallbackQueryExpiredError(err)) throw err;
+        });
+        const occ = Number(data.split(':')[1]);
+        if (selected.includes(occ)) {
+          const index = selected.indexOf(occ);
+          selected.splice(index, 1);
+        } else {
+          selected.push(occ);
+        }
+
+        await occCtx
+          .editMessageReplyMarkup({
+            reply_markup: getOccurrenceSelectionKeyboard(locale, selected),
+          })
+          .catch((err) => {
+            if (!isMessageToDeleteNotFoundError(err)) throw err;
+          });
+      }
+    }
+  } catch (error) {
+    // Make sure we clean up the message in case of errors/timeout
+    await ctx.api.deleteMessage(ctx.chat!.id, message.message_id).catch(() => {});
+    throw error;
+  }
 };
 
 const collectBroadcastSchedule = async (
@@ -214,6 +301,26 @@ const collectBroadcastSchedule = async (
     }
   }
 
+  if (scheduleType === 'monthly_weekday') {
+    const weekday = await waitForScheduleWeekDay(
+      conversation,
+      ctx,
+      locale,
+      i18n.t(locale, 'admin_broadcast_select_weekday'),
+    );
+    if (weekday === null) return null;
+    schedule.weekDays = [weekday];
+
+    const selectedOccurrences = await waitForScheduleOccurrences(
+      conversation,
+      ctx,
+      locale,
+      i18n.t(locale, 'admin_broadcast_select_occurrences'),
+    );
+    if (!selectedOccurrences) return null;
+    schedule.monthDays = selectedOccurrences;
+  }
+
   const time = await waitForScheduleText(
     conversation,
     ctx,
@@ -242,7 +349,9 @@ const formatScheduleSummary = (
       schedule.weekDays?.[1] === undefined
         ? ''
         : getBroadcastWeekDayLabel(locale, schedule.weekDays[1]),
-    day: schedule.monthDays?.[0]?.toString() || '',
+    day: schedule.scheduleType === 'monthly_weekday'
+      ? getOccurrencesLabel(locale, schedule.monthDays || [])
+      : schedule.monthDays?.[0]?.toString() || '',
     day2: schedule.monthDays?.[1]?.toString() || '',
   };
   return i18n.t(locale, `schedule_summary_${schedule.scheduleType}`, values);

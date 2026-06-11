@@ -16,7 +16,8 @@ export type ScheduledBroadcastScheduleType =
     | 'twice_weekly'
     | 'biweekly'
     | 'monthly'
-    | 'twice_monthly';
+    | 'twice_monthly'
+    | 'monthly_weekday';
 
 export interface SupportTicket {
     id: number;

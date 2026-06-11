@@ -119,6 +119,8 @@ export const getBroadcastScheduleTypeKeyboard = (locale: string, includeSendNow:
         .text(i18n.t(locale, 'schedule_monthly'), 'admin_broadcast_schedule_type:monthly')
         .text(i18n.t(locale, 'schedule_twice_monthly'), 'admin_broadcast_schedule_type:twice_monthly')
         .row()
+        .text(i18n.t(locale, 'schedule_monthly_weekday'), 'admin_broadcast_schedule_type:monthly_weekday')
+        .row()
         .text(i18n.t(locale, 'admin_cancel'), 'admin_cancel');
 };
 

@@ -103,6 +103,86 @@ test('inactive, already-run, and wrong-time schedules are not due', () => {
   );
 });
 
+test('monthly weekday schedules match configured weekday occurrences', () => {
+  // June 15, 2026 is the 3rd Monday (Monday = 1)
+  assert.equal(
+    isScheduledBroadcastDue(
+      baseSchedule({
+        schedule_type: 'monthly_weekday',
+        week_days: [1],
+        month_days: [3],
+      }),
+      mondayAt0930Tashkent,
+    ),
+    true,
+  );
+
+  assert.equal(
+    isScheduledBroadcastDue(
+      baseSchedule({
+        schedule_type: 'monthly_weekday',
+        week_days: [1],
+        month_days: [1, -1],
+      }),
+      mondayAt0930Tashkent,
+    ),
+    false,
+  );
+
+  // June 29, 2026 is the 5th and last Monday of June
+  const lastMonday = new Date('2026-06-29T04:30:00.000Z');
+  assert.equal(
+    isScheduledBroadcastDue(
+      baseSchedule({
+        schedule_type: 'monthly_weekday',
+        week_days: [1],
+        month_days: [-1], // Last
+      }),
+      lastMonday,
+    ),
+    true,
+  );
+
+  assert.equal(
+    isScheduledBroadcastDue(
+      baseSchedule({
+        schedule_type: 'monthly_weekday',
+        week_days: [1],
+        month_days: [5], // 5th
+      }),
+      lastMonday,
+    ),
+    true,
+  );
+
+  // June 19, 2026 is the 3rd Friday (Friday = 5)
+  const thirdFriday = new Date('2026-06-19T04:30:00.000Z');
+  assert.equal(
+    isScheduledBroadcastDue(
+      baseSchedule({
+        schedule_type: 'monthly_weekday',
+        week_days: [5],
+        month_days: [3],
+      }),
+      thirdFriday,
+    ),
+    true,
+  );
+
+  // June 15, 2026 is a Monday (1), so it shouldn't trigger a Friday (5) schedule
+  assert.equal(
+    isScheduledBroadcastDue(
+      baseSchedule({
+        schedule_type: 'monthly_weekday',
+        week_days: [5],
+        month_days: [3],
+      }),
+      mondayAt0930Tashkent,
+    ),
+    false,
+  );
+});
+
 test('schedule input validators reject impossible values', () => {
   assert.equal(isValidScheduleDate('2026-02-29'), false);
   assert.equal(isValidScheduleDate('2028-02-29'), true);

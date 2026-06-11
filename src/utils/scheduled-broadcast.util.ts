@@ -9,6 +9,7 @@ import {
   getTashkentTimeKey,
   getTashkentWeekDay,
 } from './time/tashkent-time.util';
+import { i18n } from '../i18n';
 
 export const SCHEDULE_TYPES: ScheduledBroadcastScheduleType[] = [
   'once',
@@ -19,7 +20,29 @@ export const SCHEDULE_TYPES: ScheduledBroadcastScheduleType[] = [
   'biweekly',
   'monthly',
   'twice_monthly',
+  'monthly_weekday',
 ];
+
+export const getOccurrenceLabel = (locale: string, occurrence: number): string => {
+  if (occurrence === -1) {
+    return i18n.t(locale, 'occurrence_last');
+  }
+  return i18n.t(locale, `occurrence_${occurrence}`);
+};
+
+export const getOccurrencesLabel = (locale: string, occurrences: number[]): string => {
+  const sorted = [...occurrences].sort((a, b) => {
+    const valA = a === -1 ? 99 : a;
+    const valB = b === -1 ? 99 : b;
+    return valA - valB;
+  });
+  const labels = sorted.map((occ) => getOccurrenceLabel(locale, occ));
+  if (labels.length === 0) return '';
+  if (labels.length === 1) return labels[0];
+  const lastLabel = labels.pop();
+  const connector = locale === 'uz' ? ' va ' : ' и ';
+  return labels.join(', ') + connector + lastLabel;
+};
 
 const parseDateKey = (value: string): Date | null => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -113,6 +136,14 @@ export const isScheduledBroadcastDue = (
     case 'monthly':
     case 'twice_monthly':
       return monthDays.includes(monthDay);
+    case 'monthly_weekday': {
+      if (!weekDays.includes(weekDay)) return false;
+      const [year, month] = today.split('-').map(Number);
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const occurrence = Math.ceil(monthDay / 7);
+      const isLast = monthDay + 7 > daysInMonth;
+      return monthDays.includes(occurrence) || (isLast && monthDays.includes(-1));
+    }
     default:
       return false;
   }

@@ -105,7 +105,7 @@ import {
     ScheduledBroadcast,
     ScheduledBroadcastWeekDay,
 } from '../types/support.types';
-import { normalizeNumberArray } from '../utils/scheduled-broadcast.util';
+import { normalizeNumberArray, getOccurrencesLabel } from '../utils/scheduled-broadcast.util';
 
 /**
  * Check if user is an admin
@@ -170,7 +170,9 @@ const getScheduledBroadcastDescription = (
         date: item.scheduled_date || item.start_date || '',
         weekday: weekDays[0] === undefined ? '' : i18n.t(locale, SCHEDULE_WEEKDAY_KEYS[weekDays[0]]),
         weekday2: weekDays[1] === undefined ? '' : i18n.t(locale, SCHEDULE_WEEKDAY_KEYS[weekDays[1]]),
-        day: monthDays[0]?.toString() || '',
+        day: item.schedule_type === 'monthly_weekday'
+            ? getOccurrencesLabel(locale, monthDays)
+            : monthDays[0]?.toString() || '',
         day2: monthDays[1]?.toString() || '',
     });
 };
