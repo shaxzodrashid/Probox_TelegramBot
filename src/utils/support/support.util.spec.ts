@@ -407,13 +407,13 @@ test('enqueueSupportRequest acknowledges immediately and finishes the FAQ reply 
       'uz',
     );
 
-    assert.deepEqual(replies, ["⏳ AI yordamchi so'rovingizni tekshiryapti..."]);
+    assert.deepEqual(replies, ["⏳Probox AI yordamchi so'rovingizni tekshiryapti..."]);
 
     releaseResolution();
     await SupportDispatcherService.whenIdle(55);
 
     assert.deepEqual(replies, [
-      "⏳ AI yordamchi so'rovingizni tekshiryapti...",
+      "⏳Probox AI yordamchi so'rovingizni tekshiryapti...",
       'Ha, bizda dostavka mavjud.',
     ]);
     assert.ok(chatActions.includes('typing'));
@@ -535,7 +535,7 @@ test('enqueueSupportRequest keeps the thinking message until fallback AI support
     await SupportDispatcherService.whenIdle(55);
 
     assert.deepEqual(replies, [
-      "⏳ AI yordamchi so'rovingizni tekshiryapti...",
+      "⏳Probox AI yordamchi so'rovingizni tekshiryapti...",
       'Murojaatingizni AI yordamchi ko‘rib chiqdi va yordam berishda davom etadi.',
     ]);
     assert.deepEqual(deletedMessages, [{ chatId: 55, messageId: 101 }]);
@@ -992,7 +992,7 @@ test('processSupportRequest sends a polite AI handoff message when the agent esc
     );
 
     assert.equal(replies.length, 2);
-    assert.equal(replies[0], "⏳ AI yordamchi so'rovingizni tekshiryapti...");
+    assert.equal(replies[0], "⏳Probox AI yordamchi so'rovingizni tekshiryapti...");
     assert.equal(
       replies[1],
       "Sizning murojaatingiz qo'llab-quvvatlash jamoasiga yo'naltirildi. Javob tayyor bo'lgach, shu chatda yuboriladi.",
@@ -1374,7 +1374,7 @@ test('processSupportRequest falls back to the locale message when the AI agent f
     );
 
     assert.equal(replies.length, 2);
-    assert.equal(replies[0], "⏳ AI yordamchi so'rovingizni tekshiryapti...");
+    assert.equal(replies[0], "⏳Probox AI yordamchi so'rovingizni tekshiryapti...");
     assert.equal(
       replies[1],
       "❌ Afsuski, murojaatingizni avtomatik qayta ishlash vaqtincha yakunlanmadi. Iltimos, birozdan so'ng qayta urinib ko'ring yoki yangi murojaat yuboring.",
@@ -1401,7 +1401,7 @@ test('processSupportRequest falls back to the locale message when the AI agent f
   }
 });
 
-test('processSupportRequest formats escalated AI handoff replies as Telegram HTML', async () => {
+test('processSupportRequest sends escalated AI handoff replies as Telegram rich messages', async () => {
   const originalSupportGroupId = config.SUPPORT_GROUP_ID;
   const originalGetOpenAgentTicketByUserTelegramId =
     SupportService.getOpenAgentTicketByUserTelegramId;
@@ -1527,10 +1527,20 @@ test('processSupportRequest formats escalated AI handoff replies as Telegram HTM
   })) as typeof SupportAgentService.generateReply;
 
   const { ctx, replies } = makeFakeCtx();
+  const richMessages: unknown[] = [];
+  const api = {
+    ...makeFakeApi(),
+    raw: {
+      sendRichMessage: async (payload: unknown) => {
+        richMessages.push(payload);
+        return { message_id: 1000 };
+      },
+    },
+  };
 
   try {
     await processSupportRequest(
-      makeFakeApi() as unknown as import('grammy').Api<import('grammy').RawApi>,
+      api as unknown as import('grammy').Api<import('grammy').RawApi>,
       ctx as unknown as import('../../types/context').BotContext,
       makeUser(),
       'Menga yordam kerak',
@@ -1539,12 +1549,19 @@ test('processSupportRequest formats escalated AI handoff replies as Telegram HTM
       'uz',
     );
 
-    assert.equal(replies.length, 2);
-    assert.equal(replies[0], "⏳ AI yordamchi so'rovingizni tekshiryapti...");
+    assert.equal(replies.length, 1);
+    assert.equal(richMessages.length, 1);
+    const [richMessage] = richMessages as Array<{
+      chat_id: number;
+      rich_message: { html: string };
+      reply_markup?: unknown;
+    }>;
+    assert.equal(richMessage.chat_id, 55);
     assert.equal(
-      replies[1],
-      'Tushundim, Muhammadali. Sizni qiziqtirgan <b>iPhone 16 Pro 128GB White (yangi)</b> modeli uchun narxni tez orada aniqlab, sizga xabar beraman.',
+      richMessage.rich_message.html,
+      '<p>Tushundim, Muhammadali. Sizni qiziqtirgan <b>iPhone 16 Pro 128GB White (yangi)</b> modeli uchun narxni tez orada aniqlab, sizga xabar beraman.</p>',
     );
+    assert.ok(richMessage.reply_markup);
   } finally {
     config.SUPPORT_GROUP_ID = originalSupportGroupId;
     SupportService.getOpenAgentTicketByUserTelegramId = originalGetOpenAgentTicketByUserTelegramId;
@@ -1732,7 +1749,7 @@ test('processSupportRequest routes CRM application requests to the application f
 
     assert.equal(replies.length, 0);
     assert.deepEqual(apiMessages, [
-      "⏳ AI yordamchi so'rovingizni tekshiryapti...",
+      "⏳Probox AI yordamchi so'rovingizni tekshiryapti...",
       "✅ Tushunarli, ariza qoldirish bo'limiga o'tamiz. Davom etish uchun tugmani bosing.",
     ]);
     assert.deepEqual(pendingActionSets, [

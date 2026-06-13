@@ -397,7 +397,11 @@ test('SupportAgentService passes system instructions, all tool config, and schem
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
-      /Format reply_text for Telegram for easy scanning: short readable blocks, blank lines between sections, compact bullets for lists, and bold labels with Telegram HTML/i,
+      /Format reply_text for Telegram rich messages: short readable blocks, blank lines between sections, Markdown-style "-" bullets for lists, bold labels with Telegram HTML/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Telegram rich messages support tables.*do not claim that tables are unsupported/i,
     );
     assert.match(
       capturedSystemInstruction.join('\n'),

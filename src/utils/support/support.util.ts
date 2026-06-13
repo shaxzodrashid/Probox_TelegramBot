@@ -12,7 +12,12 @@ import {
   formatGeminiRequestFailureSummary,
 } from '../gemini-error.util';
 import { formatUzPhone } from '../uz-phone.util';
-import { escapeHtml, richTextToTelegramHtml } from '../telegram/telegram-rich-text.util';
+import {
+  escapeHtml,
+  richTextToTelegramHtml,
+  richTextToTelegramRichHtml,
+} from '../telegram/telegram-rich-text.util';
+import { trySendTelegramRichMessage } from '../telegram/telegram-rich-message.util';
 import {
   getAdminGroupChatId,
   withAdminGroupMigrationRetry,
@@ -87,6 +92,7 @@ interface SupportReplyOptions {
   deferred: boolean;
   text: string;
   parseMode?: 'HTML';
+  useRichMessage?: boolean;
 }
 
 const normalizeSupportLocale = (languageCode?: string | null): SupportLocale =>
@@ -244,16 +250,48 @@ const buildSupportReplyMarkup = (user: User, locale: string) => {
 };
 
 const replyToSupportUser = async (params: SupportReplyOptions) => {
+  const replyMarkup = buildSupportReplyMarkup(params.user, params.locale);
+
+  if (params.useRichMessage) {
+    const richMessage = await trySendTelegramRichMessage({
+      api: params.api,
+      chatId: params.chatId,
+      html: richTextToTelegramRichHtml(params.text),
+      replyMarkup,
+    });
+
+    if (richMessage) {
+      return richMessage;
+    }
+  }
+
+  const fallbackText = params.useRichMessage ? richTextToTelegramHtml(params.text) : params.text;
   const options = {
-    reply_markup: buildSupportReplyMarkup(params.user, params.locale),
+    reply_markup: replyMarkup,
     ...(params.parseMode ? { parse_mode: params.parseMode } : {}),
   };
 
-  if (params.deferred) {
-    return params.api.sendMessage(params.chatId, params.text, options);
+  if (params.useRichMessage) {
+    logger.info('[TELEGRAM_RICH_MESSAGE] Sending standard-message fallback.', {
+      chatId: params.chatId,
+      deliveryMethod: params.deferred ? 'api.sendMessage' : 'ctx.reply',
+      textChars: fallbackText.length,
+      parseMode: params.parseMode ?? null,
+    });
   }
 
-  return params.ctx.reply(params.text, options);
+  const message = params.deferred
+    ? await params.api.sendMessage(params.chatId, fallbackText, options)
+    : await params.ctx.reply(fallbackText, options);
+
+  if (params.useRichMessage) {
+    logger.info('[TELEGRAM_RICH_MESSAGE] Standard-message fallback succeeded.', {
+      chatId: params.chatId,
+      messageId: message?.message_id ?? null,
+    });
+  }
+
+  return message;
 };
 
 const sendSupportLoadingMessage = async (params: {
@@ -639,8 +677,9 @@ const escalateAgentTicketToHuman = async (params: {
     locale: params.locale,
     chatId: params.chatId,
     deferred: params.deferred,
-    text: richTextToTelegramHtml(customerMessage),
+    text: customerMessage,
     parseMode: 'HTML',
+    useRichMessage: true,
   });
 
   if (forwardResult.groupMessageId && transcript.length) {
@@ -759,8 +798,9 @@ const continueAgentConversation = async (params: {
       locale: params.locale,
       chatId: params.chatId,
       deferred: params.deferred,
-      text: richTextToTelegramHtml(decision.replyText),
+      text: decision.replyText,
       parseMode: 'HTML',
+      useRichMessage: true,
     });
 
     await SupportService.appendMessage({
@@ -1019,8 +1059,9 @@ export async function processSupportRequest(
         locale,
         chatId,
         deferred,
-        text: richTextToTelegramHtml(localizedAnswer),
+        text: localizedAnswer,
         parseMode: 'HTML',
+        useRichMessage: true,
       });
 
       await SupportService.appendMessage({
