@@ -8,6 +8,17 @@ export interface FaqQuestionVariants {
   question_en: string;
 }
 
+export interface FaqRetrievalProfile {
+  intent_description: string;
+  utterances_uz: string[];
+  utterances_ru: string[];
+  utterances_en: string[];
+}
+
+export interface FaqAuthoringResult extends FaqQuestionVariants {
+  retrieval_profile: FaqRetrievalProfile;
+}
+
 export interface FaqAnswerVariants {
   answer_uz: string;
   answer_ru: string;
@@ -18,6 +29,7 @@ export interface FaqRecord extends FaqQuestionVariants, FaqAnswerVariants {
   id: number;
   status: FaqStatus;
   vector_embedding: string;
+  retrieval_profile?: FaqRetrievalProfile;
   agent_enabled: boolean;
   agent_token: string | null;
   created_by_admin_telegram_id: number;

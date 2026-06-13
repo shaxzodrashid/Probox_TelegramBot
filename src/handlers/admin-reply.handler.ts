@@ -21,17 +21,29 @@ const ADMIN_REPLY_KEY_PREFIX = 'admin:reply:';
  */
 export async function handleReplyButton(ctx: BotContext): Promise<void> {
     try {
+        const callbackData = ctx.callbackQuery?.data;
+        if (!callbackData) return;
+
+        const adminId = ctx.from?.id;
+        if (!adminId) return;
+
+        // Check admin guard
+        const adminUser = await UserService.getUserByTelegramId(adminId);
+        if (!adminUser || !adminUser.is_admin) {
+            await ctx.answerCallbackQuery({
+                text: i18n.t(adminUser?.language_code || 'uz', 'admin_access_denied'),
+                show_alert: true,
+            }).catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
+            return;
+        }
+
         await ctx.answerCallbackQuery().catch((err) => {
             if (!isCallbackQueryExpiredError(err)) throw err;
         });
 
-        const callbackData = ctx.callbackQuery?.data;
-        if (!callbackData) return;
-
         const ticketNumber = callbackData.replace('support_reply:', '');
-        const adminId = ctx.from?.id;
-
-        if (!adminId) return;
 
         // Get ticket
         const ticket = await SupportService.getTicketByTicketNumber(ticketNumber);
@@ -87,17 +99,29 @@ export async function handleReplyButton(ctx: BotContext): Promise<void> {
  */
 export async function handleCloseButton(ctx: BotContext): Promise<void> {
     try {
+        const callbackData = ctx.callbackQuery?.data;
+        if (!callbackData) return;
+
+        const adminId = ctx.from?.id;
+        if (!adminId) return;
+
+        // Check admin guard
+        const adminUser = await UserService.getUserByTelegramId(adminId);
+        if (!adminUser || !adminUser.is_admin) {
+            await ctx.answerCallbackQuery({
+                text: i18n.t(adminUser?.language_code || 'uz', 'admin_access_denied'),
+                show_alert: true,
+            }).catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
+            return;
+        }
+
         await ctx.answerCallbackQuery().catch((err) => {
             if (!isCallbackQueryExpiredError(err)) throw err;
         });
 
-        const callbackData = ctx.callbackQuery?.data;
-        if (!callbackData) return;
-
         const ticketNumber = callbackData.replace('support_close:', '');
-        const adminId = ctx.from?.id;
-
-        if (!adminId) return;
 
         // Get ticket
         const ticket = await SupportService.getTicketByTicketNumber(ticketNumber);
@@ -123,23 +147,14 @@ export async function handleCloseButton(ctx: BotContext): Promise<void> {
                 if (ticket.group_message_id && getAdminGroupChatId()) {
                     const closedMessage = `📩 Murojaat #${ticketNumber} ⚫ YOPILDI\n\n✅ Murojaat yopildi.`;
 
-                    if (ticket.photo_file_id) {
-                        await withAdminGroupMigrationRetry((chatId) =>
-                            bot.api.editMessageCaption(chatId, ticket.group_message_id!, { caption: closedMessage })
-                        )
-                            .catch((err) => {
-                                if (!isMessageToDeleteNotFoundError(err)) throw err;
-                            });
-                    } else {
-                        await withAdminGroupMigrationRetry((chatId) =>
-                            bot.api.editMessageText(chatId, ticket.group_message_id!, closedMessage, {
-                                reply_markup: undefined,
-                            })
-                        )
-                            .catch((err) => {
-                                if (!isMessageToDeleteNotFoundError(err)) throw err;
-                            });
-                    }
+                    await withAdminGroupMigrationRetry((chatId) =>
+                        bot.api.editMessageCaption(chatId, ticket.group_message_id!, {
+                            caption: closedMessage,
+                            reply_markup: undefined,
+                        })
+                    ).catch((err) => {
+                        if (!isMessageToDeleteNotFoundError(err)) throw err;
+                    });
                 }
             } catch (error) {
                 logger.error('Failed to update closed ticket message:', error);
@@ -159,17 +174,29 @@ export async function handleCloseButton(ctx: BotContext): Promise<void> {
  */
 export async function handleBlockButton(ctx: BotContext): Promise<void> {
     try {
+        const callbackData = ctx.callbackQuery?.data;
+        if (!callbackData) return;
+
+        const adminId = ctx.from?.id;
+        if (!adminId) return;
+
+        // Check admin guard
+        const adminUser = await UserService.getUserByTelegramId(adminId);
+        if (!adminUser || !adminUser.is_admin) {
+            await ctx.answerCallbackQuery({
+                text: i18n.t(adminUser?.language_code || 'uz', 'admin_access_denied'),
+                show_alert: true,
+            }).catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
+            return;
+        }
+
         await ctx.answerCallbackQuery().catch((err) => {
             if (!isCallbackQueryExpiredError(err)) throw err;
         });
 
-        const callbackData = ctx.callbackQuery?.data;
-        if (!callbackData) return;
-
         const ticketNumber = callbackData.replace('support_block:', '');
-        const adminId = ctx.from?.id;
-
-        if (!adminId) return;
 
         // Get ticket
         const ticket = await SupportService.getTicketByTicketNumber(ticketNumber);
@@ -210,12 +237,27 @@ export async function handleBlockButton(ctx: BotContext): Promise<void> {
  */
 export async function handleViewReplyButton(ctx: BotContext): Promise<void> {
     try {
+        const callbackData = ctx.callbackQuery?.data;
+        if (!callbackData) return;
+
+        const adminId = ctx.from?.id;
+        if (!adminId) return;
+
+        // Check admin guard
+        const adminUser = await UserService.getUserByTelegramId(adminId);
+        if (!adminUser || !adminUser.is_admin) {
+            await ctx.answerCallbackQuery({
+                text: i18n.t(adminUser?.language_code || 'uz', 'admin_access_denied'),
+                show_alert: true,
+            }).catch((err) => {
+                if (!isCallbackQueryExpiredError(err)) throw err;
+            });
+            return;
+        }
+
         await ctx.answerCallbackQuery().catch((err) => {
             if (!isCallbackQueryExpiredError(err)) throw err;
         });
-
-        const callbackData = ctx.callbackQuery?.data;
-        if (!callbackData) return;
 
         const ticketNumber = callbackData.replace('support_view_reply:', '');
 

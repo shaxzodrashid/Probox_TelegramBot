@@ -247,6 +247,8 @@ test('SapService getItems normalizes B/U condition aliases in filters', async ()
   const { dataQuery } = getItemQueries(hana);
 
   assert.match(dataQuery, /LOWER\(TRIM\(COALESCE\(T1\."U_PROD_CONDITION", ''\)\)\) = 'b\/u'/);
+  assert.match(dataQuery, /MAX\(T1\."U_PROD_CONDITION"\)\s+AS "U_PROD_CONDITION"/);
+  assert.doesNotMatch(dataQuery, /T1\."U_Condition"/);
 });
 
 test('SapService getItems applies exact-match filters for model, memory, sim type, color, and item group', async () => {

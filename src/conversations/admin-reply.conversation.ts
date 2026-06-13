@@ -331,26 +331,14 @@ async function processReply(
                     adminLocale
                 );
 
-                if (ticket.photo_file_id) {
-                    await withAdminGroupMigrationRetry((chatId) =>
-                        bot.api.editMessageCaption(chatId, ticket.group_message_id!, {
-                            caption: repliedMessage,
-                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale),
-                        })
-                    )
-                        .catch((err) => {
-                            if (!isMessageToDeleteNotFoundError(err)) throw err;
-                        });
-                } else {
-                    await withAdminGroupMigrationRetry((chatId) =>
-                        bot.api.editMessageText(chatId, ticket.group_message_id!, repliedMessage, {
-                            reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale),
-                        })
-                    )
-                        .catch((err) => {
-                            if (!isMessageToDeleteNotFoundError(err)) throw err;
-                        });
-                }
+                await withAdminGroupMigrationRetry((chatId) =>
+                    bot.api.editMessageCaption(chatId, ticket.group_message_id!, {
+                        caption: repliedMessage,
+                        reply_markup: getSupportTicketRepliedKeyboard(ticket.ticket_number, adminLocale),
+                    })
+                ).catch((err) => {
+                    if (!isMessageToDeleteNotFoundError(err)) throw err;
+                });
                 logger.info(`Updated admin group message for ticket ${ticket.ticket_number}`);
             } catch (error) {
                 logger.error('Failed to update admin group message:', error);

@@ -1,5 +1,5 @@
 import { SupportTicket, SupportTicketMessage } from '../../types/support.types';
-import { escapeHtml, richTextToTelegramHtml } from '../telegram/telegram-rich-text.util';
+import { escapeHtml, richTextToTelegramHtml, richTextToTelegramRichHtml } from '../telegram/telegram-rich-text.util';
 import { formatUzPhone } from '../uz-phone.util';
 
 export interface SupportTranscriptUserSnapshot {
@@ -350,14 +350,23 @@ const renderMessageBubble = (
   const sender = getSenderPresentation(message.sender_type);
   const hasPhoto = Boolean(message.photo_file_id);
   const text = message.message_text?.trim() || '';
-  const renderedText =
-    message.sender_type === 'agent' ? richTextToTelegramHtml(text) : escapeHtml(text);
-  const safeText = text
-    ? renderedText.replace(/\n/g, '<br />')
-    : `<span class="muted" ${renderLocalizedAttributes({
-        uz: TRANSCRIPT_COPY.uz.other.noText,
-        ru: TRANSCRIPT_COPY.ru.other.noText,
-      })}>${escapeHtml(TRANSCRIPT_COPY[locale].other.noText)}</span>`;
+
+  let safeText = '';
+  if (!text) {
+    safeText = `<span class="muted" ${renderLocalizedAttributes({
+      uz: TRANSCRIPT_COPY.uz.other.noText,
+      ru: TRANSCRIPT_COPY.ru.other.noText,
+    })}>${escapeHtml(TRANSCRIPT_COPY[locale].other.noText)}</span>`;
+  } else if (message.sender_type === 'agent') {
+    safeText = richTextToTelegramRichHtml(text);
+  } else {
+    const renderedText =
+      message.sender_type === 'admin'
+        ? richTextToTelegramHtml(text)
+        : escapeHtml(text);
+    safeText = renderedText.replace(/\n/g, '<br />');
+  }
+
   const photoBadge = hasPhoto
     ? `<div class="attachment"><span ${renderLocalizedAttributes({
         uz: TRANSCRIPT_COPY.uz.other.photoAttached,
@@ -408,27 +417,38 @@ export const buildSupportTranscriptHtmlExport = (
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${escapeHtml(`${copy.pageTitle} #${params.ticket.ticket_number}`)}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       :root {
-        color-scheme: light;
-        --page-bg: #eff4f8;
-        --panel-bg: rgba(255, 255, 255, 0.92);
-        --panel-border: rgba(120, 144, 156, 0.22);
-        --panel-muted: #f7fafc;
-        --text: #142331;
-        --muted: #607080;
-        --line: rgba(20, 35, 49, 0.1);
-        --shadow: 0 22px 60px rgba(16, 36, 54, 0.12);
-        --hero-start: #11344d;
-        --hero-end: #1d6a67;
-        --user-bg: #e8f1ff;
-        --user-border: #bfd5fb;
-        --agent-bg: #effbea;
-        --agent-border: #cdeac7;
-        --admin-bg: #fff3df;
-        --admin-border: #f2d7a4;
-        --system-bg: #f3f5f8;
-        --system-border: #d5dde5;
+        --font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --bg-page: #f8fafc;
+        --bg-card: #ffffff;
+        --bg-sidebar: #ffffff;
+        --border-color: #e2e8f0;
+        
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+        
+        --bg-msg-user: #f1f5f9;
+        --border-msg-user: #e2e8f0;
+        --text-msg-user: #0f172a;
+        
+        --bg-msg-agent: #f0fdf4;
+        --border-msg-agent: #bbf7d0;
+        --text-msg-agent: #166534;
+        
+        --bg-msg-admin: #fffbeb;
+        --border-msg-admin: #fde68a;
+        --text-msg-admin: #92400e;
+        
+        --bg-msg-system: #f1f5f9;
+        --border-msg-system: #cbd5e1;
+        --text-msg-system: #475569;
+        
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
       }
 
       * {
@@ -437,261 +457,289 @@ export const buildSupportTranscriptHtmlExport = (
 
       body {
         margin: 0;
-        padding: 28px 18px 40px;
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(circle at top left, rgba(17, 52, 77, 0.12), transparent 30%),
-          radial-gradient(circle at right 10%, rgba(29, 106, 103, 0.12), transparent 24%),
-          linear-gradient(180deg, #f7fafc 0%, var(--page-bg) 100%);
+        padding: 0;
+        font-family: var(--font-family);
+        background-color: var(--bg-page);
+        color: var(--text-main);
+        -webkit-font-smoothing: antialiased;
       }
 
       .page {
-        max-width: 1180px;
+        display: flex;
+        min-height: 100vh;
+        max-width: 1440px;
         margin: 0 auto;
       }
 
-      .hero {
-        position: relative;
-        overflow: hidden;
-        padding: 28px 30px;
-        border-radius: 30px;
-        background: linear-gradient(135deg, var(--hero-start) 0%, var(--hero-end) 100%);
-        color: #fff;
-        box-shadow: var(--shadow);
-      }
-
-      .hero::after {
-        content: "";
-        position: absolute;
-        inset: auto -80px -120px auto;
-        width: 240px;
-        height: 240px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.08);
-        filter: blur(6px);
-      }
-
-      .hero-top {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-      }
-
-      .hero-copy {
-        max-width: 760px;
-      }
-
-      .hero h1 {
-        margin: 0 0 10px;
-        font-size: 32px;
-        line-height: 1.08;
-      }
-
-      .hero p {
-        margin: 0;
-        font-size: 15px;
-        line-height: 1.65;
-        color: rgba(255, 255, 255, 0.88);
-      }
-
-      .locale-switcher {
+      .sidebar {
+        width: 360px;
+        background-color: var(--bg-sidebar);
+        border-right: 1px solid var(--border-color);
+        padding: 32px 24px;
         display: flex;
         flex-direction: column;
-        gap: 10px;
-        min-width: 210px;
-        padding: 16px;
-        border-radius: 22px;
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        backdrop-filter: blur(10px);
+        gap: 24px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
       }
 
-      .locale-switcher-label {
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.72);
+      .sidebar-header h1 {
+        font-size: 20px;
+        font-weight: 700;
+        margin: 0 0 12px 0;
+        color: var(--text-main);
+        line-height: 1.2;
       }
 
-      .locale-buttons {
+      .status-badge-container {
         display: flex;
+        margin-bottom: 8px;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .status-badge.open {
+        background-color: #dcfce7;
+        color: #15803d;
+      }
+
+      .status-badge.closed {
+        background-color: #f1f5f9;
+        color: #475569;
+      }
+
+      .status-badge.replied {
+        background-color: #dbeafe;
+        color: #1d4ed8;
+      }
+
+      .meta-card {
+        background-color: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .meta-card-title {
+        font-size: 14px;
+        font-weight: 700;
+        margin: 0 0 16px 0;
+        color: var(--text-main);
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .meta-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 14px;
+      }
+
+      .meta-field:last-child {
+        margin-bottom: 0;
+      }
+
+      .meta-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .meta-value {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-main);
+        word-break: break-all;
+      }
+
+      .reason-card {
+        background-color: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: var(--shadow-sm);
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .reason-icon {
+        font-size: 18px;
+        flex-shrink: 0;
+        line-height: 1;
+      }
+
+      .reason-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .reason-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: #92400e;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .reason-text {
+        font-size: 13px;
+        color: #78350f;
+        line-height: 1.5;
+        font-weight: 500;
+      }
+
+      .language-control {
+        display: flex;
+        flex-direction: column;
         gap: 8px;
+        margin-top: auto;
+      }
+
+      .language-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .segmented-control {
+        display: flex;
+        background-color: #f1f5f9;
+        border-radius: 8px;
+        padding: 4px;
+        border: 1px solid var(--border-color);
       }
 
       .locale-button {
         flex: 1;
-        border: 0;
-        border-radius: 999px;
-        padding: 10px 14px;
-        font: inherit;
-        font-size: 14px;
+        border: none;
+        background: none;
+        padding: 8px 12px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 6px;
+        color: var(--text-muted);
         cursor: pointer;
-        color: #fff;
-        background: rgba(255, 255, 255, 0.12);
-        transition: transform 140ms ease, background 140ms ease, box-shadow 140ms ease;
+        transition: all 0.15s ease;
       }
 
       .locale-button:hover {
-        transform: translateY(-1px);
-        background: rgba(255, 255, 255, 0.18);
+        color: var(--text-main);
       }
 
       .locale-button.is-active {
-        background: #ffffff;
-        color: #163247;
-        box-shadow: 0 8px 18px rgba(16, 36, 54, 0.16);
+        background-color: #ffffff;
+        color: var(--text-main);
+        box-shadow: var(--shadow-sm);
       }
 
-      .hero-badges {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 12px;
-        margin-top: 22px;
+      .generated-info {
+        font-size: 11px;
+        color: var(--text-muted);
+        padding-top: 16px;
+        border-top: 1px solid var(--border-color);
+        font-weight: 500;
       }
 
-      .hero-badge {
-        padding: 14px 16px;
-        border-radius: 20px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+      .main-content {
+        flex: 1;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        overflow-y: auto;
+        height: 100vh;
       }
 
-      .hero-badge-label {
-        display: block;
-        margin-bottom: 6px;
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.68);
-      }
-
-      .hero-badge-value {
-        font-size: 16px;
-        font-weight: 700;
-      }
-
-      .hero-note {
-        margin-top: 16px;
-        font-size: 14px;
-        line-height: 1.6;
-        color: rgba(255, 255, 255, 0.88);
-      }
-
-      .section {
-        margin-top: 22px;
-        border-radius: 28px;
-        background: var(--panel-bg);
-        border: 1px solid var(--panel-border);
-        box-shadow: var(--shadow);
-        overflow: hidden;
-        backdrop-filter: blur(10px);
-      }
-
-      .section-header {
-        padding: 24px 26px 12px;
-      }
-
-      .section-header h2 {
-        margin: 0;
+      .timeline-header h2 {
         font-size: 22px;
+        font-weight: 700;
+        margin: 0 0 6px 0;
+        color: var(--text-main);
       }
 
-      .section-header p {
-        margin: 8px 0 0;
-        color: var(--muted);
+      .timeline-header p {
         font-size: 14px;
-        line-height: 1.6;
-      }
-
-      .metadata-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 14px;
-        padding: 0 26px 26px;
-      }
-
-      .meta-card {
-        padding: 16px 18px;
-        border-radius: 20px;
-        background: var(--panel-muted);
-        border: 1px solid rgba(120, 144, 156, 0.16);
-      }
-
-      .meta-card .label {
-        display: block;
-        margin-bottom: 8px;
-        color: var(--muted);
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-
-      .meta-card .value {
-        font-size: 15px;
-        line-height: 1.6;
-        word-break: break-word;
-      }
-
-      .chat-shell {
-        position: relative;
-        padding: 8px 26px 28px;
-        background:
-          linear-gradient(180deg, rgba(247, 250, 252, 0.8) 0%, rgba(255, 255, 255, 0.65) 100%);
-      }
-
-      .chat-shell::before {
-        content: "";
-        position: absolute;
-        left: 50%;
-        top: 8px;
-        bottom: 28px;
-        width: 1px;
-        background: linear-gradient(180deg, transparent 0%, var(--line) 12%, var(--line) 88%, transparent 100%);
-        transform: translateX(-50%);
+        color: var(--text-muted);
+        margin: 0;
+        line-height: 1.5;
       }
 
       .alignment-guide {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
-        margin: 0 0 18px;
+        display: flex;
+        gap: 16px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
       }
 
       .guide-pill {
-        padding: 10px 12px;
-        border-radius: 999px;
-        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
         font-weight: 600;
-        text-align: center;
-        border: 1px solid transparent;
+        color: var(--text-muted);
+        padding: 6px 12px;
+        border-radius: 9999px;
+        border: 1px solid var(--border-color);
+        background-color: #ffffff;
+        box-shadow: var(--shadow-sm);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
       }
 
-      .guide-pill.user {
-        background: var(--user-bg);
-        border-color: var(--user-border);
+      .guide-pill::before {
+        content: "";
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
       }
 
-      .guide-pill.agent {
-        background: var(--agent-bg);
-        border-color: var(--agent-border);
+      .guide-pill.user::before {
+        background-color: #64748b;
       }
 
-      .guide-pill.system {
-        background: var(--system-bg);
-        border-color: var(--system-border);
+      .guide-pill.agent::before {
+        background-color: #10b981;
+      }
+
+      .guide-pill.system::before {
+        background-color: #f59e0b;
+      }
+
+      .chat-timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
       }
 
       .message {
-        position: relative;
         display: flex;
         flex-direction: column;
-        width: fit-content;
-        max-width: min(72%, 820px);
-        margin: 16px 0;
-        gap: 8px;
+        width: 100%;
+        max-width: 80%;
       }
 
       .message.user {
@@ -708,184 +756,216 @@ export const buildSupportTranscriptHtmlExport = (
       .message.system {
         margin-left: auto;
         margin-right: auto;
-        max-width: min(58%, 720px);
         align-items: center;
+        max-width: 90%;
       }
 
       .message-meta {
         display: flex;
-        flex-wrap: wrap;
         align-items: center;
-        gap: 10px;
-        font-size: 12px;
-        color: var(--muted);
+        gap: 8px;
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+        padding: 0 4px;
+        font-weight: 500;
       }
 
-      .message.system .message-meta {
-        justify-content: center;
+      .message-meta .sender {
+        font-weight: 600;
+        color: var(--text-main);
       }
 
-      .sender {
+      .message-meta .sequence {
+        background-color: #e2e8f0;
+        color: #475569;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 9px;
         font-weight: 700;
-        color: var(--text);
-      }
-
-      .sequence {
-        opacity: 0.82;
       }
 
       .bubble {
-        border-radius: 24px;
-        padding: 16px 18px;
-        border: 1px solid transparent;
-        line-height: 1.7;
+        border-radius: 16px;
+        padding: 14px 18px;
+        line-height: 1.6;
+        font-size: 15px;
+        box-shadow: var(--shadow-sm);
+        position: relative;
         word-break: break-word;
-        box-shadow: 0 10px 24px rgba(16, 36, 54, 0.05);
       }
 
       .message.user .bubble {
-        background: var(--user-bg);
-        border-color: var(--user-border);
-        border-bottom-right-radius: 10px;
+        background-color: var(--bg-msg-user);
+        border: 1px solid var(--border-msg-user);
+        color: var(--text-msg-user);
+        border-top-right-radius: 4px;
       }
 
       .message.agent .bubble {
-        background: var(--agent-bg);
-        border-color: var(--agent-border);
-        border-bottom-left-radius: 10px;
+        background-color: var(--bg-msg-agent);
+        border: 1px solid var(--border-msg-agent);
+        color: var(--text-msg-agent);
+        border-top-left-radius: 4px;
       }
 
       .message.admin .bubble {
-        background: var(--admin-bg);
-        border-color: var(--admin-border);
-        border-bottom-left-radius: 10px;
+        background-color: var(--bg-msg-admin);
+        border: 1px solid var(--border-msg-admin);
+        color: var(--text-msg-admin);
+        border-top-left-radius: 4px;
       }
 
       .message.system .bubble {
-        background: var(--system-bg);
-        border-color: var(--system-border);
-        border-radius: 18px;
+        background-color: #f8fafc;
+        border: 1px solid var(--border-color);
+        color: var(--text-msg-system);
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 13px;
         text-align: center;
       }
 
-      .body {
-        font-size: 15px;
+      /* Rich text inside bubbles */
+      .bubble p {
+        margin: 0 0 10px 0;
+      }
+      .bubble p:last-child {
+        margin-bottom: 0;
+      }
+
+      .bubble blockquote {
+        margin: 12px 0;
+        padding: 8px 16px;
+        border-left: 4px solid #cbd5e1;
+        background-color: rgba(0, 0, 0, 0.02);
+        font-style: italic;
+        border-radius: 0 8px 8px 0;
+      }
+
+      .bubble ul, .bubble ol {
+        margin: 8px 0;
+        padding-left: 24px;
+      }
+
+      .bubble li {
+        margin-bottom: 4px;
+      }
+
+      .bubble code {
+        font-family: "Cascadia Code", Consolas, monospace;
+        font-size: 13px;
+        background-color: rgba(0, 0, 0, 0.05);
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: inherit;
+      }
+
+      .bubble pre {
+        margin: 12px 0;
+        padding: 12px;
+        background-color: rgba(0, 0, 0, 0.04);
+        border-radius: 8px;
+        overflow-x: auto;
+        font-family: "Cascadia Code", Consolas, monospace;
+        font-size: 13px;
+      }
+
+      /* Stunning table styles */
+      .bubble table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+        font-size: 13px;
+        background-color: #ffffff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--border-color);
+      }
+
+      .bubble th, .bubble td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-color);
+        text-align: left;
+      }
+
+      .bubble th {
+        background-color: #f8fafc;
+        font-weight: 700;
+        color: var(--text-main);
+        border-bottom: 2px solid var(--border-color);
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.05em;
+      }
+
+      .bubble tr:last-child td {
+        border-bottom: none;
+      }
+
+      .bubble tr:nth-child(even) {
+        background-color: #f8fafc;
       }
 
       .attachment {
-        margin-top: 14px;
-        padding-top: 12px;
-        border-top: 1px dashed rgba(20, 35, 49, 0.16);
-        font-size: 13px;
-        color: var(--muted);
-      }
-
-      code {
-        font-family: "Cascadia Code", Consolas, monospace;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--border-color);
         font-size: 12px;
-        background: rgba(20, 35, 49, 0.06);
-        padding: 2px 6px;
-        border-radius: 8px;
+        color: var(--text-muted);
       }
 
       .muted {
-        color: var(--muted);
+        color: var(--text-muted);
       }
 
       .empty-state {
-        padding: 22px;
-        border-radius: 20px;
-        border: 1px dashed rgba(120, 144, 156, 0.34);
-        background: #f8fbfd;
-        color: var(--muted);
+        padding: 32px;
+        border-radius: 12px;
+        border: 1px dashed var(--border-color);
+        background: #ffffff;
+        color: var(--text-muted);
         text-align: center;
+        font-size: 15px;
+        box-shadow: var(--shadow-sm);
       }
 
-      @media (max-width: 860px) {
-        .hero-top {
+      /* Custom scrollbars */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 9999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+
+      @media (max-width: 1024px) {
+        .page {
           flex-direction: column;
-          align-items: stretch;
         }
-
-        .locale-switcher {
-          min-width: 0;
+        .sidebar {
+          width: 100%;
+          height: auto;
+          position: relative;
+          border-right: none;
+          border-bottom: 1px solid var(--border-color);
+          padding: 24px;
         }
-
-        .chat-shell::before {
-          display: none;
+        .main-content {
+          padding: 24px 16px;
+          height: auto;
+          overflow-y: visible;
         }
-
-        .alignment-guide {
-          grid-template-columns: 1fr;
-        }
-
-        .message,
-        .message.system {
-          max-width: 100%;
-        }
-      }
-
-      @media (max-width: 640px) {
-        body {
-          padding: 18px 12px 28px;
-        }
-
-        .hero,
-        .section {
-          border-radius: 22px;
-        }
-
-        .hero {
-          padding: 22px 18px;
-        }
-
-        .hero h1 {
-          font-size: 26px;
-        }
-
-        .section-header,
-        .metadata-grid,
-        .chat-shell {
-          padding-left: 16px;
-          padding-right: 16px;
-        }
-
-        .hero-badges {
-          grid-template-columns: 1fr 1fr;
-        }
-
-        .message.user,
-        .message.agent,
-        .message.admin,
-        .message.system {
-          max-width: 100%;
-        }
-
-        .message.user {
-          align-items: flex-end;
-        }
-
-        .message.agent,
-        .message.admin {
-          align-items: flex-start;
-        }
-
-        .message.system {
-          align-items: center;
-        }
-
-        .message-meta {
-          gap: 8px;
-        }
-
-        .message.user .message-meta {
-          justify-content: flex-end;
-        }
-
-        .message.agent .message-meta,
-        .message.admin .message-meta,
-        .message.system .message-meta {
-          justify-content: flex-start;
+        .message {
+          max-width: 95%;
         }
       }
     </style>
@@ -896,172 +976,132 @@ export const buildSupportTranscriptHtmlExport = (
     `${TRANSCRIPT_COPY.ru.pageTitle} #${params.ticket.ticket_number}`,
   )}">
     <main class="page">
-      <section class="hero">
-        <div class="hero-top">
-          <div class="hero-copy">
-            <h1 ${renderLocalizedAttributes({
-              uz: `${TRANSCRIPT_COPY.uz.heroTitle} #${params.ticket.ticket_number}`,
-              ru: `${TRANSCRIPT_COPY.ru.heroTitle} #${params.ticket.ticket_number}`,
-            })}>${escapeHtml(`${copy.heroTitle} #${params.ticket.ticket_number}`)}</h1>
-            <p ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.heroDescription,
-              ru: TRANSCRIPT_COPY.ru.heroDescription,
-            })}>${escapeHtml(copy.heroDescription)}</p>
-          </div>
-
-          <div class="locale-switcher">
-            <span class="locale-switcher-label" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.other.languageSwitcher,
-              ru: TRANSCRIPT_COPY.ru.other.languageSwitcher,
-            })}>${escapeHtml(copy.other.languageSwitcher)}</span>
-            <div class="locale-buttons">
-              <button type="button" class="locale-button${
-                locale === 'uz' ? ' is-active' : ''
-              }" data-locale-switch="uz">O'zbekcha</button>
-              <button type="button" class="locale-button${
-                locale === 'ru' ? ' is-active' : ''
-              }" data-locale-switch="ru">Русский</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="hero-badges">
-          <div class="hero-badge">
-            <span class="hero-badge-label" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.badges.messages,
-              ru: TRANSCRIPT_COPY.ru.badges.messages,
-            })}>${escapeHtml(copy.badges.messages)}</span>
-            <span class="hero-badge-value">${params.messages.length}</span>
-          </div>
-          <div class="hero-badge">
-            <span class="hero-badge-label" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.badges.handlingMode,
-              ru: TRANSCRIPT_COPY.ru.badges.handlingMode,
-            })}>${escapeHtml(copy.badges.handlingMode)}</span>
-            <span class="hero-badge-value" ${renderLocalizedAttributes(localizedHandlingMode)}>${escapeHtml(
-              localizedHandlingMode[locale],
-            )}</span>
-          </div>
-          <div class="hero-badge">
-            <span class="hero-badge-label" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.badges.status,
-              ru: TRANSCRIPT_COPY.ru.badges.status,
-            })}>${escapeHtml(copy.badges.status)}</span>
-            <span class="hero-badge-value" ${renderLocalizedAttributes(localizedStatus)}>${escapeHtml(
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h1 ${renderLocalizedAttributes({
+            uz: `${TRANSCRIPT_COPY.uz.heroTitle} #${params.ticket.ticket_number}`,
+            ru: `${TRANSCRIPT_COPY.ru.heroTitle} #${params.ticket.ticket_number}`,
+          })}>${escapeHtml(`${copy.heroTitle} #${params.ticket.ticket_number}`)}</h1>
+          
+          <div class="status-badge-container">
+            <span class="status-badge ${params.ticket.status.toLowerCase()}" ${renderLocalizedAttributes(localizedStatus)}>${escapeHtml(
               localizedStatus[locale],
             )}</span>
           </div>
-          <div class="hero-badge">
-            <span class="hero-badge-label" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.badges.generated,
-              ru: TRANSCRIPT_COPY.ru.badges.generated,
-            })}>${escapeHtml(copy.badges.generated)}</span>
-            <span class="hero-badge-value">${escapeHtml(formatDateTime(generatedAt, locale))}</span>
-          </div>
         </div>
 
-        <p class="hero-note" ${renderLocalizedAttributes({
-          uz: TRANSCRIPT_COPY.uz.timelineHint,
-          ru: TRANSCRIPT_COPY.ru.timelineHint,
-        })}>${escapeHtml(copy.timelineHint)}</p>
-      </section>
-
-      <section class="section">
-        <div class="section-header">
-          <h2 ${renderLocalizedAttributes({
+        <div class="meta-card">
+          <div class="meta-card-title" ${renderLocalizedAttributes({
             uz: TRANSCRIPT_COPY.uz.sections.overviewTitle,
             ru: TRANSCRIPT_COPY.ru.sections.overviewTitle,
-          })}>${escapeHtml(copy.sections.overviewTitle)}</h2>
-          <p ${renderLocalizedAttributes({
-            uz: TRANSCRIPT_COPY.uz.sections.overviewDescription,
-            ru: TRANSCRIPT_COPY.ru.sections.overviewDescription,
-          })}>${escapeHtml(copy.sections.overviewDescription)}</p>
-        </div>
-
-        <div class="metadata-grid">
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
+          })}>${escapeHtml(copy.sections.overviewTitle)}</div>
+          
+          <div class="meta-field">
+            <span class="meta-label" ${renderLocalizedAttributes({
               uz: TRANSCRIPT_COPY.uz.metadata.customer,
               ru: TRANSCRIPT_COPY.ru.metadata.customer,
             })}>${escapeHtml(copy.metadata.customer)}</span>
-            <div class="value">${renderMetadataValue(userFullName)}</div>
+            <div class="meta-value">${renderMetadataValue(userFullName)}</div>
           </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
+          <div class="meta-field">
+            <span class="meta-label" ${renderLocalizedAttributes({
               uz: TRANSCRIPT_COPY.uz.metadata.phone,
               ru: TRANSCRIPT_COPY.ru.metadata.phone,
             })}>${escapeHtml(copy.metadata.phone)}</span>
-            <div class="value">${renderMetadataValue(formatUzPhone(params.user.phone_number))}</div>
+            <div class="meta-value">${renderMetadataValue(formatUzPhone(params.user.phone_number))}</div>
           </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
+          <div class="meta-field">
+            <span class="meta-label" ${renderLocalizedAttributes({
               uz: TRANSCRIPT_COPY.uz.metadata.telegram,
               ru: TRANSCRIPT_COPY.ru.metadata.telegram,
             })}>${escapeHtml(copy.metadata.telegram)}</span>
-            <div class="value">${renderMetadataValue(`${username} (ID: ${params.user.telegram_id})`)}</div>
+            <div class="meta-value">${renderMetadataValue(`${username} (ID: ${params.user.telegram_id})`)}</div>
           </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
+          <div class="meta-field">
+            <span class="meta-label" ${renderLocalizedAttributes({
               uz: TRANSCRIPT_COPY.uz.metadata.sapCode,
               ru: TRANSCRIPT_COPY.ru.metadata.sapCode,
             })}>${escapeHtml(copy.metadata.sapCode)}</span>
-            <div class="value">${renderMetadataValue(params.user.sap_card_code || '')}</div>
+            <div class="meta-value">${renderMetadataValue(params.user.sap_card_code || '')}</div>
           </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
+          <div class="meta-field">
+            <span class="meta-label" ${renderLocalizedAttributes({
               uz: TRANSCRIPT_COPY.uz.metadata.language,
               ru: TRANSCRIPT_COPY.ru.metadata.language,
             })}>${escapeHtml(copy.metadata.language)}</span>
-            <div class="value" ${renderLocalizedAttributes(localizedUserLanguage)}>${escapeHtml(
+            <div class="meta-value" ${renderLocalizedAttributes(localizedUserLanguage)}>${escapeHtml(
               localizedUserLanguage[locale],
             )}</div>
           </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
+          <div class="meta-field">
+            <span class="meta-label" ${renderLocalizedAttributes({
               uz: TRANSCRIPT_COPY.uz.metadata.ticketCreated,
               ru: TRANSCRIPT_COPY.ru.metadata.ticketCreated,
             })}>${escapeHtml(copy.metadata.ticketCreated)}</span>
-            <div class="value">${renderMetadataValue(
+            <div class="meta-value">${renderMetadataValue(
               formatDateTime(params.ticket.created_at, locale),
             )}</div>
           </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
+          <div class="meta-field">
+            <span class="meta-label" ${renderLocalizedAttributes({
               uz: TRANSCRIPT_COPY.uz.metadata.lastUpdated,
               ru: TRANSCRIPT_COPY.ru.metadata.lastUpdated,
             })}>${escapeHtml(copy.metadata.lastUpdated)}</span>
-            <div class="value">${renderMetadataValue(
+            <div class="meta-value">${renderMetadataValue(
               formatDateTime(params.ticket.updated_at, locale),
             )}</div>
           </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.metadata.matchedFaq,
-              ru: TRANSCRIPT_COPY.ru.metadata.matchedFaq,
-            })}>${escapeHtml(copy.metadata.matchedFaq)}</span>
-            <div class="value">${renderMetadataValue(
-              params.ticket.matched_faq_id ? String(params.ticket.matched_faq_id) : '',
+          <div class="meta-field">
+            <span class="meta-label" ${renderLocalizedAttributes({
+              uz: TRANSCRIPT_COPY.uz.badges.handlingMode,
+              ru: TRANSCRIPT_COPY.ru.badges.handlingMode,
+            })}>${escapeHtml(copy.badges.handlingMode)}</span>
+            <div class="meta-value" ${renderLocalizedAttributes(localizedHandlingMode)}>${escapeHtml(
+              localizedHandlingMode[locale],
             )}</div>
           </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.metadata.agentToken,
-              ru: TRANSCRIPT_COPY.ru.metadata.agentToken,
-            })}>${escapeHtml(copy.metadata.agentToken)}</span>
-            <div class="value">${renderMetadataValue(params.ticket.agent_token || '')}</div>
-          </div>
-          <div class="meta-card">
-            <span class="label" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.metadata.escalationReason,
-              ru: TRANSCRIPT_COPY.ru.metadata.escalationReason,
-            })}>${escapeHtml(copy.metadata.escalationReason)}</span>
-            <div class="value">${renderMetadataValue(params.ticket.agent_escalation_reason || '')}</div>
+        </div>
+
+        ${
+          params.ticket.agent_escalation_reason
+            ? `<div class="reason-card">
+                <span class="reason-icon">⚠️</span>
+                <div class="reason-content">
+                  <span class="reason-title" ${renderLocalizedAttributes({
+                    uz: TRANSCRIPT_COPY.uz.metadata.escalationReason,
+                    ru: TRANSCRIPT_COPY.ru.metadata.escalationReason,
+                  })}>${escapeHtml(copy.metadata.escalationReason)}</span>
+                  <span class="reason-text">${escapeHtml(params.ticket.agent_escalation_reason)}</span>
+                </div>
+              </div>`
+            : ''
+        }
+
+        <div class="language-control">
+          <span class="language-label" ${renderLocalizedAttributes({
+            uz: TRANSCRIPT_COPY.uz.other.languageSwitcher,
+            ru: TRANSCRIPT_COPY.ru.other.languageSwitcher,
+          })}>${escapeHtml(copy.other.languageSwitcher)}</span>
+          <div class="segmented-control">
+            <button type="button" class="locale-button${
+              locale === 'uz' ? ' is-active' : ''
+            }" data-locale-switch="uz">O'zbekcha</button>
+            <button type="button" class="locale-button${
+              locale === 'ru' ? ' is-active' : ''
+            }" data-locale-switch="ru">Русский</button>
           </div>
         </div>
-      </section>
 
-      <section class="section">
-        <div class="section-header">
+        <div class="generated-info">
+          <span ${renderLocalizedAttributes({
+            uz: TRANSCRIPT_COPY.uz.badges.generated,
+            ru: TRANSCRIPT_COPY.ru.badges.generated,
+          })}>${escapeHtml(copy.badges.generated)}</span>: ${escapeHtml(formatDateTime(generatedAt, locale))}
+        </div>
+      </aside>
+
+      <div class="main-content">
+        <div class="timeline-header">
           <h2 ${renderLocalizedAttributes({
             uz: TRANSCRIPT_COPY.uz.sections.timelineTitle,
             ru: TRANSCRIPT_COPY.ru.sections.timelineTitle,
@@ -1072,25 +1112,25 @@ export const buildSupportTranscriptHtmlExport = (
           })}>${escapeHtml(copy.sections.timelineDescription)}</p>
         </div>
 
-        <div class="chat-shell">
-          <div class="alignment-guide">
-            <div class="guide-pill agent" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.roleHints.agent,
-              ru: TRANSCRIPT_COPY.ru.roleHints.agent,
-            })}>${escapeHtml(copy.roleHints.agent)}</div>
-            <div class="guide-pill system" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.roleHints.system,
-              ru: TRANSCRIPT_COPY.ru.roleHints.system,
-            })}>${escapeHtml(copy.roleHints.system)}</div>
-            <div class="guide-pill user" ${renderLocalizedAttributes({
-              uz: TRANSCRIPT_COPY.uz.roleHints.user,
-              ru: TRANSCRIPT_COPY.ru.roleHints.user,
-            })}>${escapeHtml(copy.roleHints.user)}</div>
-          </div>
+        <div class="alignment-guide">
+          <div class="guide-pill agent" ${renderLocalizedAttributes({
+            uz: TRANSCRIPT_COPY.uz.roleHints.agent,
+            ru: TRANSCRIPT_COPY.ru.roleHints.agent,
+          })}>${escapeHtml(copy.roleHints.agent)}</div>
+          <div class="guide-pill system" ${renderLocalizedAttributes({
+            uz: TRANSCRIPT_COPY.uz.roleHints.system,
+            ru: TRANSCRIPT_COPY.ru.roleHints.system,
+          })}>${escapeHtml(copy.roleHints.system)}</div>
+          <div class="guide-pill user" ${renderLocalizedAttributes({
+            uz: TRANSCRIPT_COPY.uz.roleHints.user,
+            ru: TRANSCRIPT_COPY.ru.roleHints.user,
+          })}>${escapeHtml(copy.roleHints.user)}</div>
+        </div>
 
+        <div class="chat-timeline">
           ${messagesHtml}
         </div>
-      </section>
+      </div>
     </main>
 
     <script>

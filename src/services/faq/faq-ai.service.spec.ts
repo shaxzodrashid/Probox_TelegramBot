@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { FaqAiService } from './faq-ai.service';
 import { GeminiService } from '../gemini.service';
 import { FaqRecord } from '../../types/faq.types';
+import { config } from '../../config';
 
 const makeFaq = (id: number): FaqRecord => ({
   id,
@@ -22,6 +23,44 @@ const makeFaq = (id: number): FaqRecord => ({
   workflow_stage: 'completed',
   created_at: new Date(),
   updated_at: new Date(),
+});
+
+test('generateQuestionVariants creates an intent-aware retrieval profile with the dedicated authoring model', async () => {
+  const originalGenerateJson = GeminiService.generateJson;
+  let capturedParams: Parameters<typeof GeminiService.generateJson>[0] | undefined;
+
+  GeminiService.generateJson = (async (params) => {
+    capturedParams = params;
+    return {
+      question_uz: 'Salomlashish',
+      question_ru: 'Приветствие',
+      question_en: 'Greeting',
+      intent_description: 'Match standalone greetings used to start a conversation with the bot.',
+      utterances_uz: ['Assalomu alaykum', 'Salom', 'Salomlar'],
+      utterances_ru: ['Здравствуйте', 'Привет', 'Добрый день'],
+      utterances_en: ['Hello', 'Hi', 'Good morning'],
+    };
+  }) as typeof GeminiService.generateJson;
+
+  try {
+    const result = await FaqAiService.generateQuestionVariants({
+      sourceQuestion: 'Salomlashish, masalan "Assalomu alaykum". Store greetings as quick FAQ.',
+      neighbors: [],
+    });
+
+    assert.equal(capturedParams?.model, config.GEMINI_FAQ_AUTHORING_MODEL);
+    assert.equal(capturedParams?.schemaName, 'FAQ retrieval profile');
+    assert.ok(capturedParams?.systemInstruction);
+    assert.match(String(capturedParams?.systemInstruction), /Never convert a non-question intent/);
+    assert.deepEqual(result.retrieval_profile.utterances_uz, [
+      'Assalomu alaykum',
+      'Salom',
+      'Salomlar',
+    ]);
+    assert.equal(result.question_en, 'Greeting');
+  } finally {
+    GeminiService.generateJson = originalGenerateJson;
+  }
 });
 
 test('chooseSupportFaqCandidate returns null when there are no agent-enabled candidates', async () => {

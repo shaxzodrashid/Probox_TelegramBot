@@ -33,6 +33,41 @@ test('isExactFaqQuestionMatch compares against all FAQ language variants', () =>
   );
 });
 
+test('isExactFaqQuestionMatch compares against generated retrieval utterances', () => {
+  assert.equal(
+    isExactFaqQuestionMatch(
+      {
+        question_uz: 'Salomlashish',
+        question_ru: 'Приветствие',
+        question_en: 'Greeting',
+        retrieval_profile: {
+          intent_description:
+            'Match standalone greetings used to start a conversation with the bot.',
+          utterances_uz: ['Assalomu alaykum', 'Salom', 'Salomlar'],
+          utterances_ru: ['Здравствуйте', 'Привет'],
+          utterances_en: ['Hello', 'Hi'],
+        },
+      },
+      '  ASSALOMU ALAYKUM ',
+    ),
+    true,
+  );
+});
+
+test('isExactFaqQuestionMatch supports semicolon-separated manual aliases', () => {
+  assert.equal(
+    isExactFaqQuestionMatch(
+      {
+        question_uz: 'Assalomu alaykum; Salom; Salomlar',
+        question_ru: 'Здравствуйте; Привет',
+        question_en: 'Hello; Hi',
+      },
+      'Salom',
+    ),
+    true,
+  );
+});
+
 test('getFaqAnswerForLanguage returns the requested locale with fallbacks', () => {
   assert.equal(
     getFaqAnswerForLanguage(

@@ -401,7 +401,31 @@ test('SupportAgentService passes system instructions, all tool config, and schem
     );
     assert.match(
       capturedSystemInstruction.join('\n'),
-      /Telegram rich messages support tables.*do not claim that tables are unsupported/i,
+      /Telegram rich messages support tables[\s\S]*do not claim that tables are unsupported/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /multiple product models or multiple variants of the same model/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Table columns are completely dynamic.*every distinct data attribute in its own column/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Each row must represent one concrete model or purchasable variant/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /different models consecutively.*consolidate the comparison into a single table/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /iPhone 17 Pro \| Yangi \| Cosmic Orange \| 256GB \| 17 446 000/i,
+    );
+    assert.match(
+      capturedSystemInstruction.join('\n'),
+      /Missing storage or color alone is not ambiguous when the exact model\/type is clear/i,
     );
     assert.match(
       capturedSystemInstruction.join('\n'),

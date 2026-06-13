@@ -1442,7 +1442,6 @@ export class SapService {
       T1."ItmsGrpCod"                       AS "ItemGroupCode",
       MAX(G."ItmsGrpNam")                   AS "ItemGroupName",
       MAX(T1."U_Color")                     AS "U_Color",
-      MAX(T1."U_Condition")                 AS "U_Condition",
       MAX(T1."U_Model")                     AS "U_Model",
       MAX(T1."U_DeviceType")                AS "U_DeviceType",
       MAX(T1."U_Memory")                    AS "U_Memory",

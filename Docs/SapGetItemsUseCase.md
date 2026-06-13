@@ -190,7 +190,7 @@ Each row can include:
 - stock: `OnHand`
 - grouping metadata: `ItemGroupCode`, `ItemGroupName`
 - device descriptors: `U_Model`, `U_DeviceType`, `U_Memory`, `U_Color`, `U_Sim_type`
-- condition: `U_PROD_CONDITION` and legacy `U_Condition`
+- condition: `U_PROD_CONDITION`
 - pricing: `SalePrice`
 - IMEI-mode fields: `IMEI`, `PurchasePrice`
 

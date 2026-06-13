@@ -407,8 +407,7 @@ export function formatAdminGroupMessage(
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-💬 <b>${escapeHtml(copy.message)}:</b>
-${escapeHtml(messageText)}${options.matchedFaqId ? `\n\n🧠 <b>${escapeHtml(copy.matchedFaqId)}:</b> <code>${escapeHtml(String(options.matchedFaqId))}</code>` : ''}${options.agentToken ? `\n🏷 <b>${escapeHtml(copy.agentToken)}:</b> <code>${escapeHtml(options.agentToken)}</code>` : ''}${options.escalationReason ? `\n⚠️ <b>${escapeHtml(copy.escalationReason)}:</b> ${escapeHtml(options.escalationReason)}` : ''}${options.hasTranscriptAttachment ? `\n📎 <b>${escapeHtml(copy.fullTranscript)}:</b> ${escapeHtml(copy.transcriptAttached)}` : ''}${options.transcript?.length ? `\n\n📝 <b>${escapeHtml(copy.transcriptPreview)}:</b>\n${formatTranscriptExcerpt(options.transcript, locale)}` : ''}`;
+⚠️ <b>${escapeHtml(copy.escalationReason)}:</b> ${richTextToTelegramHtml(options.escalationReason || '')}`;
 }
 
 const buildAdminUserSnapshot = (ctx: BotContext, user: User): SupportAdminUserSnapshot => ({
@@ -534,20 +533,23 @@ const forwardTicketToAdminGroup = async (params: {
     params.options,
   );
 
-  const groupMessage: { message_id: number } = params.photoFileId
-    ? await withAdminGroupMigrationRetry((chatId) =>
-        params.api.sendPhoto(chatId, params.photoFileId!, {
-          caption: adminMessage,
-          parse_mode: 'HTML',
-          reply_markup: getSupportTicketKeyboard(params.ticket.ticket_number, params.locale),
-        }),
-      )
-    : await withAdminGroupMigrationRetry((chatId) =>
-        params.api.sendMessage(chatId, adminMessage, {
-          parse_mode: 'HTML',
-          reply_markup: getSupportTicketKeyboard(params.ticket.ticket_number, params.locale),
-        }),
-      );
+  const transcriptExport = buildSupportTranscriptHtmlExport({
+    ticket: params.ticket,
+    user: buildAdminUserSnapshot(params.ctx, params.user),
+    messages: params.options?.transcript || [],
+  });
+
+  const groupMessage = await withAdminGroupMigrationRetry((chatId) =>
+    params.api.sendDocument(
+      chatId,
+      new InputFile(transcriptExport.buffer, transcriptExport.fileName),
+      {
+        caption: adminMessage,
+        parse_mode: 'HTML',
+        reply_markup: getSupportTicketKeyboard(params.ticket.ticket_number, params.locale),
+      },
+    ),
+  );
 
   await SupportService.updateGroupMessageId(params.ticket.id, groupMessage.message_id);
   await SupportService.updateLatestMessageGroupMessageId(
@@ -557,53 +559,33 @@ const forwardTicketToAdminGroup = async (params: {
   );
 
   logger.info(
-    `Forwarded ticket ${params.ticket.ticket_number} to admin group, message ID: ${groupMessage.message_id}`,
+    `Forwarded ticket ${params.ticket.ticket_number} with HTML transcript directly to admin group, message ID: ${groupMessage.message_id}`,
   );
+
+  if (params.photoFileId) {
+    try {
+      await withAdminGroupMigrationRetry((chatId) =>
+        params.api.sendPhoto(chatId, params.photoFileId!, {
+          caption:
+            normalizeSupportLocale(params.user.language_code) === 'ru'
+              ? `🖼 <b>Фото, прикрепленное пользователем</b>`
+              : `🖼 <b>Foydalanuvchi tomonidan biriktirilgan rasm</b>`,
+          parse_mode: 'HTML',
+          reply_parameters: { message_id: groupMessage.message_id },
+        }),
+      );
+    } catch (photoError) {
+      logger.warn(
+        `[SUPPORT] Failed to send photo attachment reply for ticket ${params.ticket.ticket_number}.`,
+        photoError,
+      );
+    }
+  }
+
   return {
     forwarded: true,
     groupMessageId: groupMessage.message_id,
   };
-};
-
-const sendSupportTranscriptAttachmentToAdminGroup = async (params: {
-  api: Api<RawApi>;
-  ctx: BotContext;
-  user: User;
-  ticket: SupportTicket;
-  transcript: SupportTicketMessage[];
-  groupMessageId: number;
-}) => {
-  if (!params.transcript.length) {
-    return;
-  }
-
-  const transcriptExport = buildSupportTranscriptHtmlExport({
-    ticket: params.ticket,
-    user: buildAdminUserSnapshot(params.ctx, params.user),
-    messages: params.transcript,
-  });
-
-  try {
-    await withAdminGroupMigrationRetry((chatId) =>
-      params.api.sendDocument(
-        chatId,
-        new InputFile(transcriptExport.buffer, transcriptExport.fileName),
-        {
-          caption:
-            normalizeSupportLocale(params.user.language_code) === 'ru'
-              ? `📎 <b>Полный транскрипт обращения #${escapeHtml(params.ticket.ticket_number)}</b>`
-              : `📎 <b>Murojaat #${escapeHtml(params.ticket.ticket_number)} uchun to'liq transkript</b>`,
-          parse_mode: 'HTML',
-          reply_parameters: { message_id: params.groupMessageId },
-        },
-      ),
-    );
-  } catch (error) {
-    logger.warn(
-      `[SUPPORT] Failed to send HTML transcript attachment for ticket ${params.ticket.ticket_number}.`,
-      error,
-    );
-  }
 };
 
 const escalateAgentTicketToHuman = async (params: {
@@ -681,17 +663,6 @@ const escalateAgentTicketToHuman = async (params: {
     parseMode: 'HTML',
     useRichMessage: true,
   });
-
-  if (forwardResult.groupMessageId && transcript.length) {
-    void sendSupportTranscriptAttachmentToAdminGroup({
-      api: params.api,
-      ctx: params.ctx,
-      user: params.user,
-      ticket: escalatedTicket || params.ticket,
-      transcript,
-      groupMessageId: forwardResult.groupMessageId,
-    });
-  }
 };
 
 const moveAgentTicketToApplicationFlow = async (params: {

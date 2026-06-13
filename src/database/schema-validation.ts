@@ -93,6 +93,7 @@ const REQUIRED_COLUMNS = {
     'answer_uz',
     'answer_ru',
     'answer_en',
+    'retrieval_profile',
     'status',
     'created_by_admin_telegram_id',
     'locked_by_admin_telegram_id',
@@ -135,7 +136,7 @@ const getMissingColumns = async (
     logger.warn(`Missing table: ${tableName}`);
     return [...REQUIRED_COLUMNS[tableName]];
   }
-  
+
   let existingColumns = new Set<string>();
   try {
     const cols = await db('information_schema.columns')

@@ -1,4 +1,11 @@
-import { FaqAnswerVariants, FaqNeighbor, FaqQuestionVariants, FaqRecord } from '../../types/faq.types';
+import { config } from '../../config';
+import {
+  FaqAnswerVariants,
+  FaqAuthoringResult,
+  FaqNeighbor,
+  FaqQuestionVariants,
+  FaqRecord,
+} from '../../types/faq.types';
 import { logger } from '../../utils/logger';
 import { GeminiService } from '../gemini.service';
 
@@ -6,6 +13,10 @@ interface QuestionVariantsPayload {
   question_uz?: string;
   question_ru?: string;
   question_en?: string;
+  intent_description?: string;
+  utterances_uz?: string[];
+  utterances_ru?: string[];
+  utterances_en?: string[];
 }
 
 interface AnswerVariantsPayload {
@@ -45,21 +56,113 @@ const formatNeighbors = (neighbors: FaqNeighbor[]): string => {
     .join('\n\n');
 };
 
-const assertQuestionVariants = (payload: QuestionVariantsPayload): FaqQuestionVariants => {
+const normalizeUtterances = (values: string[] | undefined): string[] => {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  return values
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => {
+      const key = value.toLocaleLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+};
+
+const assertQuestionVariants = (payload: QuestionVariantsPayload): FaqAuthoringResult => {
   const question_uz = payload.question_uz?.trim();
   const question_ru = payload.question_ru?.trim();
   const question_en = payload.question_en?.trim();
+  const intent_description = payload.intent_description?.trim();
+  const utterances_uz = normalizeUtterances(payload.utterances_uz);
+  const utterances_ru = normalizeUtterances(payload.utterances_ru);
+  const utterances_en = normalizeUtterances(payload.utterances_en);
 
-  if (!question_uz || !question_ru || !question_en) {
-    throw new Error('Gemini returned incomplete question variants');
+  if (
+    !question_uz ||
+    !question_ru ||
+    !question_en ||
+    !intent_description ||
+    utterances_uz.length === 0 ||
+    utterances_ru.length === 0 ||
+    utterances_en.length === 0
+  ) {
+    throw new Error('Gemini returned an incomplete FAQ retrieval profile');
   }
 
   return {
     question_uz,
     question_ru,
     question_en,
+    retrieval_profile: {
+      intent_description,
+      utterances_uz,
+      utterances_ru,
+      utterances_en,
+    },
   };
 };
+
+const FAQ_AUTHORING_RESPONSE_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    question_uz: { type: 'string' },
+    question_ru: { type: 'string' },
+    question_en: { type: 'string' },
+    intent_description: { type: 'string' },
+    utterances_uz: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 6,
+      maxItems: 20,
+    },
+    utterances_ru: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 6,
+      maxItems: 20,
+    },
+    utterances_en: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 6,
+      maxItems: 20,
+    },
+  },
+  required: [
+    'question_uz',
+    'question_ru',
+    'question_en',
+    'intent_description',
+    'utterances_uz',
+    'utterances_ru',
+    'utterances_en',
+  ],
+  additionalProperties: false,
+};
+
+const FAQ_RETRIEVAL_ARCHITECT_INSTRUCTION = [
+  'You are the FAQ Retrieval Dataset Architect for a multilingual Telegram customer-support bot.',
+  'Your output is production retrieval data, not marketing copy and not a translation exercise.',
+  'The stored document embedding and exact alias matcher will be built from your output.',
+  'The admin input may be a question, command, greeting, short phrase, list of examples, intent label, or prose describing what messages should trigger one FAQ answer.',
+  'Infer the target incoming-message intent precisely before writing data.',
+  'A target utterance is what an end user may actually send to the bot.',
+  'Never convert a non-question intent such as a greeting, thanks, goodbye, confirmation, or command into a meta-question about that intent.',
+  'Preserve explicit examples from the admin input as trigger utterances whenever they belong to the target intent.',
+  'Generate broad but precise lexical coverage, including natural wording, short forms, polite forms, colloquial forms, and common orthographic variants.',
+  'Do not add neighboring intents that should receive a different answer.',
+  'The question_uz, question_ru, and question_en fields are concise admin-facing intent labels. They do not have to be grammatical questions.',
+  'The intent_description is a language-neutral English definition of exactly when this FAQ should match.',
+  'Each utterance list must contain realistic standalone user messages in that language, not explanations or labels.',
+].join('\n');
 
 const assertAnswerVariants = (payload: AnswerVariantsPayload): FaqAnswerVariants => {
   const answer_uz = payload.answer_uz?.trim();
@@ -169,24 +272,26 @@ export class FaqAiService {
   static async generateQuestionVariants(params: {
     sourceQuestion: string;
     neighbors: FaqNeighbor[];
-  }): Promise<FaqQuestionVariants> {
+  }): Promise<FaqAuthoringResult> {
     const prompt = [
-      'You are generating multilingual FAQ question variants for a Telegram bot admin panel.',
-      'Return valid JSON with exactly these keys: question_uz, question_ru, question_en.',
-      'The output questions must preserve the same user intent as the source question.',
-      'Write natural FAQ-style phrasing in Uzbek, Russian, and English.',
-      'Keep the meaning aligned across languages.',
-      'Make the wording noticeably different from the nearby FAQ neighbors so the new FAQ is not too close to them in embedding space.',
-      'Do not answer the question. Do not add extra keys or commentary.',
+      'Create one expert-quality multilingual retrieval profile for the target FAQ intent.',
+      'Return only the JSON required by the response schema.',
+      'Produce 8-15 diverse trigger utterances per language when the intent supports that variety.',
+      'Keep all three language sets semantically aligned, but make each set sound native rather than literally translated.',
+      'Use nearby FAQs only to avoid accidental intent duplication. Do not distort the target intent merely to increase vector distance.',
+      'Do not answer the FAQ.',
       '',
-      `Source question:\n${params.sourceQuestion}`,
+      `Admin intent description and examples:\n${params.sourceQuestion}`,
       '',
       `Nearest published FAQ neighbors:\n${formatNeighbors(params.neighbors)}`,
     ].join('\n');
 
     const payload = await GeminiService.generateJson<QuestionVariantsPayload>({
+      model: config.GEMINI_FAQ_AUTHORING_MODEL,
       prompt,
-      schemaName: 'faq question variants',
+      schemaName: 'FAQ retrieval profile',
+      systemInstruction: FAQ_RETRIEVAL_ARCHITECT_INSTRUCTION,
+      responseSchema: FAQ_AUTHORING_RESPONSE_SCHEMA,
     });
 
     return assertQuestionVariants(payload);

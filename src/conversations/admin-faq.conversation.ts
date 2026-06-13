@@ -6,7 +6,13 @@ import { FaqAiService } from '../services/faq/faq-ai.service';
 import { FaqEmbeddingService } from '../services/faq/faq-embedding.service';
 import { FaqService } from '../services/faq/faq.service';
 import { BotContext, BotConversation, FaqEditableField, SessionData } from '../types/context';
-import { FaqAnswerVariants, FaqNeighbor, FaqQuestionVariants, FaqRecord } from '../types/faq.types';
+import {
+  FaqAnswerVariants,
+  FaqAuthoringResult,
+  FaqNeighbor,
+  FaqQuestionVariants,
+  FaqRecord,
+} from '../types/faq.types';
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import { logger } from '../utils/logger';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
@@ -126,7 +132,7 @@ const buildQuestionReviewText = (
   locale: string,
   sourceQuestion: string,
   neighbors: FaqNeighbor[],
-  variants: FaqQuestionVariants,
+  variants: FaqAuthoringResult,
 ): string => {
   const lines = [
     `<b>${escapeHtml(i18n.t(locale, 'admin_faq_generated_questions_title'))}</b>`,
@@ -153,6 +159,14 @@ const buildQuestionReviewText = (
   lines.push(`UZ: ${escapeHtml(variants.question_uz)}`);
   lines.push(`RU: ${escapeHtml(variants.question_ru)}`);
   lines.push(`EN: ${escapeHtml(variants.question_en)}`);
+  lines.push('');
+  lines.push(`<b>${escapeHtml(i18n.t(locale, 'admin_faq_intent_description_label'))}</b>`);
+  lines.push(escapeHtml(variants.retrieval_profile.intent_description));
+  lines.push('');
+  lines.push(`<b>${escapeHtml(i18n.t(locale, 'admin_faq_trigger_phrases_label'))}</b>`);
+  lines.push(`UZ: ${escapeHtml(variants.retrieval_profile.utterances_uz.join('; '))}`);
+  lines.push(`RU: ${escapeHtml(variants.retrieval_profile.utterances_ru.join('; '))}`);
+  lines.push(`EN: ${escapeHtml(variants.retrieval_profile.utterances_en.join('; '))}`);
 
   return lines.join('\n');
 };
@@ -777,9 +791,31 @@ const updatePublishedFaqQuestions = async (
   faqId: number,
   questions: FaqQuestionVariants,
 ): Promise<FaqRecord | null> => {
-  const embedding = await externalGemini(conversation, () => FaqEmbeddingService.embedFaqDocument(questions));
+  const sourceDescription = [
+    `Confirmed Uzbek label: ${questions.question_uz}`,
+    `Confirmed Russian label: ${questions.question_ru}`,
+    `Confirmed English label: ${questions.question_en}`,
+  ].join('\n');
+  const generatedProfile = await externalGemini(conversation, () =>
+    FaqAiService.generateQuestionVariants({
+      sourceQuestion: sourceDescription,
+      neighbors: [],
+    }),
+  );
+  const authoringResult: FaqAuthoringResult = {
+    ...questions,
+    retrieval_profile: generatedProfile.retrieval_profile,
+  };
+  const embedding = await externalGemini(conversation, () =>
+    FaqEmbeddingService.embedFaqDocument(authoringResult),
+  );
   return conversation.external(() =>
-    FaqService.updatePublishedQuestionVariants(faqId, questions, embedding),
+    FaqService.updatePublishedQuestionVariants(
+      faqId,
+      questions,
+      authoringResult.retrieval_profile,
+      embedding,
+    ),
   );
 };
 

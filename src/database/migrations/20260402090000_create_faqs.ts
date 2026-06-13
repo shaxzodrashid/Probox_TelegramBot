@@ -17,6 +17,7 @@ export async function up(knex: Knex): Promise<void> {
       table.text('answer_uz').notNullable().defaultTo('');
       table.text('answer_ru').notNullable().defaultTo('');
       table.text('answer_en').notNullable().defaultTo('');
+      table.jsonb('retrieval_profile').notNullable().defaultTo('{}');
       table
         .enu('status', FAQ_STATUS, {
           useNative: true,

@@ -2,15 +2,17 @@ import { config } from '../../config';
 import db from '../../database/database';
 import {
   FaqAnswerVariants,
+  FaqAuthoringResult,
   FaqNeighbor,
   FaqQuestionVariants,
   FaqRecord,
+  FaqRetrievalProfile,
 } from '../../types/faq.types';
 import { FaqEmbeddingService } from './faq-embedding.service';
 import { isExactFaqQuestionMatch } from '../../utils/faq/faq-match.util';
 import { logger } from '../../utils/logger';
 
-interface CreateDraftFaqInput extends FaqQuestionVariants {
+interface CreateDraftFaqInput extends FaqAuthoringResult {
   embedding: number[];
   adminTelegramId: number;
 }
@@ -68,9 +70,57 @@ const toSafeNumber = (value: unknown): number => {
   return 0;
 };
 
+const normalizeStringList = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+
+const normalizeRetrievalProfile = (value: unknown): FaqRetrievalProfile | undefined => {
+  let parsed = value;
+
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return undefined;
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const intent_description =
+    typeof record.intent_description === 'string' ? record.intent_description.trim() : '';
+  const utterances_uz = normalizeStringList(record.utterances_uz);
+  const utterances_ru = normalizeStringList(record.utterances_ru);
+  const utterances_en = normalizeStringList(record.utterances_en);
+
+  if (
+    !intent_description ||
+    utterances_uz.length === 0 ||
+    utterances_ru.length === 0 ||
+    utterances_en.length === 0
+  ) {
+    return undefined;
+  }
+
+  return {
+    intent_description,
+    utterances_uz,
+    utterances_ru,
+    utterances_en,
+  };
+};
+
 const normalizeFaqRecord = (faq: FaqRecord): FaqRecord => ({
   ...faq,
   id: toSafeNumber(faq.id),
+  retrieval_profile: normalizeRetrievalProfile(faq.retrieval_profile),
   agent_enabled: faq.agent_enabled === true,
   agent_token: faq.agent_token?.trim() || null,
   created_by_admin_telegram_id: toSafeNumber(faq.created_by_admin_telegram_id),
@@ -157,6 +207,7 @@ export class FaqService {
         answer_uz: '',
         answer_ru: '',
         answer_en: '',
+        retrieval_profile: input.retrieval_profile,
         status: 'draft',
         agent_enabled: false,
         agent_token: null,
@@ -407,6 +458,7 @@ export class FaqService {
   static async updatePublishedQuestionVariants(
     faqId: number,
     questions: FaqQuestionVariants,
+    retrievalProfile: FaqRetrievalProfile,
     embedding: number[],
   ): Promise<FaqRecord | null> {
     const [record] = await db<FaqRecord>('faqs')
@@ -416,6 +468,7 @@ export class FaqService {
       })
       .update({
         ...questions,
+        retrieval_profile: retrievalProfile,
         vector_embedding: this.toVectorLiteral(embedding),
         updated_at: new Date(),
       })

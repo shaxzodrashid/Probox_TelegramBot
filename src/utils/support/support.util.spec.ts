@@ -95,7 +95,7 @@ const makeFakeApi = () => ({
   sendPhoto: async () => ({ message_id: 999 }),
 });
 
-test('formatAdminGroupMessage applies Telegram HTML formatting for agent transcript lines only', () => {
+test('formatAdminGroupMessage formats details card and escalation reason, excluding transcript preview', () => {
   const message = formatAdminGroupMessage(
     'ABC123',
     {
@@ -107,9 +107,10 @@ test('formatAdminGroupMessage applies Telegram HTML formatting for agent transcr
       sap_card_code: 'C001',
       language_code: 'uz',
     },
-    'ha <script>alert(1)</script>',
+    'ignored latest message text',
     new Date('2026-04-20T09:10:00.000Z'),
     {
+      escalationReason: 'Needs human verification for **contracts**.',
       transcript: [
         {
           id: 1,
@@ -121,23 +122,21 @@ test('formatAdminGroupMessage applies Telegram HTML formatting for agent transcr
           group_message_id: null,
           created_at: new Date(),
         },
-        {
-          id: 2,
-          ticket_id: 99,
-          sender_type: 'agent',
-          message_text: '<b>Oyiga to‘lov:</b> 1 995 233 so‘m',
-          photo_file_id: null,
-          telegram_message_id: 2,
-          group_message_id: null,
-          created_at: new Date(),
-        },
       ],
     },
   );
 
-  assert.match(message, /ha &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-  assert.match(message, /1\. <b>Foydalanuvchi:<\/b> &lt;b&gt;raw user&lt;\/b&gt;/);
-  assert.match(message, /2\. <b>AI agent:<\/b> <b>Oyiga to‘lov:<\/b> 1 995 233 so‘m/);
+  assert.match(message, /Yangi murojaat #ABC123/);
+  assert.match(message, /Ali Valiyev/);
+  assert.match(message, /\+998901234567/);
+  assert.match(message, /@ali/);
+  assert.match(message, /ID: <code>55<\/code>/);
+  assert.match(message, /C001/);
+  assert.match(message, /O'zbekcha/i);
+  assert.match(message, /Operatorga yo‘naltirish sababi/);
+  assert.match(message, /Needs human verification for <b>contracts<\/b>\./);
+  assert.doesNotMatch(message, /ignored latest message text/);
+  assert.doesNotMatch(message, /raw user/);
 });
 
 test('processSupportRequest routes active AI-ticket messages through FAQ resolution before continuing the ticket', async () => {
@@ -1185,7 +1184,7 @@ test('processSupportRequest replies to the user before the HTML transcript attac
   };
 
   try {
-    await processSupportRequest(
+    const promise = processSupportRequest(
       api as unknown as import('grammy').Api<import('grammy').RawApi>,
       ctx as unknown as import('../../types/context').BotContext,
       makeUser(),
@@ -1195,21 +1194,25 @@ test('processSupportRequest replies to the user before the HTML transcript attac
       'uz',
     );
 
-    const userReplyIndex = events.findIndex((entry) =>
-      entry.includes("reply:Sizning murojaatingiz qo'llab-quvvatlash jamoasiga yo'naltirildi."),
-    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
     const documentStartIndex = events.indexOf('admin:document:start');
 
-    assert.notEqual(userReplyIndex, -1);
     assert.notEqual(documentStartIndex, -1);
-    assert.ok(userReplyIndex < documentStartIndex);
     assert.equal(documentFinished, false);
 
     if (resolveDocument) {
       resolveDocument();
     }
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
+    await promise;
+
+    const userReplyIndex = events.findIndex((entry) =>
+      entry.includes("reply:Sizning murojaatingiz qo'llab-quvvatlash jamoasiga yo'naltirildi."),
+    );
+
+    assert.notEqual(userReplyIndex, -1);
+    assert.ok(documentStartIndex < userReplyIndex);
     assert.equal(documentFinished, true);
   } finally {
     if (resolveDocument) {

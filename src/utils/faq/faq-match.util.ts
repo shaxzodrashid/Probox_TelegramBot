@@ -1,4 +1,8 @@
-import { FaqAnswerVariants, FaqQuestionVariants } from '../../types/faq.types';
+import {
+  FaqAnswerVariants,
+  FaqQuestionVariants,
+  FaqRetrievalProfile,
+} from '../../types/faq.types';
 
 const APOSTROPHE_VARIANTS_REGEX = /[ʻʼ’‘`´]/g;
 const QUOTE_VARIANTS_REGEX = /[“”«»]/g;
@@ -14,7 +18,9 @@ export function normalizeFaqQuestion(text: string): string {
 }
 
 export function isExactFaqQuestionMatch(
-  candidateQuestions: FaqQuestionVariants,
+  candidateQuestions: FaqQuestionVariants & {
+    retrieval_profile?: FaqRetrievalProfile;
+  },
   userQuestion: string,
 ): boolean {
   const normalizedUserQuestion = normalizeFaqQuestion(userQuestion);
@@ -22,11 +28,18 @@ export function isExactFaqQuestionMatch(
     return false;
   }
 
-  return [
+  const candidateUtterances = [
     candidateQuestions.question_uz,
     candidateQuestions.question_ru,
     candidateQuestions.question_en,
-  ].some((candidateQuestion) => normalizeFaqQuestion(candidateQuestion) === normalizedUserQuestion);
+    ...(candidateQuestions.retrieval_profile?.utterances_uz || []),
+    ...(candidateQuestions.retrieval_profile?.utterances_ru || []),
+    ...(candidateQuestions.retrieval_profile?.utterances_en || []),
+  ].flatMap((candidateQuestion) => candidateQuestion.split(/[;\n|]+/));
+
+  return candidateUtterances.some(
+    (candidateQuestion) => normalizeFaqQuestion(candidateQuestion) === normalizedUserQuestion,
+  );
 }
 
 export function getFaqAnswerForLanguage(

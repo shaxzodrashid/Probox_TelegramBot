@@ -4,7 +4,7 @@ import { ConversationFlavor, Conversation } from '@grammyjs/conversations';
 
 import { Contract } from '../data/contracts.mock';
 import { PaymentContract } from '../interfaces/payment.interface';
-import { FaqAnswerVariants, FaqQuestionVariants } from './faq.types';
+import { FaqAnswerVariants, FaqAuthoringResult } from './faq.types';
 
 export type CustomContext = Context & I18nFlavor & SessionFlavor<SessionData>;
 export type BotContext = ConversationFlavor<CustomContext>;
@@ -86,7 +86,7 @@ export interface SessionData {
     method: string;
   };
   adminFaqSourceQuestion?: string;
-  adminFaqQuestionVariants?: FaqQuestionVariants;
+  adminFaqQuestionVariants?: FaqAuthoringResult;
   adminFaqDraftId?: number;
   adminFaqAnswerVariants?: FaqAnswerVariants;
   adminFaqAnswerRegenerationInstructions?: string;
