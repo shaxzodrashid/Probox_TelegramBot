@@ -221,6 +221,14 @@ import { getMainKeyboardByLocale } from './keyboards';
 import { FaqService } from './services/faq/faq.service';
 import { ErrorNotificationService } from './services/error-notification.service';
 import { resolveUiTextAction, routeUiTextAction } from './utils/formatting/ui-text-resolver';
+import {
+  blockedUserAlertBackHandler,
+  blockedUserDetailsHandler,
+} from './handlers/blocked-user-alert.handler';
+import {
+  BLOCKED_USER_BACK_CALLBACK_PREFIX,
+  BLOCKED_USER_DETAILS_CALLBACK_PREFIX,
+} from './keyboards/blocked-user-alert.keyboards';
 
 import { RedisAdapter } from '@grammyjs/storage-redis';
 import { redisService } from './redis/redis.service';
@@ -600,6 +608,14 @@ bot.callbackQuery(/^support_reply:.+$/, handleReplyButton);
 bot.callbackQuery(/^support_close:.+$/, handleCloseButton);
 bot.callbackQuery(/^support_block:.+$/, handleBlockButton);
 bot.callbackQuery(/^support_view_reply:.+$/, handleViewReplyButton);
+bot.callbackQuery(
+  new RegExp(`^${BLOCKED_USER_DETAILS_CALLBACK_PREFIX}\\d+$`),
+  blockedUserDetailsHandler,
+);
+bot.callbackQuery(
+  new RegExp(`^${BLOCKED_USER_BACK_CALLBACK_PREFIX}\\d+$`),
+  blockedUserAlertBackHandler,
+);
 
 // Admin panel callback handlers
 bot.callbackQuery(/^admin_users_page:\d+$/, adminUsersPaginationHandler);

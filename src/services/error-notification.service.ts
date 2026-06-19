@@ -1,7 +1,8 @@
-import { Api, RawApi } from 'grammy';
+import { Api, InlineKeyboard, RawApi } from 'grammy';
 import type { BotContext } from '../types/context';
 import { config } from '../config';
 import { logger } from '../utils/logger';
+import { getBlockedUserAlertKeyboard } from '../keyboards/blocked-user-alert.keyboards';
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
 import {
   getAdminGroupChatId,
@@ -45,7 +46,9 @@ const truncate = (value: string, maxLength: number): string => {
   return `${value.slice(0, maxLength - 3)}...`;
 };
 
-const normalizeError = (error: unknown): {
+const normalizeError = (
+  error: unknown,
+): {
   name: string;
   message: string;
   stack: string | null;
@@ -89,9 +92,7 @@ const formatActor = (actor?: ErrorNotificationActor | null): string => {
   return [fullName || 'no name', username, telegramId, languageCode].join(' | ');
 };
 
-const formatMetadata = (
-  metadata: ErrorNotificationContext['metadata'],
-): string => {
+const formatMetadata = (metadata: ErrorNotificationContext['metadata']): string => {
   if (!metadata) {
     return '';
   }
@@ -110,7 +111,8 @@ const formatMetadata = (
 };
 
 const formatUserBlockedReason = (error: unknown): string => {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
 
   if (message.includes('bot was blocked by the user')) {
     return 'Foydalanuvchi botni bloklagan.';
@@ -134,12 +136,14 @@ const getNotificationChatId = (): string => {
 const sendToNotificationChat = async (
   api: Api<RawApi>,
   text: string,
+  replyMarkup?: InlineKeyboard,
 ): Promise<void> => {
   const explicitChatId = config.ERROR_NOTIFICATION_CHAT_ID.trim();
 
   if (explicitChatId) {
     await api.sendMessage(explicitChatId, text, {
       parse_mode: 'HTML',
+      reply_markup: replyMarkup,
     });
     return;
   }
@@ -147,6 +151,7 @@ const sendToNotificationChat = async (
   await withAdminGroupMigrationRetry((chatId) =>
     api.sendMessage(chatId, text, {
       parse_mode: 'HTML',
+      reply_markup: replyMarkup,
     }),
   );
 };
@@ -256,17 +261,26 @@ export class ErrorNotificationService {
   }): Promise<void> {
     const chatId = getNotificationChatId();
     if (!chatId) {
-      logger.warn('[ERROR_NOTIFICATION] Skipped error alert because no notification chat is configured.');
+      logger.warn(
+        '[ERROR_NOTIFICATION] Skipped error alert because no notification chat is configured.',
+      );
       return;
     }
 
     try {
+      const isBlockedUserAlert =
+        params.context.scope === 'telegram_update' &&
+        params.context.chatType === 'private' &&
+        isUserBlockedError(params.error);
+      const blockedUserTelegramId = isBlockedUserAlert ? params.context.actor?.telegramId : null;
+
       await sendToNotificationChat(
         params.api,
         this.buildMessage({
           error: params.error,
           context: params.context,
         }),
+        blockedUserTelegramId ? getBlockedUserAlertKeyboard(blockedUserTelegramId) : undefined,
       );
     } catch (notificationError) {
       logger.error('[ERROR_NOTIFICATION] Failed to send error alert', notificationError);
@@ -301,9 +315,10 @@ export class ErrorNotificationService {
           params.ctx.callbackQuery?.data ||
           null,
         metadata: {
-          updateType: Object.keys(params.ctx.update)
-            .filter((key) => key !== 'update_id')
-            .join(', ') || 'unknown',
+          updateType:
+            Object.keys(params.ctx.update)
+              .filter((key) => key !== 'update_id')
+              .join(', ') || 'unknown',
         },
       },
     });

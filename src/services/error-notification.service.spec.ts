@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
 import { GrammyError } from 'grammy';
+import type { Api, RawApi } from 'grammy';
 
 process.env.BOT_TOKEN ||= 'test-token';
 const loadModule = createRequire(__filename);
 
 test('ErrorNotificationService formats blocked-user bot errors as a calm Uzbek delivery notice', async () => {
-  const { ErrorNotificationService } = loadModule('./error-notification.service') as typeof import('./error-notification.service');
+  const { ErrorNotificationService } = loadModule(
+    './error-notification.service',
+  ) as typeof import('./error-notification.service');
   const serviceInternals = ErrorNotificationService as unknown as {
     buildMessage(params: {
       error: unknown;
@@ -73,7 +76,9 @@ test('ErrorNotificationService formats blocked-user bot errors as a calm Uzbek d
 });
 
 test('ErrorNotificationService can omit stacks for compact admin alerts', async () => {
-  const { ErrorNotificationService } = loadModule('./error-notification.service') as typeof import('./error-notification.service');
+  const { ErrorNotificationService } = loadModule(
+    './error-notification.service',
+  ) as typeof import('./error-notification.service');
   const serviceInternals = ErrorNotificationService as unknown as {
     buildMessage(params: {
       error: unknown;
@@ -103,4 +108,67 @@ test('ErrorNotificationService can omit stacks for compact admin alerts', async 
   assert.match(message, /Request failed with status code 503/);
   assert.doesNotMatch(message, /Stack/);
   assert.doesNotMatch(message, /noisyInternalFrame/);
+});
+
+test('ErrorNotificationService adds the customer-details button to blocked-user alerts', async () => {
+  const { ErrorNotificationService } = loadModule(
+    './error-notification.service',
+  ) as typeof import('./error-notification.service');
+  const { config } = loadModule('../config') as typeof import('../config');
+  const originalNotificationChatId = config.ERROR_NOTIFICATION_CHAT_ID;
+  let sentOptions: {
+    reply_markup?: {
+      inline_keyboard: Array<Array<{ text: string; callback_data?: string }>>;
+    };
+  } | null = null;
+
+  config.ERROR_NOTIFICATION_CHAT_ID = '-1001234567890';
+
+  const api = {
+    sendMessage: async (_chatId: string, _text: string, options: typeof sentOptions) => {
+      sentOptions = options;
+      return {};
+    },
+  } as unknown as Api<RawApi>;
+
+  try {
+    await ErrorNotificationService.notify({
+      api,
+      error: new GrammyError(
+        'Forbidden',
+        {
+          ok: false,
+          error_code: 403,
+          description: 'Forbidden: bot was blocked by the user',
+        },
+        'sendMessage',
+        {},
+      ),
+      context: {
+        scope: 'telegram_update',
+        chatId: 8078830248,
+        chatType: 'private',
+        actor: {
+          telegramId: 8078830248,
+          firstName: 'Diyorbek',
+        },
+      },
+    });
+  } finally {
+    config.ERROR_NOTIFICATION_CHAT_ID = originalNotificationChatId;
+  }
+
+  assert.ok(sentOptions);
+  const detailsButton = (
+    sentOptions as {
+      reply_markup?: {
+        inline_keyboard: Array<Array<{ text: string; callback_data?: string }>>;
+      };
+    }
+  ).reply_markup?.inline_keyboard[0][0];
+
+  assert.deepEqual(detailsButton, {
+    text: "👤 Mijoz ma'lumotlari",
+    callback_data: 'blocked_user_details:8078830248',
+  });
 });
