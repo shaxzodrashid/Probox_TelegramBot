@@ -315,16 +315,23 @@ export class PaymentReminderService {
     });
   }
 
-  private static async findExistingRewardCoupon(
-    installment: IPurchaseInstallment,
-  ): Promise<Coupon | undefined> {
-    const existingCoupon = await db<Coupon>('coupons')
-      .where('source_type', 'payment_on_time')
-      .andWhere('sap_doc_entry', installment.DocEntry)
-      .andWhere('sap_installment_id', installment.InstlmntID)
-      .first();
+  private static async getExistingRewardCouponsSet(
+    installments: IPurchaseInstallment[],
+  ): Promise<Set<string>> {
+    if (installments.length === 0) {
+      return new Set();
+    }
 
-    return existingCoupon || undefined;
+    const pairs = installments.map((i) => [i.DocEntry, i.InstlmntID]);
+
+    const existingCoupons = await db<Coupon>('coupons')
+      .select('sap_doc_entry', 'sap_installment_id')
+      .where('source_type', 'payment_on_time')
+      .whereIn(['sap_doc_entry', 'sap_installment_id'], pairs);
+
+    return new Set(
+      existingCoupons.map((c) => `${c.sap_doc_entry}:${c.sap_installment_id}`),
+    );
   }
 
   private static async notifyAdminsAboutMissingTemplates(
@@ -364,8 +371,17 @@ export class PaymentReminderService {
     window: ProcessingWindow;
     dryRun: boolean;
     missingTemplates: Set<string>;
+    existingCoupons: Set<string>;
   }): Promise<{ couponIssued: boolean; notificationSent: boolean }> {
-    const { installment, linkedUser, promotion, window, dryRun, missingTemplates } = params;
+    const {
+      installment,
+      linkedUser,
+      promotion,
+      window,
+      dryRun,
+      missingTemplates,
+      existingCoupons,
+    } = params;
 
     if (!this.isPaymentInRewardMonth(installment, window)) {
       return { couponIssued: false, notificationSent: false };
@@ -375,8 +391,7 @@ export class PaymentReminderService {
       return { couponIssued: false, notificationSent: false };
     }
 
-    const existingCoupon = await this.findExistingRewardCoupon(installment);
-    if (existingCoupon) {
+    if (existingCoupons.has(`${installment.DocEntry}:${installment.InstlmntID}`)) {
       return { couponIssued: false, notificationSent: false };
     }
 
@@ -568,7 +583,11 @@ export class PaymentReminderService {
         this.fetchInstallments(window),
       ]);
 
-      const linkedUsersByCardCode = this.buildLinkedUserMap(users);
+      const [existingCouponsSet, linkedUsersByCardCode] = await Promise.all([
+        this.getExistingRewardCouponsSet(installments),
+        Promise.resolve(this.buildLinkedUserMap(users)),
+      ]);
+
       const checkedCardCodes = new Set(installments.map((installment) => installment.CardCode))
         .size;
       const missingTemplates = new Set<string>();
@@ -589,6 +608,7 @@ export class PaymentReminderService {
             window,
             dryRun,
             missingTemplates,
+            existingCoupons: existingCouponsSet,
           });
 
           if (rewardResult.couponIssued) {
