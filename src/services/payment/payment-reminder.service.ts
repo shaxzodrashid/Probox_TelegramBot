@@ -10,6 +10,7 @@ import { logger } from '../../utils/logger';
 import { BotNotificationService } from '../bot-notification.service';
 import { Coupon, CouponService } from '../coupon/coupon.service';
 import { Promotion, PromotionService } from '../coupon/promotion.service';
+import { MessageTemplate, MessageTemplateService } from '../message-template.service';
 import { User, UserService } from '../user.service';
 import { formatItemsList } from '../../utils/formatting/items-formatter.util';
 
@@ -364,8 +365,21 @@ export class PaymentReminderService {
     window: ProcessingWindow;
     dryRun: boolean;
     missingTemplates: Set<string>;
+    existingCouponSet?: Set<string>;
+    deliveredMessagesSet?: Set<string>;
+    activeTemplatesMap?: Map<string, MessageTemplate>;
   }): Promise<{ couponIssued: boolean; notificationSent: boolean }> {
-    const { installment, linkedUser, promotion, window, dryRun, missingTemplates } = params;
+    const {
+      installment,
+      linkedUser,
+      promotion,
+      window,
+      dryRun,
+      missingTemplates,
+      existingCouponSet,
+      deliveredMessagesSet,
+      activeTemplatesMap,
+    } = params;
 
     if (!this.isPaymentInRewardMonth(installment, window)) {
       return { couponIssued: false, notificationSent: false };
@@ -375,8 +389,11 @@ export class PaymentReminderService {
       return { couponIssued: false, notificationSent: false };
     }
 
-    const existingCoupon = await this.findExistingRewardCoupon(installment);
-    if (existingCoupon) {
+    const alreadySent = existingCouponSet
+      ? existingCouponSet.has(`${installment.DocEntry}:${installment.InstlmntID}`)
+      : Boolean(await this.findExistingRewardCoupon(installment));
+
+    if (alreadySent) {
       return { couponIssued: false, notificationSent: false };
     }
 
@@ -406,9 +423,15 @@ export class PaymentReminderService {
       return { couponIssued: coupons.length > 0, notificationSent: false };
     }
 
+    const alreadyDelivered = deliveredMessagesSet?.has(`${linkedUser.user.id}:payment_on_time`);
+    if (alreadyDelivered) {
+      return { couponIssued: coupons.length > 0, notificationSent: false };
+    }
+
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
       templateType: 'payment_paid_on_time',
+      template: activeTemplatesMap?.get('payment_paid_on_time'),
       placeholders: {
         customer_name: linkedUser.fullName,
         coupon_code: firstCoupon.code,
@@ -433,14 +456,29 @@ export class PaymentReminderService {
     linkedUser: LinkedUserContext;
     dryRun: boolean;
     missingTemplates: Set<string>;
+    sentRemindersSet?: Set<string>;
+    deliveredMessagesSet?: Set<string>;
+    activeTemplatesMap?: Map<string, MessageTemplate>;
   }): Promise<boolean> {
-    const { installment, linkedUser, dryRun, missingTemplates } = params;
-    const alreadySent = await this.hasReminderBeenSent(
-      linkedUser.user.id,
-      installment.DocEntry,
-      installment.InstlmntID,
-      'paid_late',
-    );
+    const {
+      installment,
+      linkedUser,
+      dryRun,
+      missingTemplates,
+      sentRemindersSet,
+      deliveredMessagesSet,
+      activeTemplatesMap,
+    } = params;
+    const alreadySent = sentRemindersSet
+      ? sentRemindersSet.has(
+          `${linkedUser.user.id}:${installment.DocEntry}:${installment.InstlmntID}:paid_late`,
+        )
+      : await this.hasReminderBeenSent(
+          linkedUser.user.id,
+          installment.DocEntry,
+          installment.InstlmntID,
+          'paid_late',
+        );
 
     if (alreadySent) {
       return false;
@@ -450,9 +488,15 @@ export class PaymentReminderService {
       return true;
     }
 
+    const alreadyDelivered = deliveredMessagesSet?.has(`${linkedUser.user.id}:payment_paid_late`);
+    if (alreadyDelivered) {
+      return false;
+    }
+
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
       templateType: 'payment_paid_late',
+      template: activeTemplatesMap?.get('payment_paid_late'),
       placeholders: {
         customer_name: linkedUser.fullName,
         coupon_code: '',
@@ -488,14 +532,30 @@ export class PaymentReminderService {
     reminderType: ReminderType;
     dryRun: boolean;
     missingTemplates: Set<string>;
+    sentRemindersSet?: Set<string>;
+    deliveredMessagesSet?: Set<string>;
+    activeTemplatesMap?: Map<string, MessageTemplate>;
   }): Promise<boolean> {
-    const { installment, linkedUser, reminderType, dryRun, missingTemplates } = params;
-    const alreadySent = await this.hasReminderBeenSent(
-      linkedUser.user.id,
-      installment.DocEntry,
-      installment.InstlmntID,
+    const {
+      installment,
+      linkedUser,
       reminderType,
-    );
+      dryRun,
+      missingTemplates,
+      sentRemindersSet,
+      deliveredMessagesSet,
+      activeTemplatesMap,
+    } = params;
+    const alreadySent = sentRemindersSet
+      ? sentRemindersSet.has(
+          `${linkedUser.user.id}:${installment.DocEntry}:${installment.InstlmntID}:${reminderType}`,
+        )
+      : await this.hasReminderBeenSent(
+          linkedUser.user.id,
+          installment.DocEntry,
+          installment.InstlmntID,
+          reminderType,
+        );
 
     if (alreadySent) {
       return false;
@@ -507,6 +567,12 @@ export class PaymentReminderService {
 
     const templateType =
       reminderType === 'overdue' ? 'payment_overdue' : `payment_reminder_${reminderType}`;
+
+    const alreadyDelivered = deliveredMessagesSet?.has(`${linkedUser.user.id}:${templateType}`);
+    if (alreadyDelivered) {
+      return false;
+    }
+
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
       templateType: templateType as
@@ -514,6 +580,7 @@ export class PaymentReminderService {
         | 'payment_reminder_d2'
         | 'payment_reminder_d1'
         | 'payment_reminder_d0',
+      template: activeTemplatesMap?.get(templateType),
       placeholders: {
         customer_name: linkedUser.fullName,
         coupon_code: '',
@@ -562,13 +629,79 @@ export class PaymentReminderService {
         await CouponService.expireStaleCoupons();
       }
 
-      const [users, promotion, installments] = await Promise.all([
+      const [users, promotion, installments, allTemplates] = await Promise.all([
         UserService.getUsersWithSapCardCode(),
         PromotionService.getCurrentPromotion(now),
         this.fetchInstallments(window),
+        MessageTemplateService.listTemplates(),
       ]);
 
       const linkedUsersByCardCode = this.buildLinkedUserMap(users);
+
+      const couponLookupPairs: [number, number][] = [];
+      const logLookupTuples: [number, number, number][] = [];
+      const userIds: number[] = [];
+
+      for (const installment of installments) {
+        const linkedUser = linkedUsersByCardCode.get(installment.CardCode);
+
+        if (this.isPaymentInRewardMonth(installment, window)) {
+          couponLookupPairs.push([installment.DocEntry, installment.InstlmntID]);
+        }
+
+        if (linkedUser) {
+          logLookupTuples.push([linkedUser.user.id, installment.DocEntry, installment.InstlmntID]);
+          userIds.push(linkedUser.user.id);
+        }
+      }
+
+      const activeTemplatesMap = new Map<string, MessageTemplate>(
+        allTemplates
+          .filter((t) => t.is_active && t.channel === 'telegram_bot')
+          .map((t) => [t.template_type, t]),
+      );
+
+      const [existingLogs, existingCoupons, deliveredLogs] = await Promise.all([
+        logLookupTuples.length > 0
+          ? db('payment_reminder_logs').whereIn(
+              ['user_id', 'doc_entry', 'installment_id'],
+              logLookupTuples,
+            )
+          : [],
+        couponLookupPairs.length > 0
+          ? db('coupons')
+              .where('source_type', 'payment_on_time')
+              .whereIn(['sap_doc_entry', 'sap_installment_id'], couponLookupPairs)
+          : [],
+        userIds.length > 0
+          ? db('message_dispatch_logs')
+              .whereIn('user_id', userIds)
+              .whereIn('dispatch_type', [
+                'payment_paid_on_time',
+                'payment_paid_late',
+                'payment_overdue',
+                'payment_reminder_d2',
+                'payment_reminder_d1',
+                'payment_reminder_d0',
+              ])
+              .where('status', 'sent')
+          : [],
+      ]);
+
+      const sentRemindersSet = new Set(
+        existingLogs.map(
+          (log) => `${log.user_id}:${log.doc_entry}:${log.installment_id}:${log.reminder_type}`,
+        ),
+      );
+
+      const existingCouponSet = new Set(
+        existingCoupons.map((c) => `${c.sap_doc_entry}:${c.sap_installment_id}`),
+      );
+
+      const deliveredMessagesSet = new Set(
+        deliveredLogs.map((log) => `${log.user_id}:${log.dispatch_type}`),
+      );
+
       const checkedCardCodes = new Set(installments.map((installment) => installment.CardCode))
         .size;
       const missingTemplates = new Set<string>();
@@ -589,6 +722,9 @@ export class PaymentReminderService {
             window,
             dryRun,
             missingTemplates,
+            existingCouponSet,
+            deliveredMessagesSet,
+            activeTemplatesMap,
           });
 
           if (rewardResult.couponIssued) {
@@ -614,6 +750,9 @@ export class PaymentReminderService {
               linkedUser,
               dryRun,
               missingTemplates,
+              sentRemindersSet,
+              deliveredMessagesSet,
+              activeTemplatesMap,
             });
 
             if (delivered) {
@@ -636,6 +775,9 @@ export class PaymentReminderService {
           reminderType,
           dryRun,
           missingTemplates,
+          sentRemindersSet,
+          deliveredMessagesSet,
+          activeTemplatesMap,
         });
 
         if (delivered) {
