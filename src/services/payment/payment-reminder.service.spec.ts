@@ -13,12 +13,12 @@ test(
     const serviceClass = PaymentReminderService as unknown as {
       fetchInstallments: (window: { dueDateFrom: string; dueDateTo: string }) => Promise<unknown[]>;
       findExistingRewardCoupon: () => Promise<undefined>;
-      hasReminderBeenSent: () => Promise<boolean>;
+      fetchExistingRemindersBatched: () => Promise<Set<string>>;
       logReminder: () => Promise<void>;
     };
     const originalFetchInstallments = serviceClass.fetchInstallments;
     const originalFindExistingRewardCoupon = serviceClass.findExistingRewardCoupon;
-    const originalHasReminderBeenSent = serviceClass.hasReminderBeenSent;
+    const originalFetchExistingRemindersBatched = serviceClass.fetchExistingRemindersBatched;
     const originalLogReminder = serviceClass.logReminder;
     const originalExpireCoupons = CouponService.expireStaleCoupons;
     const originalCreateCoupons = CouponService.createCouponsForUser;
@@ -89,7 +89,7 @@ test(
         },
       ];
       serviceClass.findExistingRewardCoupon = async () => undefined;
-      serviceClass.hasReminderBeenSent = async () => false;
+      serviceClass.fetchExistingRemindersBatched = async () => new Set<string>();
       serviceClass.logReminder = async () => undefined;
       CouponService.expireStaleCoupons = async () => 0;
       CouponService.createCouponsForUser = async (params) => {
@@ -171,7 +171,7 @@ test(
     } finally {
       serviceClass.fetchInstallments = originalFetchInstallments;
       serviceClass.findExistingRewardCoupon = originalFindExistingRewardCoupon;
-      serviceClass.hasReminderBeenSent = originalHasReminderBeenSent;
+      serviceClass.fetchExistingRemindersBatched = originalFetchExistingRemindersBatched;
       serviceClass.logReminder = originalLogReminder;
       CouponService.expireStaleCoupons = originalExpireCoupons;
       CouponService.createCouponsForUser = originalCreateCoupons;
@@ -189,12 +189,12 @@ test(
     const serviceClass = PaymentReminderService as unknown as {
       fetchInstallments: (window: { dueDateFrom: string; dueDateTo: string }) => Promise<unknown[]>;
       findExistingRewardCoupon: () => Promise<undefined>;
-      hasReminderBeenSent: () => Promise<boolean>;
+      fetchExistingRemindersBatched: () => Promise<Set<string>>;
       logReminder: () => Promise<void>;
     };
     const originalFetchInstallments = serviceClass.fetchInstallments;
     const originalFindExistingRewardCoupon = serviceClass.findExistingRewardCoupon;
-    const originalHasReminderBeenSent = serviceClass.hasReminderBeenSent;
+    const originalFetchExistingRemindersBatched = serviceClass.fetchExistingRemindersBatched;
     const originalLogReminder = serviceClass.logReminder;
     const originalExpireCoupons = CouponService.expireStaleCoupons;
     const originalCreateCoupons = CouponService.createCouponsForUser;
@@ -229,7 +229,7 @@ test(
         },
       ];
       serviceClass.findExistingRewardCoupon = async () => undefined;
-      serviceClass.hasReminderBeenSent = async () => false;
+      serviceClass.fetchExistingRemindersBatched = async () => new Set<string>();
       serviceClass.logReminder = async () => undefined;
       CouponService.expireStaleCoupons = async () => 0;
       CouponService.createCouponsForUser = async (params) => {
@@ -280,7 +280,7 @@ test(
     } finally {
       serviceClass.fetchInstallments = originalFetchInstallments;
       serviceClass.findExistingRewardCoupon = originalFindExistingRewardCoupon;
-      serviceClass.hasReminderBeenSent = originalHasReminderBeenSent;
+      serviceClass.fetchExistingRemindersBatched = originalFetchExistingRemindersBatched;
       serviceClass.logReminder = originalLogReminder;
       CouponService.expireStaleCoupons = originalExpireCoupons;
       CouponService.createCouponsForUser = originalCreateCoupons;
@@ -298,12 +298,12 @@ test(
     const serviceClass = PaymentReminderService as unknown as {
       fetchInstallments: (window: { dueDateFrom: string; dueDateTo: string }) => Promise<unknown[]>;
       findExistingRewardCoupon: () => Promise<undefined>;
-      hasReminderBeenSent: () => Promise<boolean>;
+      fetchExistingRemindersBatched: () => Promise<Set<string>>;
       logReminder: () => Promise<void>;
     };
     const originalFetchInstallments = serviceClass.fetchInstallments;
     const originalFindExistingRewardCoupon = serviceClass.findExistingRewardCoupon;
-    const originalHasReminderBeenSent = serviceClass.hasReminderBeenSent;
+    const originalFetchExistingRemindersBatched = serviceClass.fetchExistingRemindersBatched;
     const originalLogReminder = serviceClass.logReminder;
     const originalExpireCoupons = CouponService.expireStaleCoupons;
     const originalCreateCoupons = CouponService.createCouponsForUser;
@@ -333,7 +333,7 @@ test(
         },
       ];
       serviceClass.findExistingRewardCoupon = async () => undefined;
-      serviceClass.hasReminderBeenSent = async () => false;
+      serviceClass.fetchExistingRemindersBatched = async () => new Set<string>();
       serviceClass.logReminder = async () => undefined;
       CouponService.expireStaleCoupons = async () => 0;
       CouponService.createCouponsForUser = async () => [
@@ -394,7 +394,7 @@ test(
     } finally {
       serviceClass.fetchInstallments = originalFetchInstallments;
       serviceClass.findExistingRewardCoupon = originalFindExistingRewardCoupon;
-      serviceClass.hasReminderBeenSent = originalHasReminderBeenSent;
+      serviceClass.fetchExistingRemindersBatched = originalFetchExistingRemindersBatched;
       serviceClass.logReminder = originalLogReminder;
       CouponService.expireStaleCoupons = originalExpireCoupons;
       CouponService.createCouponsForUser = originalCreateCoupons;
@@ -412,12 +412,12 @@ test(
     const serviceClass = PaymentReminderService as unknown as {
       fetchInstallments: () => Promise<unknown[]>;
       findExistingRewardCoupon: () => Promise<undefined>;
-      hasReminderBeenSent: () => Promise<boolean>;
+      fetchExistingRemindersBatched: () => Promise<Set<string>>;
       logReminder: (params: { reminderType: string }) => Promise<void>;
     };
     const originalFetchInstallments = serviceClass.fetchInstallments;
     const originalFindExistingRewardCoupon = serviceClass.findExistingRewardCoupon;
-    const originalHasReminderBeenSent = serviceClass.hasReminderBeenSent;
+    const originalFetchExistingRemindersBatched = serviceClass.fetchExistingRemindersBatched;
     const originalLogReminder = serviceClass.logReminder;
     const originalExpireCoupons = CouponService.expireStaleCoupons;
     const originalCreateCoupons = CouponService.createCouponsForUser;
@@ -486,7 +486,7 @@ test(
         },
       ];
       serviceClass.findExistingRewardCoupon = async () => undefined;
-      serviceClass.hasReminderBeenSent = async () => false;
+      serviceClass.fetchExistingRemindersBatched = async () => new Set<string>();
       serviceClass.logReminder = async ({ reminderType }) => {
         loggedReminders.push(reminderType);
       };
@@ -528,7 +528,7 @@ test(
     } finally {
       serviceClass.fetchInstallments = originalFetchInstallments;
       serviceClass.findExistingRewardCoupon = originalFindExistingRewardCoupon;
-      serviceClass.hasReminderBeenSent = originalHasReminderBeenSent;
+      serviceClass.fetchExistingRemindersBatched = originalFetchExistingRemindersBatched;
       serviceClass.logReminder = originalLogReminder;
       CouponService.expireStaleCoupons = originalExpireCoupons;
       CouponService.createCouponsForUser = originalCreateCoupons;

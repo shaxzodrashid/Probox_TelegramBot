@@ -274,22 +274,23 @@ export class PaymentReminderService {
     });
   }
 
-  private static async hasReminderBeenSent(
-    userId: number,
-    docEntry: number,
-    installmentId: number,
-    reminderType: ReminderType,
-  ): Promise<boolean> {
-    const existing = await db('payment_reminder_logs')
-      .where({
-        user_id: userId,
-        doc_entry: docEntry,
-        installment_id: installmentId,
-        reminder_type: reminderType,
-      })
-      .first();
+  private static async fetchExistingRemindersBatched(userIds: number[]): Promise<Set<string>> {
+    if (userIds.length === 0) {
+      return new Set();
+    }
 
-    return Boolean(existing);
+    const uniqueUserIds = Array.from(new Set(userIds));
+
+    const existing = await db('payment_reminder_logs')
+      .select('user_id', 'doc_entry', 'installment_id', 'reminder_type')
+      .whereIn('user_id', uniqueUserIds);
+
+    const sentSet = new Set<string>();
+    for (const row of existing) {
+      sentSet.add(`${row.user_id}:${row.doc_entry}:${row.installment_id}:${row.reminder_type}`);
+    }
+
+    return sentSet;
   }
 
   private static async logReminder(params: {
@@ -433,16 +434,12 @@ export class PaymentReminderService {
     linkedUser: LinkedUserContext;
     dryRun: boolean;
     missingTemplates: Set<string>;
+    existingReminders: Set<string>;
   }): Promise<boolean> {
-    const { installment, linkedUser, dryRun, missingTemplates } = params;
-    const alreadySent = await this.hasReminderBeenSent(
-      linkedUser.user.id,
-      installment.DocEntry,
-      installment.InstlmntID,
-      'paid_late',
-    );
+    const { installment, linkedUser, dryRun, missingTemplates, existingReminders } = params;
+    const reminderKey = `${linkedUser.user.id}:${installment.DocEntry}:${installment.InstlmntID}:paid_late`;
 
-    if (alreadySent) {
+    if (existingReminders.has(reminderKey)) {
       return false;
     }
 
@@ -488,16 +485,13 @@ export class PaymentReminderService {
     reminderType: ReminderType;
     dryRun: boolean;
     missingTemplates: Set<string>;
+    existingReminders: Set<string>;
   }): Promise<boolean> {
-    const { installment, linkedUser, reminderType, dryRun, missingTemplates } = params;
-    const alreadySent = await this.hasReminderBeenSent(
-      linkedUser.user.id,
-      installment.DocEntry,
-      installment.InstlmntID,
-      reminderType,
-    );
+    const { installment, linkedUser, reminderType, dryRun, missingTemplates, existingReminders } =
+      params;
+    const reminderKey = `${linkedUser.user.id}:${installment.DocEntry}:${installment.InstlmntID}:${reminderType}`;
 
-    if (alreadySent) {
+    if (existingReminders.has(reminderKey)) {
       return false;
     }
 
@@ -578,6 +572,16 @@ export class PaymentReminderService {
       let reminderNotificationsSent = 0;
       let unlinkedRewardCouponsIssued = 0;
 
+      const userIdsForReminders: number[] = [];
+      for (const installment of installments) {
+        const linkedUser = linkedUsersByCardCode.get(installment.CardCode);
+        if (linkedUser) {
+          userIdsForReminders.push(linkedUser.user.id);
+        }
+      }
+
+      const existingReminders = await this.fetchExistingRemindersBatched(userIdsForReminders);
+
       for (const installment of installments) {
         const linkedUser = linkedUsersByCardCode.get(installment.CardCode);
 
@@ -614,6 +618,7 @@ export class PaymentReminderService {
               linkedUser,
               dryRun,
               missingTemplates,
+              existingReminders,
             });
 
             if (delivered) {
@@ -636,6 +641,7 @@ export class PaymentReminderService {
           reminderType,
           dryRun,
           missingTemplates,
+          existingReminders,
         });
 
         if (delivered) {
