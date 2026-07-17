@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { describe } from 'node:test';
-import { formatDate, formatCurrency } from './formatter.util';
+import { formatDate, formatCurrency, formatUzsAmountsInText } from './formatter.util';
 
 describe('formatter.util', () => {
   describe('formatDate', () => {
@@ -35,7 +35,10 @@ describe('formatter.util', () => {
       const expectedDay = String(d.getDate()).padStart(2, '0');
       const expectedMonth = String(d.getMonth() + 1).padStart(2, '0');
       const expectedYear = d.getFullYear();
-      assert.equal(formatDate('2023-10-15T14:30:00Z'), `${expectedDay}.${expectedMonth}.${expectedYear}`);
+      assert.equal(
+        formatDate('2023-10-15T14:30:00Z'),
+        `${expectedDay}.${expectedMonth}.${expectedYear}`,
+      );
     });
   });
 
@@ -63,6 +66,31 @@ describe('formatter.util', () => {
     test('returns 0 for invalid string amount', () => {
       assert.equal(formatCurrency('abc', 'UZS'), '0 UZS');
       assert.equal(formatCurrency('invalid', 'USD'), '0 USD');
+    });
+  });
+
+  describe('formatUzsAmountsInText', () => {
+    test('formats fixed-scale and ungrouped UZS amounts with dot separators', () => {
+      const text = ['Jami summa: 2753270.0000000 UZS', 'Avans: 100000 UZS'].join('\n');
+
+      assert.equal(
+        formatUzsAmountsInText(text),
+        ['Jami summa: 2.753.270 UZS', 'Avans: 100.000 UZS'].join('\n'),
+      );
+    });
+
+    test('keeps already-grouped UZS amounts stable', () => {
+      assert.equal(
+        formatUzsAmountsInText('Narxlar: 370.000 UZS va 1.184.370 UZS'),
+        'Narxlar: 370.000 UZS va 1.184.370 UZS',
+      );
+    });
+
+    test('does not change unrelated numbers or other currencies', () => {
+      assert.equal(
+        formatUzsAmountsInText('iPhone 13 Pro x1 — 2753270.0000000 USD'),
+        'iPhone 13 Pro x1 — 2753270.0000000 USD',
+      );
     });
   });
 });

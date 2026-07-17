@@ -8,8 +8,12 @@ test('BotNotificationService sends a prize photo when the template includes priz
   const serviceInternals = BotNotificationService as unknown as Record<string, unknown>;
   const userServiceInternals = UserService as unknown as Record<string, unknown>;
   const originalGetBot = serviceInternals.getBot as (() => Promise<unknown>) | undefined;
-  const originalWriteDispatchLog = serviceInternals.writeDispatchLog as ((params: unknown) => Promise<number | undefined>) | undefined;
-  const originalUnblockUserIfBlocked = userServiceInternals.unblockUserIfBlocked as ((telegramId: number) => Promise<void>) | undefined;
+  const originalWriteDispatchLog = serviceInternals.writeDispatchLog as
+    | ((params: unknown) => Promise<number | undefined>)
+    | undefined;
+  const originalUnblockUserIfBlocked = userServiceInternals.unblockUserIfBlocked as
+    | ((telegramId: number) => Promise<void>)
+    | undefined;
 
   let sentPhotoCaption: string | undefined;
   let sentMessage = false;
@@ -76,8 +80,12 @@ test('BotNotificationService keeps plain text delivery when the template does no
   const serviceInternals = BotNotificationService as unknown as Record<string, unknown>;
   const userServiceInternals = UserService as unknown as Record<string, unknown>;
   const originalGetBot = serviceInternals.getBot as (() => Promise<unknown>) | undefined;
-  const originalWriteDispatchLog = serviceInternals.writeDispatchLog as ((params: unknown) => Promise<number | undefined>) | undefined;
-  const originalUnblockUserIfBlocked = userServiceInternals.unblockUserIfBlocked as ((telegramId: number) => Promise<void>) | undefined;
+  const originalWriteDispatchLog = serviceInternals.writeDispatchLog as
+    | ((params: unknown) => Promise<number | undefined>)
+    | undefined;
+  const originalUnblockUserIfBlocked = userServiceInternals.unblockUserIfBlocked as
+    | ((telegramId: number) => Promise<void>)
+    | undefined;
 
   let sentPhoto = false;
   let sentMessageText: string | undefined;
@@ -133,6 +141,55 @@ test('BotNotificationService keeps plain text delivery when the template does no
     assert.equal(result.delivered, true);
     assert.equal(sentPhoto, false);
     assert.equal(sentMessageText, 'Xaridingiz uchun rahmat!');
+  } finally {
+    serviceInternals.getBot = originalGetBot;
+    serviceInternals.writeDispatchLog = originalWriteDispatchLog;
+    userServiceInternals.unblockUserIfBlocked = originalUnblockUserIfBlocked;
+  }
+});
+
+test('BotNotificationService normalizes UZS amounts in direct messages', async () => {
+  const serviceInternals = BotNotificationService as unknown as Record<string, unknown>;
+  const userServiceInternals = UserService as unknown as Record<string, unknown>;
+  const originalGetBot = serviceInternals.getBot as (() => Promise<unknown>) | undefined;
+  const originalWriteDispatchLog = serviceInternals.writeDispatchLog as
+    | ((params: unknown) => Promise<number | undefined>)
+    | undefined;
+  const originalUnblockUserIfBlocked = userServiceInternals.unblockUserIfBlocked as
+    | ((telegramId: number) => Promise<void>)
+    | undefined;
+
+  let sentMessageText: string | undefined;
+
+  serviceInternals.getBot = async () => ({
+    api: {
+      sendMessage: async (_chatId: number, text: string) => {
+        sentMessageText = text;
+      },
+    },
+  });
+  serviceInternals.writeDispatchLog = async () => 103;
+  userServiceInternals.unblockUserIfBlocked = async () => undefined;
+
+  try {
+    const result = await BotNotificationService.sendDirectMessage({
+      user: {
+        id: 3,
+        telegram_id: 333333,
+        phone_number: '+998903333333',
+        language_code: 'uz',
+        is_admin: false,
+        is_blocked: false,
+        is_logged_out: false,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+      text: '<b>Jami summa: 2753270.0000000 UZS</b>',
+      dispatchType: 'api_send_message',
+    });
+
+    assert.equal(result.delivered, true);
+    assert.equal(sentMessageText, '<b>Jami summa: 2.753.270 UZS</b>');
   } finally {
     serviceInternals.getBot = originalGetBot;
     serviceInternals.writeDispatchLog = originalWriteDispatchLog;

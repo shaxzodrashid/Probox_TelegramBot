@@ -11,11 +11,11 @@ export const formatDate = (dateStr: string): string => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return dateStr;
-  
+
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
-  
+
   return `${day}.${month}.${year}`;
 };
 
@@ -28,14 +28,30 @@ export const formatDate = (dateStr: string): string => {
 export const formatCurrency = (amount: number | string, currency: string = 'UZS'): string => {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(num)) return `0 ${currency}`;
-  
+
   // Use Russian locale for space as thousands separator
   const formattedNum = new Intl.NumberFormat('ru-RU', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   }).format(num);
-  
+
   return `${formattedNum} ${currency}`;
+};
+
+/**
+ * Normalizes integer UZS amounts embedded in rendered message text.
+ *
+ * Direct-message payloads can contain fixed-scale database values such as
+ * `2753270.0000000 UZS`. Keep this boundary formatter intentionally narrow:
+ * it only touches numeric tokens immediately followed by the UZS currency code.
+ */
+export const formatUzsAmountsInText = (text: string): string => {
+  const uzsAmountPattern = /(?<![\d.,])(\d{1,3}(?:[.\s]\d{3})+|\d+)(?:\.0+)?(?=\s+UZS\b)/g;
+
+  return text.replace(uzsAmountPattern, (_match, amount: string) => {
+    const integerDigits = amount.replace(/[.\s]/g, '');
+    return integerDigits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  });
 };
 
 /**
@@ -62,9 +78,7 @@ export const sanitizeName = (name?: string | null): string | null => {
 
   // Remove leading/trailing non-alphanumeric noise (like dots, dashes at ends)
   // but keep what's in between (e.g., "O'Connor" or "Doe-Smith").
-  const final = cleaned
-    .replace(/^[^\p{L}0-9]+/u, '')
-    .replace(/[^\p{L}0-9]+$/u, '');
+  const final = cleaned.replace(/^[^\p{L}0-9]+/u, '').replace(/[^\p{L}0-9]+$/u, '');
 
   return final || null;
 };

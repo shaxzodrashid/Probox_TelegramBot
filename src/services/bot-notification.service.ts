@@ -1,7 +1,12 @@
 import db from '../database/database';
 import { InputFile } from 'grammy';
 import { isUserBlockedError } from '../utils/telegram/telegram-errors';
-import { MessageTemplate, MessageTemplateService, MessageTemplateType } from './message-template.service';
+import { formatUzsAmountsInText } from '../utils/formatting/formatter.util';
+import {
+  MessageTemplate,
+  MessageTemplateService,
+  MessageTemplateType,
+} from './message-template.service';
 import { User, UserService } from './user.service';
 
 export interface NotificationResult {
@@ -88,11 +93,13 @@ export class BotNotificationService {
   }): Promise<NotificationResult> {
     try {
       const locale = params.user.language_code || 'uz';
-      const text = MessageTemplateService.render(params.template, locale, params.placeholders);
+      const text = formatUzsAmountsInText(
+        MessageTemplateService.render(params.template, locale, params.placeholders),
+      );
       const bot = await this.getBot();
       const shouldAttachPrizePhoto =
-        Boolean(params.photo)
-        && MessageTemplateService.hasPlaceholder(params.template, locale, 'prize_name');
+        Boolean(params.photo) &&
+        MessageTemplateService.hasPlaceholder(params.template, locale, 'prize_name');
 
       if (shouldAttachPrizePhoto && params.photo) {
         const photo = new InputFile(params.photo.buffer, params.photo.fileName || 'prize.jpg');
@@ -146,7 +153,8 @@ export class BotNotificationService {
   }): Promise<NotificationResult> {
     try {
       const bot = await this.getBot();
-      await bot.api.sendMessage(params.user.telegram_id, params.text, { parse_mode: 'HTML' });
+      const text = formatUzsAmountsInText(params.text);
+      await bot.api.sendMessage(params.user.telegram_id, text, { parse_mode: 'HTML' });
       await UserService.unblockUserIfBlocked(params.user.telegram_id);
 
       const dispatchLogId = await this.writeDispatchLog({
