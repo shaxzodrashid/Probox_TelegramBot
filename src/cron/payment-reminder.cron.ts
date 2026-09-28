@@ -16,7 +16,7 @@ export class PaymentReminderCron {
         try {
           const result = await PaymentReminderService.run();
           logger.info(
-            `[CRON] Payment reminders complete. rewardMonth=${result.rewardTargetMonth}, dueDateFrom=${result.dueDateFrom}, dueDateTo=${result.dueDateTo}, cardCodes=${result.checkedCardCodes}, installments=${result.fetchedInstallments}, rewardCouponsIssued=${result.rewardCouponsIssued}, unlinkedRewardCouponsIssued=${result.unlinkedRewardCouponsIssued}, rewardNotificationsSent=${result.rewardNotificationsSent}, reminderNotificationsSent=${result.reminderNotificationsSent}, remindersSent=${result.remindersSent}`,
+            `[CRON] Payment reminders complete. processingMonth=${result.rewardTargetMonth}, dueDateFrom=${result.dueDateFrom}, dueDateTo=${result.dueDateTo}, cardCodes=${result.checkedCardCodes}, installments=${result.fetchedInstallments}, rewardCouponsIssued=${result.rewardCouponsIssued}, unlinkedRewardCouponsIssued=${result.unlinkedRewardCouponsIssued}, rewardNotificationsSent=${result.rewardNotificationsSent}, reminderNotificationsSent=${result.reminderNotificationsSent}, remindersSent=${result.remindersSent}`,
           );
         } catch (error) {
           if (error instanceof PaymentReminderRunAlreadyInProgressError) {

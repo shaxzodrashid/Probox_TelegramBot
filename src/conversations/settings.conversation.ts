@@ -6,7 +6,6 @@ import { verifySapUser } from './registration.conversation';
 import { getMainKeyboardByLocale } from '../keyboards';
 import { getLocaleFromConversation } from '../utils/locale';
 import { sanitizeName } from '../utils/formatting/formatter.util';
-import { CouponRegistrationService } from '../services/coupon/coupon-registration.service';
 import { isSapBusinessPartnerAdmin } from '../utils/sap-business-partner.util';
 import { strictNormalizeUzPhone } from '../utils/uz-phone.util';
 import { logger } from '../utils/logger';
@@ -169,7 +168,4 @@ export async function changePhoneConversation(conversation: BotConversation, ctx
     reply_markup: getMainKeyboardByLocale(locale, isAdmin, true),
   });
 
-  if (user?.phone_number) {
-    await conversation.external(() => CouponRegistrationService.claimPendingCouponsForUser(user));
-  }
 }

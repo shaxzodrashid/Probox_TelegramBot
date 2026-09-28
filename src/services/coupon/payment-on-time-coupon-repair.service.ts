@@ -1,3 +1,4 @@
+import { rejectRetiredCouponOperation } from './coupon-retirement';
 import type { Knex } from 'knex';
 import { IPurchaseInstallment } from '../../interfaces/purchase.interface';
 import { SapService } from '../../sap/sap-hana.service';
@@ -103,55 +104,17 @@ export class PaymentOnTimeCouponRepairService {
     coupons: Coupon[];
     installmentsByKey: Map<string, IPurchaseInstallment>;
   }): Promise<PaymentOnTimeCouponRepairDelivery[]> {
-    const delivery: PaymentOnTimeCouponRepairDelivery[] = [];
-
-    for (const coupon of params.coupons) {
-      if (coupon.source_type !== 'payment_on_time' || coupon.status !== 'active') {
-        continue;
-      }
-
-      const installmentKey = this.buildInstallmentKey(
-        coupon.sap_doc_entry,
-        coupon.sap_installment_id,
-      );
-      if (!installmentKey) {
-        continue;
-      }
-
-      const installment = params.installmentsByKey.get(installmentKey);
-      if (!installment) {
-        continue;
-      }
-
-      const alreadyDelivered = await CouponService.hasSuccessfulDispatch(
-        coupon.id,
-        this.SUCCESSFUL_DISPATCH_TYPES,
-      );
-      if (alreadyDelivered) {
-        continue;
-      }
-
-      const result = await this.sendRecoveryNotification({
-        user: params.user,
-        coupon,
-        installment,
-      });
-
-      delivery.push({
-        user_telegram_id: params.user.telegram_id,
-        delivered: result.delivered,
-        dispatch_type: this.RECOVERY_DISPATCH_TYPE,
-        error: result.error,
-      });
-    }
-
-    return delivery;
+    void params;
+    return [];
   }
 
   static async repairHistoricalCoupons(options: {
     dryRun: boolean;
     notify: boolean;
   }): Promise<PaymentOnTimeCouponRepairSummary> {
+    if (!options.dryRun || options.notify) {
+      return rejectRetiredCouponOperation();
+    }
     const summary: PaymentOnTimeCouponRepairSummary = {
       scannedCoupons: 0,
       missingInstallmentLinkCoupons: 0,

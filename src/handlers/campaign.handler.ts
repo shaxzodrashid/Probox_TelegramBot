@@ -1,12 +1,10 @@
 import { BotContext } from '../types/context';
-import { GrammyError, InlineKeyboard, InputFile } from 'grammy';
+import { GrammyError, InputFile } from 'grammy';
 import { getMainKeyboardByLocale } from '../keyboards';
-import { getPromotionsKeyboard, getPromotionDetailKeyboard, getCouponsKeyboard } from '../keyboards/campaign.keyboards';
-import { CouponService } from '../services/coupon/coupon.service';
+import { getPromotionsKeyboard, getPromotionDetailKeyboard } from '../keyboards/campaign.keyboards';
 import { Promotion, PromotionService } from '../services/coupon/promotion.service';
 import { UserService } from '../services/user.service';
 import { minioService } from '../services/minio.service';
-import { formatDateForLocale } from '../utils/time/tashkent-time.util';
 import { buildPromotionText } from '../utils/formatting/promotion-text.util';
 import { logger } from '../utils/logger';
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
@@ -37,9 +35,6 @@ const getPromotionAbout = (promotion: Promotion, locale: string): string =>
 
 const buildPromotionCardText = (promotion: Promotion, locale: string): string =>
   buildPromotionText(getPromotionTitle(promotion, locale), getPromotionAbout(promotion, locale));
-
-const getRegistrationStarterKeyboard = (ctx: BotContext) =>
-  new InlineKeyboard().text(ctx.t('registration_button'), 'start_registration');
 
 const buildPromotionsListText = (promotions: Promotion[], locale: string, header: string): string => {
   const lines = promotions.map((promotion, index) => `${index + 1}. ${escapeHtml(getPromotionTitle(promotion, locale))}`);
@@ -303,51 +298,9 @@ export const promotionSelectionHandler = async (ctx: BotContext) => {
 };
 
 export const couponsHandler = async (ctx: BotContext) => {
-  const locale = await resolveLocale(ctx);
-  const telegramId = ctx.from?.id;
-
   clearPromotionSession(ctx);
-  await answerPromotionCallback(ctx);
-
-  if (!telegramId) {
-    return;
-  }
-
-  const user = await UserService.getUserByTelegramId(telegramId);
-  if (!user || user.is_logged_out) {
-    await ctx.reply(ctx.t('campaign_login_required'), {
-      reply_markup: getRegistrationStarterKeyboard(ctx),
-    });
-    return;
-  }
-
-  const coupons = await CouponService.getActiveCouponsByTelegramId(telegramId);
-  if (coupons.length === 0) {
-    await ctx.reply(ctx.t('campaign_no_coupons'));
-    return;
-  }
-
-  let text = `<b>${escapeHtml(ctx.t('campaign_coupons_header', { count: coupons.length.toString() }))}</b>\n\n`;
-  coupons.forEach((coupon, index) => {
-    const promotion = locale === 'ru' ? coupon.promotion_title_ru : coupon.promotion_title_uz;
-    text += `${index + 1}. <code>${escapeHtml(coupon.code)}</code>\n`;
-    text += `${escapeHtml(ctx.t('campaign_coupon_expires', {
-      date: formatDateForLocale(coupon.expires_at, locale),
-    }))}\n`;
-    if (promotion) {
-      text += `${escapeHtml(ctx.t('campaign_coupon_promotion', { title: promotion }))}\n`;
-    }
-    text += '\n';
-  });
-
-  await ctx.reply(text, {
-    parse_mode: 'HTML',
-    reply_markup: getCouponsKeyboard(locale),
-  });
-
-  if (ctx.callbackQuery) {
-    await ctx.deleteMessage().catch(() => undefined);
-  }
+  if (ctx.callbackQuery) await ctx.answerCallbackQuery();
+  await ctx.reply(ctx.t('coupon_program_retired'));
 };
 
 export const campaignBackToPromotionsHandler = async (ctx: BotContext) => {

@@ -8,19 +8,18 @@ export const getMainKeyboard = (ctx: CustomContext, isAdmin: boolean = false, is
   const keyboard = new Keyboard()
     .text(ctx.t('menu_contracts')).text(ctx.t('menu_payments')).row()
     .text(ctx.t('menu_branches')).text(ctx.t('menu_application')).row()
-    .text(ctx.t('menu_support')).text(ctx.t('menu_promotions')).row()
-    .text(ctx.t('menu_coupons'));
+    .text(ctx.t('menu_support')).text(ctx.t('menu_promotions'));
 
   // Logged in users see Settings next to Support
   if (isLoggedIn) {
-    keyboard.text(ctx.t('menu_settings'));
+    keyboard.row().text(ctx.t('menu_settings'));
   }
 
   if (isAdmin) {
     // If admin is NOT logged in (rare), we still want settings somewhere? 
     // But usually admin is logged in.
     if (!isLoggedIn) {
-      keyboard.text(ctx.t('menu_settings'));
+      keyboard.row().text(ctx.t('menu_settings'));
     }
     keyboard.row().text(ctx.t('admin_menu'));
   }
@@ -36,17 +35,16 @@ export const getMainKeyboardByLocale = (locale: string, isAdmin: boolean = false
   const keyboard = new Keyboard()
     .text(i18n.t(locale, 'menu_contracts')).text(i18n.t(locale, 'menu_payments')).row()
     .text(i18n.t(locale, 'menu_branches')).text(i18n.t(locale, 'menu_application')).row()
-    .text(i18n.t(locale, 'menu_support')).text(i18n.t(locale, 'menu_promotions')).row()
-    .text(i18n.t(locale, 'menu_coupons'));
+    .text(i18n.t(locale, 'menu_support')).text(i18n.t(locale, 'menu_promotions'));
 
   // Logged in users see Settings next to Support
   if (isLoggedIn) {
-    keyboard.text(i18n.t(locale, 'menu_settings'));
+    keyboard.row().text(i18n.t(locale, 'menu_settings'));
   }
 
   if (isAdmin) {
     if (!isLoggedIn) {
-      keyboard.text(i18n.t(locale, 'menu_settings'));
+      keyboard.row().text(i18n.t(locale, 'menu_settings'));
     }
     keyboard.row().text(i18n.t(locale, 'admin_menu'));
   }

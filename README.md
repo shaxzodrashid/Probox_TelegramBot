@@ -132,3 +132,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📄 License
 
 This project is licensed under the ISC License.
+
+## Coupon program retirement
+
+The coupon program is permanently retired. See [retirement and deployment notes](Docs/coupon-retirement.md) for the HTTP 410 API response, retained payment reminders, template restoration migration, and upstream CRM changes.

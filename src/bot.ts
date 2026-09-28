@@ -1,3 +1,4 @@
+import { couponRetirementMiddleware } from './middlewares/coupon-retirement.middleware';
 import { Bot, session } from 'grammy';
 import { conversations, createConversation } from '@grammyjs/conversations';
 import { BotContext, SessionData } from './types/context';
@@ -281,6 +282,7 @@ bot.use(i18n);
 bot.use(sessionRestorerMiddleware);
 
 bot.use(conversations());
+bot.use(couponRetirementMiddleware);
 
 bot.use(createConversation(exampleConversation));
 bot.use(createConversation(registrationConversation));

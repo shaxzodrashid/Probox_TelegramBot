@@ -1,7 +1,12 @@
+import { COUPON_PROGRAM_RETIRED, isRetiredCouponNotification } from './coupon/coupon-retirement';
 import db from '../database/database';
 import { InputFile } from 'grammy';
 import { isUserBlockedError } from '../utils/telegram/telegram-errors';
-import { MessageTemplate, MessageTemplateService, MessageTemplateType } from './message-template.service';
+import {
+  MessageTemplate,
+  MessageTemplateService,
+  MessageTemplateType,
+} from './message-template.service';
 import { User, UserService } from './user.service';
 
 export interface NotificationResult {
@@ -52,7 +57,16 @@ export class BotNotificationService {
     photo?: NotificationPhoto | null;
     template?: MessageTemplate;
   }): Promise<NotificationResult> {
-    const template = params.template || await MessageTemplateService.getActiveTemplateByType(params.templateType);
+    if (
+      params.couponId !== undefined ||
+      isRetiredCouponNotification(params.templateType) ||
+      isRetiredCouponNotification(params.dispatchType)
+    ) {
+      return { delivered: false, error: COUPON_PROGRAM_RETIRED };
+    }
+    const template =
+      params.template ||
+      (await MessageTemplateService.getActiveTemplateByType(params.templateType));
 
     if (!template) {
       const dispatchLogId = await this.writeDispatchLog({
@@ -87,13 +101,20 @@ export class BotNotificationService {
     dispatchType: string;
     photo?: NotificationPhoto | null;
   }): Promise<NotificationResult> {
+    if (
+      params.couponId !== undefined ||
+      isRetiredCouponNotification(params.template.template_type) ||
+      isRetiredCouponNotification(params.dispatchType)
+    ) {
+      return { delivered: false, error: COUPON_PROGRAM_RETIRED };
+    }
     try {
       const locale = params.user.language_code || 'uz';
       const text = MessageTemplateService.render(params.template, locale, params.placeholders);
       const bot = await this.getBot();
       const shouldAttachPrizePhoto =
-        Boolean(params.photo)
-        && MessageTemplateService.hasPlaceholder(params.template, locale, 'prize_name');
+        Boolean(params.photo) &&
+        MessageTemplateService.hasPlaceholder(params.template, locale, 'prize_name');
 
       if (shouldAttachPrizePhoto && params.photo) {
         const photo = new InputFile(params.photo.buffer, params.photo.fileName || 'prize.jpg');
@@ -145,6 +166,9 @@ export class BotNotificationService {
     text: string;
     dispatchType: string;
   }): Promise<NotificationResult> {
+    if (isRetiredCouponNotification(params.dispatchType)) {
+      return { delivered: false, error: COUPON_PROGRAM_RETIRED };
+    }
     try {
       const bot = await this.getBot();
       await bot.api.sendMessage(params.user.telegram_id, params.text, { parse_mode: 'HTML' });

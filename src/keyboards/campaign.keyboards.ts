@@ -34,7 +34,6 @@ export const getPromotionsKeyboard = (promotions: Promotion[], locale: string) =
   });
 
   keyboard
-    .text(i18n.t(locale, 'menu_coupons'), 'campaign_open_coupons')
     .text(i18n.t(locale, 'back'), 'campaign_back_to_menu');
 
   return keyboard;
@@ -53,11 +52,8 @@ export const getPromotionDetailKeyboard = (
     keyboard.text(i18n.t(locale, 'admin_campaign_promotions_back'), 'campaign_back_to_promotions');
   }
 
-  if (options.showCoupons) {
-    keyboard.text(i18n.t(locale, 'menu_coupons'), 'campaign_open_coupons');
-  }
 
-  if (options.showBackToPromotions || options.showCoupons) {
+  if (options.showBackToPromotions) {
     keyboard.row();
   }
 
@@ -73,10 +69,8 @@ export const getCouponsKeyboard = (locale: string) => {
     .text(i18n.t(locale, 'back'), 'campaign_back_to_menu');
 };
 
-export const getCouponAdminKeyboard = (code: string, locale: string) =>
+export const getCouponAdminKeyboard = (_code: string, locale: string) =>
   new InlineKeyboard()
-    .text(i18n.t(locale, 'admin_campaign_mark_winner'), `admin_coupon_mark_winner:${code}`)
-    .row()
     .text(i18n.t(locale, 'admin_back_to_menu'), 'admin_back_to_menu');
 
 export const getAdminCouponExportModeKeyboard = (locale: string) =>
@@ -130,6 +124,7 @@ export const getAdminPromotionDetailKeyboard = (
   assignCoupons: boolean,
   locale: string,
 ) => {
+  void assignCoupons;
   const keyboard = new InlineKeyboard();
 
   keyboard
@@ -148,10 +143,6 @@ export const getAdminPromotionDetailKeyboard = (
     .text(
       isActive ? i18n.t(locale, 'admin_campaign_make_inactive') : i18n.t(locale, 'admin_campaign_make_active'),
       `${ADMIN_PROMOTION_TOGGLE_CALLBACK_PREFIX}${promotionId}`,
-    )
-    .text(
-      assignCoupons ? i18n.t(locale, 'admin_campaign_assign_coupons_disable') : i18n.t(locale, 'admin_campaign_assign_coupons_enable'),
-      `${ADMIN_PROMOTION_ASSIGN_COUPONS_TOGGLE_CALLBACK_PREFIX}${promotionId}`,
     )
     .row();
 
