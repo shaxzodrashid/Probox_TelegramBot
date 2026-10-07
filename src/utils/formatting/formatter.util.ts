@@ -68,7 +68,7 @@ export const sanitizeName = (name?: string | null): string | null => {
     // Remove emojis
     .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
     // Remove variation selectors and other invisibles
-    .replace(/[\uFE0F\u200D\u200B\u200C]/g, '')
+    .replace(/(?:\uFE0F|\u200D|\u200B|\u200C)/g, '')
     .trim();
 
   // If the result doesn't contain at least one letter, it's invalid

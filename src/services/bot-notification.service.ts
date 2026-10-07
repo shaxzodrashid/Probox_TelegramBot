@@ -56,6 +56,7 @@ export class BotNotificationService {
     couponId?: number;
     dispatchType: string;
     photo?: NotificationPhoto | null;
+    template?: MessageTemplate;
   }): Promise<NotificationResult> {
     if (
       params.couponId !== undefined ||
@@ -64,7 +65,9 @@ export class BotNotificationService {
     ) {
       return { delivered: false, error: COUPON_PROGRAM_RETIRED };
     }
-    const template = await MessageTemplateService.getActiveTemplateByType(params.templateType);
+    const template =
+      params.template ||
+      (await MessageTemplateService.getActiveTemplateByType(params.templateType));
 
     if (!template) {
       const dispatchLogId = await this.writeDispatchLog({

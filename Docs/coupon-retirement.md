@@ -16,7 +16,17 @@ Authenticated `POST /api/v1/coupons/` returns HTTP 410 with code `COUPON_PROGRAM
 
 ## Deployment
 
-Deploy the build and run `npm run db:migrate` through the existing deployment process. Migration `20260928090000_restore_payment_reminder_templates` creates only missing active Telegram templates for d2, d1, d0, overdue and paid-late notifications, in Uzbek and Russian. Existing active templates are preserved. It does not restore coupon templates. The new default texts are in the migration for review. Down migration deliberately retains these templates to preserve dispatch references.
+For the Docker Compose deployment, rebuild and recreate only the bot service. Its entrypoint automatically runs `npm run db:migrate` before starting the application; no separate migration command is needed.
+
+```sh
+git pull --ff-only origin main &&
+docker compose build bot &&
+docker compose up -d --no-deps --force-recreate bot
+docker compose ps bot
+docker compose logs --tail=100 bot
+```
+
+Migration `20260928090000_restore_payment_reminder_templates` creates only missing active Telegram templates for d2, d1, d0, overdue and paid-late notifications, in Uzbek and Russian. Existing active templates are preserved. It does not restore coupon templates. The new default texts are in the migration for review. Down migration deliberately retains these templates to preserve dispatch references.
 
 The payment cron remains at its configured schedule (default 13:01 Asia/Tashkent) and sends ordinary payment reminders only. `PAYMENT_REWARD_TARGET_MONTH` no longer controls it. The current-month query window is retained for paid-late messages. Legacy reward counters in the run summary remain zero for compatibility.
 

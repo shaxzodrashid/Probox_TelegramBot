@@ -1,3 +1,4 @@
+import { MessageTemplateService } from '../message-template.service';
 import assert from 'node:assert/strict';
 import test, { after, type TestContext } from 'node:test';
 import {
@@ -16,6 +17,10 @@ after(async () => {
 });
 
 const internals = PaymentReminderService as unknown as {
+  loadReminderState: () => Promise<{
+    sentRemindersSet: Set<string>;
+    deliveredMessagesSet: Set<string>;
+  }>;
   acquireRunLock: () => Promise<string>;
   releaseRunLock: (token: string) => Promise<void>;
   fetchInstallments: (window: { dueDateFrom: string; dueDateTo: string }) => Promise<unknown[]>;
@@ -36,6 +41,11 @@ const installment = (id: number, due: string, paid = 0, paidDate?: string, cardC
   itemsPairs: '',
 });
 function setup(t: TestContext) {
+  t.mock.method(MessageTemplateService, 'listTemplates', async () => []);
+  t.mock.method(internals, 'loadReminderState', async () => ({
+    sentRemindersSet: new Set<string>(),
+    deliveredMessagesSet: new Set<string>(),
+  }));
   const sent: string[] = [];
   const warnings: string[] = [];
   const logs: string[] = [];
@@ -135,7 +145,10 @@ test('dry run and already processed installments do not send or write', async (t
   const state = setup(t);
   t.mock.method(internals, 'fetchInstallments', async () => [installment(1, '2026-09-28')]);
   assert.equal((await PaymentReminderService.run({ now, dryRun: true })).remindersSent, 1);
-  t.mock.method(internals, 'hasReminderBeenSent', async () => true);
+  t.mock.method(internals, 'loadReminderState', async () => ({
+    sentRemindersSet: new Set(['1:1:1:d0']),
+    deliveredMessagesSet: new Set<string>(),
+  }));
   assert.equal((await PaymentReminderService.run({ now })).remindersSent, 0);
   assert.deepEqual(state.sent, []);
   assert.deepEqual(state.logs, []);

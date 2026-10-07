@@ -1,3 +1,4 @@
+import { MessageTemplate, MessageTemplateService } from '../message-template.service';
 import db from '../../database/database';
 import { IPurchaseInstallment } from '../../interfaces/purchase.interface';
 import { redisService } from '../../redis/redis.service';
@@ -295,14 +296,29 @@ export class PaymentReminderService {
     linkedUser: LinkedUserContext;
     dryRun: boolean;
     missingTemplates: Set<string>;
+    sentRemindersSet?: Set<string>;
+    deliveredMessagesSet?: Set<string>;
+    activeTemplatesMap?: Map<string, MessageTemplate>;
   }): Promise<boolean> {
-    const { installment, linkedUser, dryRun, missingTemplates } = params;
-    const alreadySent = await this.hasReminderBeenSent(
-      linkedUser.user.id,
-      installment.DocEntry,
-      installment.InstlmntID,
-      'paid_late',
-    );
+    const {
+      installment,
+      linkedUser,
+      dryRun,
+      missingTemplates,
+      sentRemindersSet,
+      deliveredMessagesSet,
+      activeTemplatesMap,
+    } = params;
+    const alreadySent = sentRemindersSet
+      ? sentRemindersSet.has(
+          `${linkedUser.user.id}:${installment.DocEntry}:${installment.InstlmntID}:paid_late`,
+        )
+      : await this.hasReminderBeenSent(
+          linkedUser.user.id,
+          installment.DocEntry,
+          installment.InstlmntID,
+          'paid_late',
+        );
 
     if (alreadySent) {
       return false;
@@ -312,9 +328,15 @@ export class PaymentReminderService {
       return true;
     }
 
+    const alreadyDelivered = deliveredMessagesSet?.has(`${linkedUser.user.id}:payment_paid_late`);
+    if (alreadyDelivered) {
+      return false;
+    }
+
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
       templateType: 'payment_paid_late',
+      template: activeTemplatesMap?.get('payment_paid_late'),
       placeholders: {
         customer_name: linkedUser.fullName,
         payment_due_date: formatDateForLocale(installment.InstDueDate, linkedUser.locale),
@@ -347,14 +369,30 @@ export class PaymentReminderService {
     reminderType: ReminderType;
     dryRun: boolean;
     missingTemplates: Set<string>;
+    sentRemindersSet?: Set<string>;
+    deliveredMessagesSet?: Set<string>;
+    activeTemplatesMap?: Map<string, MessageTemplate>;
   }): Promise<boolean> {
-    const { installment, linkedUser, reminderType, dryRun, missingTemplates } = params;
-    const alreadySent = await this.hasReminderBeenSent(
-      linkedUser.user.id,
-      installment.DocEntry,
-      installment.InstlmntID,
+    const {
+      installment,
+      linkedUser,
       reminderType,
-    );
+      dryRun,
+      missingTemplates,
+      sentRemindersSet,
+      deliveredMessagesSet,
+      activeTemplatesMap,
+    } = params;
+    const alreadySent = sentRemindersSet
+      ? sentRemindersSet.has(
+          `${linkedUser.user.id}:${installment.DocEntry}:${installment.InstlmntID}:${reminderType}`,
+        )
+      : await this.hasReminderBeenSent(
+          linkedUser.user.id,
+          installment.DocEntry,
+          installment.InstlmntID,
+          reminderType,
+        );
 
     if (alreadySent) {
       return false;
@@ -366,6 +404,12 @@ export class PaymentReminderService {
 
     const templateType =
       reminderType === 'overdue' ? 'payment_overdue' : `payment_reminder_${reminderType}`;
+
+    const alreadyDelivered = deliveredMessagesSet?.has(`${linkedUser.user.id}:${templateType}`);
+    if (alreadyDelivered) {
+      return false;
+    }
+
     const result = await BotNotificationService.sendTemplateMessage({
       user: linkedUser.user,
       templateType: templateType as
@@ -373,6 +417,7 @@ export class PaymentReminderService {
         | 'payment_reminder_d2'
         | 'payment_reminder_d1'
         | 'payment_reminder_d0',
+      template: activeTemplatesMap?.get(templateType),
       placeholders: {
         customer_name: linkedUser.fullName,
         payment_due_date: formatDateForLocale(installment.InstDueDate, linkedUser.locale),
@@ -399,6 +444,56 @@ export class PaymentReminderService {
     return result.delivered;
   }
 
+  private static async loadReminderState(
+    installments: IPurchaseInstallment[],
+    linkedUsersByCardCode: Map<string, LinkedUserContext>,
+  ): Promise<{ sentRemindersSet: Set<string>; deliveredMessagesSet: Set<string> }> {
+    const logLookupTuples: [number, number, number][] = [];
+    const userIds: number[] = [];
+
+    for (const installment of installments) {
+      const linkedUser = linkedUsersByCardCode.get(installment.CardCode);
+
+      if (linkedUser) {
+        logLookupTuples.push([linkedUser.user.id, installment.DocEntry, installment.InstlmntID]);
+        userIds.push(linkedUser.user.id);
+      }
+    }
+
+    const [existingLogs, deliveredLogs] = await Promise.all([
+      logLookupTuples.length > 0
+        ? db('payment_reminder_logs').whereIn(
+            ['user_id', 'doc_entry', 'installment_id'],
+            logLookupTuples,
+          )
+        : [],
+      userIds.length > 0
+        ? db('message_dispatch_logs')
+            .whereIn('user_id', userIds)
+            .whereIn('dispatch_type', [
+              'payment_paid_late',
+              'payment_overdue',
+              'payment_reminder_d2',
+              'payment_reminder_d1',
+              'payment_reminder_d0',
+            ])
+            .where('status', 'sent')
+        : [],
+    ]);
+
+    const sentRemindersSet = new Set(
+      existingLogs.map(
+        (log) => `${log.user_id}:${log.doc_entry}:${log.installment_id}:${log.reminder_type}`,
+      ),
+    );
+
+    const deliveredMessagesSet = new Set(
+      deliveredLogs.map((log) => `${log.user_id}:${log.dispatch_type}`),
+    );
+
+    return { sentRemindersSet, deliveredMessagesSet };
+  }
+
   static async run(options?: { now?: Date; dryRun?: boolean }): Promise<PaymentReminderRunResult> {
     const runLockToken = await this.acquireRunLock();
     const now = options?.now || new Date();
@@ -410,12 +505,25 @@ export class PaymentReminderService {
         `[PAYMENT_REMINDER] Starting run. dryRun=${dryRun} processingMonth=${window.processingMonth} dueDateFrom=${window.dueDateFrom} dueDateTo=${window.dueDateTo}`,
       );
 
-      const [users, installments] = await Promise.all([
+      const [users, installments, allTemplates] = await Promise.all([
         UserService.getUsersWithSapCardCode(),
         this.fetchInstallments(window),
+        MessageTemplateService.listTemplates(),
       ]);
 
       const linkedUsersByCardCode = this.buildLinkedUserMap(users);
+
+      const activeTemplatesMap = new Map<string, MessageTemplate>(
+        allTemplates
+          .filter((t) => t.is_active && t.channel === 'telegram_bot')
+          .map((t) => [t.template_type, t]),
+      );
+
+      const { sentRemindersSet, deliveredMessagesSet } = await this.loadReminderState(
+        installments,
+        linkedUsersByCardCode,
+      );
+
       const checkedCardCodes = new Set(installments.map((installment) => installment.CardCode))
         .size;
       const missingTemplates = new Set<string>();
@@ -439,6 +547,9 @@ export class PaymentReminderService {
               linkedUser,
               dryRun,
               missingTemplates,
+              sentRemindersSet,
+              deliveredMessagesSet,
+              activeTemplatesMap,
             });
 
             if (delivered) {
@@ -461,6 +572,9 @@ export class PaymentReminderService {
           reminderType,
           dryRun,
           missingTemplates,
+          sentRemindersSet,
+          deliveredMessagesSet,
+          activeTemplatesMap,
         });
 
         if (delivered) {
