@@ -124,7 +124,7 @@ If `API_KEY` is configured, send it as `x-api-key: <your-key>` or `Authorization
 - Set `BOT_USERNAME` in your `.env` so campaign links can be generated consistently.
 - Current promo slug: `aksiya_01`
 - Example deep link: `https://t.me/<your_bot_username>?start=aksiya_01`
-- Phone verification: `https://t.me/<your_bot_username>?start=auth_998901234567`. See [Telegram verification](Docs/telegram-auth.md) for contact ownership checks and the current verification-only scope.
+- Website login: the store API generates `https://t.me/<your_bot_username>?start=auth_<login_id>`. See [Telegram login integration](Docs/telegram-auth.md) for signed webhooks, configuration, and contact ownership checks.
 
 ## 🤝 Contributing
 

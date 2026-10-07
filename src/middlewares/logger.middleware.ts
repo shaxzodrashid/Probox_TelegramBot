@@ -9,6 +9,7 @@ export const loggerMiddleware = async (ctx: BotContext, next: NextFunction) => {
 
   if (
     config.LOG_LEVEL === 'extra-high' &&
+    !(ctx.chat?.type === 'private' && ctx.session?.telegramAuth?.status === 'pending') &&
     !ctx.message?.contact &&
     !parseAuthStart(ctx.message?.text)
   ) {

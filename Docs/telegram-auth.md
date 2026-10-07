@@ -1,29 +1,52 @@
-# Telegram contact verification
+# Telegram website login
 
-Open `https://t.me/<bot_username>?start=auth_998901234567`. Use the full international phone number as digits, including the country code, without `+`, spaces, or punctuation. The reserved `auth_` prefix keeps this flow separate from campaign links. `buildTelegramAuthDeepLink(botUsername, phone)` in `src/utils/telegram/telegram-auth.util.ts` generates the link from an international phone number.
+Implemented against [the store API contract](ExternalSystemWebhook.md). The website/store API creates `https://t.me/<bot_username>?start=auth_<login_id>` with a 32-character lowercase hexadecimal login ID. Phone-only links such as `auth_998901234567` are rejected; the phone link builder has been removed. The bot never creates website login IDs.
 
-Telegram allows letters, digits, underscores and hyphens in start payloads, up to 64 characters ([documentation](https://core.telegram.org/bots/features#deep-linking)). The generated phone payload stays within this limit.
+## Configuration
 
-The bot immediately requests the user's contact through a reply-keyboard button in a private chat. Existing bot registration is unnecessary. Starting verification exits any active conversation and clears its pending application/registration routing. A new auth link replaces the previous attempt. Ordinary `/start` or the menu's `start` callback clears auth state and resumes the normal start flow; `/cancel` cancels a pending verification.
+Set these variables in the bot server environment:
 
-Verification requires all of these checks:
+```dotenv
+PROBOX_STORE_API_URL=https://store-api.probox.uz
+PROBOX_LOGIN_SECRET=<shared secret>
+```
 
-- An unexpired pending attempt bound to the sender's Telegram ID.
-- A contact message, with `contact.user_id` present and equal to `ctx.from.id`.
-- A non-forwarded contact sent no earlier than the attempt's start time.
-- An exact full-number match after removing `+` and formatting spaces/parentheses/hyphens. Country codes are never inferred and suffixes are never compared.
+The secret must exactly match the store API's `TELEGRAM_LOGIN_BOT_SECRET`. Generate it privately with `openssl rand -hex 32`; do not commit or print it. The bot requires an HTTPS origin without credentials, query parameters or a path. Missing configuration fails closed for website login and does not disable the rest of the bot. Docker Compose already loads the bot's `.env` through `env_file`; no Compose changes or bot database migrations are needed.
 
-Typed phone numbers, contacts without a Telegram ID, other people's contacts, forwarded contacts, invalid phone numbers and mismatched numbers cannot complete verification. The user can retry without leaving the flow. Requests expire after 10 minutes.
+## Flow
 
-On success, the keyboard is removed and `ctx.session.telegramAuth` becomes `{ status: 'verified', telegram_id, phone_number, verified_at, expires_at }`. Timestamps are Unix milliseconds. This state uses the existing Redis session storage and is valid for 10 minutes after verification; expiry is checked on updates. Redis session TTL is 3 days, so expired data may remain stored until the next update or session eviction. Repeated contact messages cannot trigger verification again.
+1. `/start auth_<login_id>` exits active conversations, clears pending application/registration routing, and sends `POST /api/v1/webhooks/telegram-bot/login/open` with `login_id` and `telegram_user_id`.
+2. Only after a successful `open` does the bot request contact sharing. That same message includes the masked phone, available device/browser and location details, and a warning to approve only a login the user initiated. Remote details are escaped for Telegram HTML. The keyboard offers contact sharing and **This isn't me**.
+3. The bot checks that the attempt is unexpired and bound to the sender, `contact.user_id === ctx.from.id`, the contact is not forwarded, and its message date is no earlier than the attempt start. Start time is rounded down to Telegram's second precision. Typed phone numbers, missing owner IDs and other people's contacts never reach `confirm`.
+4. A valid contact triggers `POST .../confirm`. The contact's phone number is sent unchanged; audit names, username and language come from `ctx.from`. The store API owns phone normalization and exact equality checks.
+5. Only a validated `200` response with matching `login_id` and status `confirmed` or `completed` marks `telegramAuth` as `verified`, removes the keyboard and tells the user to return to the website.
 
-This version only verifies contact ownership and phone equality. It sends no webhook, creates no external login/session, and does not change bot registration, customer records, or SAP identity. The verified state is a future integration point, not a webhook delivery queue. When the external API contract is available, add request correlation, delivery/authentication and replay handling according to that contract; a phone-only link currently does not identify an external login attempt.
+The pending state uses the store API's `expires_at`, typically five minutes. Confirmation does not extend it. Existing bot registration is unnecessary, and website verification does not modify the bot's customer/SAP identity. Website sockets, completion, tokens and cookies remain the store API/frontend's responsibility.
 
-Messages are available in Uzbek and Russian using the bot's current locale. Raw auth-start and contact updates are excluded from verbose update logging.
+## Cancellation and failures
 
-Local verification:
+- `/cancel` sends `decline` with `reason: "cancelled"`; **This isn't me** sends `reason: "not_me"`.
+- A failed decline retains the refusal for retry. Subsequent contact messages retry the decline and cannot approve that attempt. A successful decline removes local state and the keyboard.
+- A new auth link replaces the local attempt. Ordinary `/start` or the menu's `start` callback abandons it locally without calling `decline`; the store session expires on its own.
+- All `4xx` action failures end the local attempt. Error messages are mapped by `location`, including phone mismatch, other account, expired link, already confirmed and declined.
+- Network failures and `5xx` are retried at most three times with a 10-second timeout per request and 500ms/1000ms waits. After exhausted confirmation retries, pending state remains and the user can resend their contact. A failed `open` asks the user to reopen the link and never shows a contact request.
+- Malformed success responses or responses for a different login ID cannot mark the user verified.
+
+## Signing and state
+
+Every request uses `X-Probox-Bot-Signature: t=<unix_seconds>,s=<hex HMAC-SHA256>`, calculated over `<timestamp>.<raw JSON body>`. JSON is serialized once and the exact string is sent on every retry, with a fresh timestamp/signature. Redirects are not followed. The store API checks its five-minute signature window and makes actions idempotent, so uncertain request delivery can be retried safely.
+
+Redis-backed `ctx.session.telegramAuth` stores the login ID, Telegram ID, server expiry, pending masked request details or verified timestamp, and an outstanding refusal when needed. It does not store the shared contact phone. Expiry is checked on updates; expired data can remain until an update or the existing three-day Redis session TTL. Old persisted phone-only auth sessions are discarded.
+
+Uzbek and Russian messages follow the bot's current locale. Raw auth starts, contacts and pending auth updates are excluded from verbose update logs; auth-start and pending auth messages are redacted in bot error notifications. The webhook client never logs secrets, signatures, full login IDs, phones or upstream response messages.
+
+## Verification and rollout
 
 ```powershell
-node --require ts-node/register --test src/utils/telegram/telegram-auth.util.spec.ts src/middlewares/telegram-auth.middleware.spec.ts
+npm run test:telegram-login
 npm run build
 ```
+
+Local tests cover exact request bytes/signatures, bounded retries, terminal errors, malformed responses, contact ownership, request details, cancellation, refusal retries, legacy links and actual conversation middleware ordering. HTTP and Telegram delivery are mocked; they do not prove live deployment.
+
+Deploy the bot with the two environment variables configured. Use the store API deployment/feature-flag instructions in [ExternalSystemWebhook.md](ExternalSystemWebhook.md). Before enabling `auth.telegram_bot_login`, run the documented staging browser-to-bot flow, mismatch, second-account, cancellation, expiry and duplicate-confirmation checks. No store API settings or feature flags are changed by this bot implementation.

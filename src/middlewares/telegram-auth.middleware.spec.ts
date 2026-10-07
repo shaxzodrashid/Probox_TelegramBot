@@ -6,20 +6,57 @@ import type { Update } from 'grammy/types';
 import type { BotContext, SessionData } from '../types/context';
 import { i18n } from '../i18n';
 import { createTelegramAuthMiddleware } from './telegram-auth.middleware';
-import { TELEGRAM_AUTH_TTL_MS } from '../utils/telegram/telegram-auth.util';
+import {
+  ProboxLoginApi,
+  ProboxLoginError,
+  ProboxLoginOpenResult,
+  ProboxLoginConfirmInput,
+} from '../services/probox-login.service';
 
-function fixture() {
+const loginId = '3f6c0a3b9d2e4f718a5b6c7d8e9f0a1b';
+const anotherId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+function openResult(id = loginId): ProboxLoginOpenResult {
+  return {
+    login_id: id,
+    status: 'opened',
+    phone_masked: '+998 90 *** ** 67',
+    language: 'uz',
+    client: { device_type: 'desktop', browser: 'Chrome', os: 'macOS' },
+    location: { country_code: 'UZ', country: 'Uzbekistan', city: 'Tashkent' },
+    requested_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 300_000).toISOString(),
+    expires_in: 300,
+  };
+}
+function fixture(locale = 'uz') {
   const replies: Array<{ text: string; options?: unknown }> = [];
+  const opened: Array<[string, number]> = [];
+  const confirmed: ProboxLoginConfirmInput[] = [];
+  const declined: unknown[] = [];
   const cleared: number[] = [];
-  let exits = 0;
-  let nextCalls = 0;
-  let callbackAnswers = 0;
+  let exits = 0,
+    nextCalls = 0,
+    callbackAnswers = 0;
+  const api: ProboxLoginApi = {
+    open: async (id, user) => {
+      opened.push([id, user]);
+      return openResult(id);
+    },
+    confirm: async (input) => {
+      confirmed.push(input);
+      return { login_id: input.login_id, status: 'confirmed' };
+    },
+    decline: async (id, user, reason) => {
+      declined.push([id, user, reason]);
+      return { login_id: id, status: 'declined' };
+    },
+  };
   const ctx = {
     chat: { id: 123, type: 'private' },
-    from: { id: 123 },
+    from: { id: 123, first_name: 'Ali', last_name: 'Test', username: 'ali', language_code: 'uz' },
     session: {} as SessionData,
-    message: { text: '/start auth_998901234567', date: Math.floor(Date.now() / 1000) },
-    t: (key: string) => i18n.t('uz', key),
+    message: { text: `/start auth_${loginId}`, date: Math.floor(Date.now() / 1000) },
+    t: (key: string, args?: Record<string, string>) => i18n.t(locale, key, args),
     conversation: {
       exitAll: async () => {
         exits++;
@@ -34,160 +71,292 @@ function fixture() {
   } as unknown as BotContext;
   const middleware = createTelegramAuthMiddleware(async (id) => {
     cleared.push(id);
-  });
+  }, api);
   const run = () =>
     middleware(ctx, async () => {
       nextCalls++;
     });
-  const contact = (phone = '+998 (90) 123-45-67', userId: number | undefined = 123) => {
-    Object.defineProperty(ctx, 'message', {
-      configurable: true,
-      value: {
-        date: Math.floor(Date.now() / 1000),
-        contact: { phone_number: phone, user_id: userId, first_name: 'Test' },
-      },
-    });
-  };
-  const text = (value: string) =>
-    Object.defineProperty(ctx, 'message', {
-      configurable: true,
-      value: { text: value, date: Math.floor(Date.now() / 1000) },
+  const message = (value: object | undefined) =>
+    Object.defineProperty(ctx, 'message', { configurable: true, value });
+  const text = (value: string) => message({ text: value, date: Math.floor(Date.now() / 1000) });
+  const contact = (phone = '+998 (90) 123-45-67') =>
+    message({
+      date: Math.floor(Date.now() / 1000),
+      contact: { phone_number: phone, user_id: 123, first_name: 'Contact name' },
     });
   return {
     ctx,
+    api,
     replies,
+    opened,
+    confirmed,
+    declined,
     cleared,
     run,
-    contact,
     text,
+    contact,
+    message,
     auth: () => ctx.session.telegramAuth,
+    last: () => replies[replies.length - 1],
     stats: () => ({ exits, nextCalls, callbackAnswers }),
   };
 }
 
-test('requests contact, verifies full phone and Telegram ownership, persists result, and does not reverify duplicates', async () => {
+test('open precedes contact request, displays details and warning, and retains server expiry', async () => {
   const f = fixture();
+  const result = openResult();
+  f.api.open = async (id, user) => {
+    assert.equal(f.replies.length, 0);
+    f.opened.push([id, user]);
+    return result;
+  };
   f.ctx.session.pendingAction = 'application';
   f.ctx.session.deepLinkSlug = 'aksiya_01';
   await f.run();
+  assert.deepEqual(f.opened, [[loginId, 123]]);
   assert.equal(f.auth()?.status, 'pending');
+  assert.equal(f.auth()?.expires_at, Date.parse(result.expires_at));
   assert.equal(f.ctx.session.pendingAction, undefined);
   assert.equal(f.ctx.session.deepLinkSlug, undefined);
   assert.deepEqual(f.cleared, [123]);
   assert.equal(f.stats().exits, 1);
-  assert.match(JSON.stringify(f.replies[0].options), /"request_contact":true/);
+  for (const value of ['+998 90 *** ** 67', 'Chrome', 'macOS', 'Tashkent', 'hech kimga'])
+    assert.ok(f.last().text.includes(value));
+  assert.match(JSON.stringify(f.last().options), /"request_contact":true/);
+  assert.ok(JSON.stringify(f.last().options).includes(i18n.t('uz', 'telegram_auth_not_me')));
+});
+
+test('escapes remote details and omits unavailable metadata lines', async () => {
+  const f = fixture();
+  const result = openResult();
+  result.phone_masked = '<phone>';
+  result.client.browser = '<b>bad</b>';
+  result.client.os = null;
+  result.client.device_type = null;
+  result.location = { country: null, city: null, country_code: null };
+  f.api.open = async () => result;
+  await f.run();
+  assert.ok(f.last().text.includes('&lt;phone&gt;'));
+  assert.ok(f.last().text.includes('&lt;b&gt;bad&lt;/b&gt;'));
+  assert.ok(!f.last().text.includes('Joylashuv:'));
+});
+
+test('only successful confirm verifies; sends the unmodified contact phone and sender audit fields', async () => {
+  const f = fixture();
+  await f.run();
   f.contact();
   await f.run();
+  assert.deepEqual(f.confirmed, [
+    {
+      login_id: loginId,
+      telegram_user_id: 123,
+      phone_number: '+998 (90) 123-45-67',
+      first_name: 'Ali',
+      last_name: 'Test',
+      username: 'ali',
+      language_code: 'uz',
+    },
+  ]);
   assert.equal(f.auth()?.status, 'verified');
-  assert.equal(f.auth()?.phone_number, '+998901234567');
-  assert.equal(f.auth()?.telegram_id, 123);
-  assert.deepEqual(f.replies[f.replies.length - 1]?.options, {
-    reply_markup: { remove_keyboard: true },
-  });
-  const result = { ...f.auth() };
+  assert.deepEqual(f.last().options, { reply_markup: { remove_keyboard: true } });
+  const verified = { ...f.auth() };
   await f.run();
-  assert.deepEqual(f.auth(), result);
-  assert.equal(f.replies.length, 2);
+  assert.deepEqual(f.auth(), verified);
+  assert.equal(f.confirmed.length, 1);
   assert.equal(f.stats().nextCalls, 1);
 });
 
-test('rejects missing/foreign ownership, wrong country, typed numbers, forwarded and stale contacts; allows retry', async () => {
+test('unowned, forwarded, old and typed contacts never reach confirm; valid retries do', async () => {
   const f = fixture();
   await f.run();
   for (const owner of [456, undefined]) {
     f.contact();
-    if (f.ctx.message?.contact) f.ctx.message.contact.user_id = owner;
+    f.ctx.message!.contact!.user_id = owner;
     await f.run();
-    assert.equal(f.auth()?.status, 'pending');
-    assert.equal(
-      f.replies[f.replies.length - 1]?.text,
-      i18n.t('uz', 'telegram_auth_own_contact_only'),
-    );
   }
-  for (const phone of ['+1901234567', '+998901234568', 'bad998901234567']) {
-    f.contact(phone);
-    await f.run();
-    assert.equal(f.auth()?.status, 'pending');
-    assert.equal(
-      f.replies[f.replies.length - 1]?.text,
-      i18n.t('uz', 'telegram_auth_phone_mismatch'),
-    );
-  }
-  f.text('998901234567');
-  await f.run();
-  assert.equal(f.auth()?.status, 'pending');
   f.contact();
   Object.assign(f.ctx.message!, { forward_origin: { type: 'user' } });
   await f.run();
-  assert.equal(f.auth()?.status, 'pending');
   f.contact();
   f.ctx.message!.date = 1;
   await f.run();
+  f.text('998901234567');
+  await f.run();
+  assert.equal(f.confirmed.length, 0);
   assert.equal(f.auth()?.status, 'pending');
   f.contact();
   await f.run();
-  assert.equal(f.auth()?.status, 'verified');
-  assert.equal(f.stats().nextCalls, 0);
+  assert.equal(f.confirmed.length, 1);
 });
 
-test('expired or wrong-sender attempts fail closed', async () => {
-  for (const condition of ['expired', 'sender']) {
+test('confirm 4xx ends the attempt and maps every documented location without remote messages', async () => {
+  const cases: Array<[number, string, string]> = [
+    [409, 'TG_LOGIN_PHONE_MISMATCH', 'phone_mismatch'],
+    [403, 'TG_LOGIN_OTHER_ACCOUNT', 'other_account'],
+    [404, 'TG_LOGIN_NOT_FOUND', 'invalid_link'],
+    [410, 'TG_LOGIN_EXPIRED', 'expired'],
+    [409, 'TG_LOGIN_ALREADY_CONFIRMED', 'already_confirmed'],
+    [409, 'TG_LOGIN_DECLINED', 'declined'],
+    [409, 'TG_LOGIN_NOT_OPENED', 'error'],
+    [400, 'invalid_phone_number', 'error'],
+    [401, 'TG_BOT_SIGNATURE_INVALID', 'error'],
+  ];
+  for (const [status, location, key] of cases) {
     const f = fixture();
     await f.run();
-    if (condition === 'expired') f.auth()!.expires_at = Date.now();
-    else f.auth()!.telegram_id = 456;
+    f.api.confirm = async () => {
+      throw new ProboxLoginError(status, location);
+    };
     f.contact();
     await f.run();
-    assert.equal(f.auth(), undefined);
-    assert.equal(f.replies[f.replies.length - 1]?.text, i18n.t('uz', 'telegram_auth_expired'));
-    assert.equal(f.stats().nextCalls, 0);
+    assert.equal(f.auth(), undefined, location);
+    assert.equal(f.last().text, i18n.t('uz', `telegram_auth_${key}`));
+    assert.deepEqual(f.last().options, { reply_markup: { remove_keyboard: true } });
   }
 });
 
-test('new starts replace verified attempts and invalid links erase previous approval', async () => {
-  const f = fixture();
-  await f.run();
-  f.contact();
-  await f.run();
-  f.text('/start auth_998901234568');
-  await f.run();
-  assert.equal(f.auth()?.status, 'pending');
-  assert.equal(f.auth()?.phone_number, '+998901234568');
-  f.text('/start auth_bad');
-  await f.run();
-  assert.equal(f.auth(), undefined);
-  assert.equal(f.replies[f.replies.length - 1]?.text, i18n.t('uz', 'telegram_auth_invalid_link'));
-});
-
-test('cancel and normal/promo starts clear attempts while unrelated updates pass through', async () => {
-  for (const command of ['/cancel@example_bot', '/start', '/start aksiya_01']) {
+test('network and 5xx confirmation failures preserve pending state for a safe retry', async () => {
+  for (const error of [new Error('transport'), new ProboxLoginError(503, 'TG_LOGIN_UNAVAILABLE')]) {
     const f = fixture();
     await f.run();
-    f.text(command);
+    const pending = { ...f.auth() };
+    f.api.confirm = async () => {
+      throw error;
+    };
+    f.contact();
     await f.run();
-    assert.equal(f.auth(), undefined);
-    assert.equal(f.stats().nextCalls, command.startsWith('/cancel') ? 0 : 1);
+    assert.deepEqual(f.auth(), pending);
+    assert.equal(f.last().text, i18n.t('uz', 'telegram_auth_retry'));
+    f.api.confirm = async () => ({ login_id: loginId, status: 'completed' });
+    await f.run();
+    assert.equal(f.auth()?.status, 'verified');
   }
-  const f = fixture();
-  f.text('/start aksiya_01');
-  await f.run();
-  assert.equal(f.stats().nextCalls, 1);
-  assert.equal(f.stats().exits, 0);
 });
 
-test('private-chat restriction consumes auth links but leaves ordinary group updates alone', async () => {
+test('failed open never asks for contact; locally expired or different-sender sessions never confirm', async () => {
   const f = fixture();
-  Object.assign(f.ctx.chat!, { type: 'group' });
+  f.api.open = async () => {
+    throw new ProboxLoginError(503, 'TG_LOGIN_UNAVAILABLE');
+  };
   await f.run();
   assert.equal(f.auth(), undefined);
-  assert.equal(f.replies[f.replies.length - 1]?.text, i18n.t('uz', 'telegram_auth_private_only'));
-  assert.equal(f.stats().nextCalls, 0);
-  f.text('hello');
+  assert.ok(!JSON.stringify(f.last().options).includes('request_contact'));
+  for (const scenario of ['expired', 'sender']) {
+    const g = fixture();
+    await g.run();
+    if (scenario === 'expired') g.auth()!.expires_at = Date.now();
+    else g.auth()!.telegram_id = 456;
+    g.contact();
+    await g.run();
+    assert.equal(g.auth(), undefined);
+    assert.equal(g.confirmed.length, 0);
+  }
+  const g = fixture();
+  g.api.open = async () => ({ ...openResult(), expires_at: new Date(1).toISOString() });
+  await g.run();
+  assert.equal(g.auth(), undefined);
+});
+
+test('cancel and not-me decline with correct reasons and remove keyboard', async () => {
+  for (const [text, reason] of [
+    ['/cancel@example_bot', 'cancelled'],
+    [i18n.t('uz', 'telegram_auth_not_me'), 'not_me'],
+  ]) {
+    const f = fixture();
+    await f.run();
+    f.text(text);
+    await f.run();
+    assert.deepEqual(f.declined, [[loginId, 123, reason]]);
+    assert.equal(f.auth(), undefined);
+    assert.deepEqual(f.last().options, { reply_markup: { remove_keyboard: true } });
+  }
+});
+
+test('failed decline preserves refusal and retries decline rather than confirming a later contact', async () => {
+  const f = fixture();
   await f.run();
+  f.api.decline = async () => {
+    throw new ProboxLoginError(503, 'TG_LOGIN_UNAVAILABLE');
+  };
+  f.text('/cancel');
+  await f.run();
+  const pending = f.auth();
+  assert.equal(pending?.status, 'pending');
+  assert.equal(pending?.status === 'pending' && pending.decline_reason, 'cancelled');
+  f.api.decline = async (id, user, reason) => {
+    f.declined.push([id, user, reason]);
+    return { login_id: id, status: 'declined' };
+  };
+  f.contact();
+  await f.run();
+  assert.equal(f.confirmed.length, 0);
+  assert.deepEqual(f.declined, [[loginId, 123, 'cancelled']]);
+  assert.equal(f.auth(), undefined);
+});
+
+test('new links replace attempts; ordinary starts abandon without decline; phone-only links are rejected', async () => {
+  const f = fixture();
+  await f.run();
+  f.text(`/start auth_${anotherId}`);
+  await f.run();
+  assert.equal(f.auth()?.login_id, anotherId);
+  f.text('/start auth_998901234567');
+  await f.run();
+  assert.equal(f.auth(), undefined);
+  assert.equal(f.opened.length, 2);
+  for (const command of ['/start', '/start aksiya_01']) {
+    const g = fixture();
+    await g.run();
+    g.text(command);
+    await g.run();
+    assert.equal(g.auth(), undefined);
+    assert.equal(g.declined.length, 0);
+    assert.equal(g.stats().nextCalls, 1);
+  }
+});
+
+test('rejects old persisted phone-only state and leaves normal group/promo updates alone', async () => {
+  const f = fixture();
+  f.contact();
+  Object.assign(f.ctx.session, {
+    telegramAuth: { status: 'pending', phone_number: '+998901234567', telegram_id: 123 },
+  });
+  await f.run();
+  assert.equal(f.auth(), undefined);
+  assert.equal(f.confirmed.length, 0);
+  const g = fixture();
+  Object.assign(g.ctx.chat!, { type: 'group' });
+  await g.run();
+  assert.equal(g.opened.length, 0);
+  g.text('hello');
+  await g.run();
+  assert.equal(g.stats().nextCalls, 1);
+  const h = fixture();
+  h.text('/start aksiya_01');
+  await h.run();
+  assert.equal(h.stats().exits, 0);
+});
+
+test('pending callbacks cannot reach other flows; menu start abandons without declining', async () => {
+  const f = fixture();
+  await f.run();
+  f.message(undefined);
+  Object.defineProperty(f.ctx, 'callbackQuery', {
+    configurable: true,
+    value: { data: 'old_menu' },
+  });
+  await f.run();
+  assert.equal(f.stats().callbackAnswers, 1);
+  assert.equal(f.stats().nextCalls, 0);
+  Object.defineProperty(f.ctx, 'callbackQuery', { configurable: true, value: { data: 'start' } });
+  await f.run();
+  assert.equal(f.auth(), undefined);
+  assert.equal(f.declined.length, 0);
   assert.equal(f.stats().nextCalls, 1);
 });
 
-test('auth runs before actual conversation replay and Redis-compatible session serialization retains pending state', async () => {
+test('real conversation replay is interrupted; session serialization persists auth; later ordinary contacts still work', async () => {
+  const f = fixture();
   const bot = new Bot<BotContext>('123:test', {
     botInfo: {
       id: 999,
@@ -204,20 +373,24 @@ test('auth runs before actual conversation replay and Redis-compatible session s
     },
   });
   const data = new Map<string, string>();
-  const storage = {
-    read: async (key: string) =>
-      data.has(key) ? (JSON.parse(data.get(key)!) as SessionData) : undefined,
-    write: async (key: string, value: SessionData) => {
-      data.set(key, JSON.stringify(value));
-    },
-    delete: async (key: string) => {
-      data.delete(key);
-    },
-  };
-  bot.use(session({ initial: () => ({}), storage }));
+  bot.use(
+    session({
+      initial: () => ({}),
+      storage: {
+        read: async (key) =>
+          data.has(key) ? (JSON.parse(data.get(key)!) as SessionData) : undefined,
+        write: async (key, value) => {
+          data.set(key, JSON.stringify(value));
+        },
+        delete: async (key) => {
+          data.delete(key);
+        },
+      },
+    }),
+  );
   bot.use(i18n);
   bot.use(conversations());
-  bot.use(createTelegramAuthMiddleware(async () => {}));
+  bot.use(createTelegramAuthMiddleware(async () => {}, f.api));
   let conversationContacts = 0;
   bot.use(
     createConversation(async (conversation) => {
@@ -226,89 +399,55 @@ test('auth runs before actual conversation replay and Redis-compatible session s
     }, 'ordinary'),
   );
   bot.command('ordinary', (ctx) => ctx.conversation.enter('ordinary'));
-  const texts: string[] = [];
-  bot.api.config.use(async (_prev, method, payload) => {
-    if (method === 'sendMessage') texts.push((payload as { text: string }).text);
-    return {
-      ok: true,
-      result: {
-        message_id: 1,
-        date: Math.floor(Date.now() / 1000),
-        chat: { id: 123, type: 'private' },
-      },
-    } as never;
-  });
-  let updateId = 0;
+  bot.api.config.use(
+    async () =>
+      ({
+        ok: true,
+        result: { message_id: 1, date: 1, chat: { id: 123, type: 'private' } },
+      }) as never,
+  );
+  let id = 0;
   async function update(content: object) {
-    const entities =
-      'text' in content
-        ? [{ type: 'bot_command', offset: 0, length: String(content.text).split(' ')[0].length }]
-        : undefined;
     await bot.handleUpdate({
-      update_id: ++updateId,
+      update_id: ++id,
       message: {
-        message_id: updateId,
+        message_id: id,
         date: Math.floor(Date.now() / 1000),
         chat: { id: 123, type: 'private', first_name: 'Test' },
         from: { id: 123, is_bot: false, first_name: 'Test' },
-        entities,
+        entities:
+          'text' in content
+            ? [
+                {
+                  type: 'bot_command',
+                  offset: 0,
+                  length: String(content.text).split(' ')[0].length,
+                },
+              ]
+            : undefined,
         ...content,
       },
     } as Update);
   }
   await update({ text: '/ordinary' });
-  await update({ text: '/start auth_998901234567' });
+  await update({ text: `/start auth_${loginId}` });
   assert.equal(JSON.parse(data.get('123')!).telegramAuth.status, 'pending');
-  await update({ contact: { phone_number: '998901234567', user_id: 123, first_name: 'Test' } });
+  const contact = { contact: { phone_number: '998901234567', user_id: 123, first_name: 'Test' } };
+  await update(contact);
   assert.equal(conversationContacts, 0);
-  const auth = JSON.parse(data.get('123')!).telegramAuth;
-  assert.equal(auth.status, 'verified');
-  assert.equal(auth.expires_at - auth.verified_at, TELEGRAM_AUTH_TTL_MS);
-  assert.equal(texts[texts.length - 1], i18n.t('uz', 'telegram_auth_verified'));
-  // Later ordinary conversations must still receive their own contact updates.
+  assert.equal(JSON.parse(data.get('123')!).telegramAuth.status, 'verified');
   await update({ text: '/ordinary' });
-  await update({ contact: { phone_number: '998901234567', user_id: 123, first_name: 'Test' } });
+  await update(contact);
   assert.equal(conversationContacts, 1);
-  assert.deepEqual(JSON.parse(data.get('123')!).telegramAuth, auth);
 });
 
-test('menu start cancels verification and pending callbacks cannot reach other flows', async () => {
-  const f = fixture();
-  await f.run();
-  Object.defineProperty(f.ctx, 'message', { configurable: true, value: undefined });
-  Object.defineProperty(f.ctx, 'callbackQuery', {
-    configurable: true,
-    value: { data: 'old_menu_button' },
-  });
-  await f.run();
-  assert.equal(f.stats().callbackAnswers, 1);
-  assert.equal(f.stats().nextCalls, 0);
-  assert.equal(f.auth()?.status, 'pending');
-  Object.defineProperty(f.ctx, 'callbackQuery', { configurable: true, value: { data: 'start' } });
-  await f.run();
-  assert.equal(f.auth(), undefined);
-  assert.equal(f.stats().nextCalls, 1);
-});
-
-test('successful verification expires and contacts without an attempt stay available to ordinary registration', async () => {
-  const f = fixture();
-  f.contact();
-  await f.run();
-  assert.equal(f.stats().nextCalls, 1);
-  assert.equal(f.auth(), undefined);
-  f.text('/start auth_998901234567');
-  await f.run();
-  f.contact();
-  await f.run();
-  f.auth()!.expires_at = Date.now();
-  f.text('/help');
-  await f.run();
-  assert.equal(f.auth(), undefined);
-  assert.equal(f.stats().nextCalls, 2);
-});
-
-test('all auth messages resolve in both supported locales', () => {
+test('messages and refusal buttons work in both supported locales', async () => {
   for (const locale of ['uz', 'ru']) {
+    const f = fixture(locale);
+    await f.run();
+    f.text(i18n.t(locale, 'telegram_auth_not_me'));
+    await f.run();
+    assert.deepEqual(f.declined, [[loginId, 123, 'not_me']]);
     for (const key of [
       'request_contact',
       'own_contact_only',
@@ -318,6 +457,16 @@ test('all auth messages resolve in both supported locales', () => {
       'expired',
       'cancelled',
       'verified',
+      'heading',
+      'share_phone',
+      'not_me',
+      'retry',
+      'open_retry',
+      'decline_retry',
+      'error',
+      'other_account',
+      'already_confirmed',
+      'declined',
     ]) {
       const fullKey = `telegram_auth_${key}`;
       assert.notEqual(i18n.t(locale, fullKey), fullKey);

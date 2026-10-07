@@ -29,6 +29,8 @@ const isLoopbackHost = (host: string): boolean => {
 export const config = {
   BOT_TOKEN: process.env.BOT_TOKEN as string,
   BOT_USERNAME: process.env.BOT_USERNAME || '',
+  PROBOX_STORE_API_URL: process.env.PROBOX_STORE_API_URL || '',
+  PROBOX_LOGIN_SECRET: process.env.PROBOX_LOGIN_SECRET || '',
   PASSPORT_SCANNER_GIF_ID: process.env.PASSPORT_SCANNER_GIF_ID || null,
   NODE_ENV: process.env.NODE_ENV || 'development',
   BOT_ENABLED: parseBoolean(process.env.BOT_ENABLED, true),

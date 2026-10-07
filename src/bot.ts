@@ -9,6 +9,7 @@ import { logger } from './utils/logger';
 import { loggerMiddleware } from './middlewares/logger.middleware';
 import { sessionRestorerMiddleware } from './middlewares/session.middleware';
 import { createTelegramAuthMiddleware } from './middlewares/telegram-auth.middleware';
+import { ProboxLoginClient } from './services/probox-login.service';
 
 import { startHandler } from './handlers/start.handler';
 import { helpHandler, aboutHandler } from './handlers/help.handler';
@@ -266,7 +267,6 @@ bot.api.config.use((prev, method, payload, signal) => {
 });
 
 // Middlewares
-bot.use(loggerMiddleware);
 
 const storage = new RedisAdapter({
   instance: redisService.getClient(),
@@ -279,15 +279,19 @@ bot.use(
     storage,
   }),
 );
+bot.use(loggerMiddleware);
 bot.use(i18n);
 bot.use(sessionRestorerMiddleware);
 
 bot.use(conversations());
 bot.use(
-  createTelegramAuthMiddleware(async (telegramId) => {
-    await redisService.delete(`registrationActive:${telegramId}`);
-    await redisService.delete(`pendingAction:${telegramId}`);
-  }),
+  createTelegramAuthMiddleware(
+    async (telegramId) => {
+      await redisService.delete(`registrationActive:${telegramId}`);
+      await redisService.delete(`pendingAction:${telegramId}`);
+    },
+    new ProboxLoginClient({ baseUrl: config.PROBOX_STORE_API_URL, secret: config.PROBOX_LOGIN_SECRET }),
+  ),
 );
 bot.use(couponRetirementMiddleware);
 

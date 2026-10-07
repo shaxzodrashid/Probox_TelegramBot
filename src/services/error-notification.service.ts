@@ -9,6 +9,7 @@ import {
   withAdminGroupMigrationRetry,
 } from '../utils/telegram/admin-group-chat.util';
 import { isUserBlockedError } from '../utils/telegram/telegram-errors';
+import { parseAuthStart } from '../utils/telegram/telegram-auth.util';
 
 type ErrorNotificationSeverity = 'warning' | 'error' | 'critical';
 
@@ -292,6 +293,11 @@ export class ErrorNotificationService {
     ctx: BotContext;
     error: unknown;
   }): Promise<void> {
+    const userMessage =
+      params.ctx.message?.text ||
+      params.ctx.message?.caption ||
+      params.ctx.callbackQuery?.data ||
+      null;
     await this.notify({
       api: params.api,
       error: params.error,
@@ -310,10 +316,11 @@ export class ErrorNotificationService {
           languageCode: params.ctx.from?.language_code ?? null,
         },
         userMessage:
-          params.ctx.message?.text ||
-          params.ctx.message?.caption ||
-          params.ctx.callbackQuery?.data ||
-          null,
+          parseAuthStart(userMessage ?? undefined) ||
+          (params.ctx.chat?.type === 'private' &&
+            params.ctx.session?.telegramAuth?.status === 'pending')
+            ? '[Telegram login request]'
+            : userMessage,
         metadata: {
           updateType:
             Object.keys(params.ctx.update)

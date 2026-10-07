@@ -20,6 +20,7 @@
     "run:payment-reminder": "ts-node src/scripts/run-payment-reminder.ts",
     "repair:payment-on-time-coupons": "ts-node src/scripts/repair-payment-on-time-coupons.ts",
     "test:purchase-pdf": "ts-node src/scripts/test-purchase-pdf.ts",
+    "test:telegram-login": "node --require ts-node/register --test src/services/probox-login.service.spec.ts src/utils/telegram/telegram-auth.util.spec.ts src/middlewares/telegram-auth.middleware.spec.ts src/middlewares/logger.middleware.spec.ts src/services/error-notification.service.spec.ts",
     "test:payment-reminder": "node --require ts-node/register --test --test-force-exit src/services/payment/payment-reminder.service.spec.ts",
     "test:faq-routing": "node --require ts-node/register --test src/services/faq/faq-routing.service.spec.ts src/services/faq/faq-ai.service.spec.ts src/services/faq/faq-embedding.service.spec.ts src/services/faq/faq.service.spec.ts src/utils/faq/faq-match.util.spec.ts src/utils/faq/faq-routing-score.util.spec.ts src/utils/faq/inventory-intent.util.spec.ts",
     "compare:current": "ts-node -P passport_comparison/tsconfig.json passport_comparison/runner/run-current.ts",
