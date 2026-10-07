@@ -1,26 +1,20 @@
 import { InlineKeyboard, Keyboard } from 'grammy';
-import { BotContext, BotConversation, MessageTemplateEditableField } from '../types/context';
+import { BotContext, BotConversation } from '../types/context';
 import { MessageTemplate, MessageTemplateService, MessageTemplateType } from '../services/message-template.service';
 import { getAdminMenuKeyboard } from '../keyboards/admin.keyboards';
 import {
   getAdminTemplateDetailKeyboard,
   getAdminTemplatesKeyboard,
-  ADMIN_TEMPLATE_BACK_TO_LIST_CALLBACK
 } from '../keyboards/template.keyboards';
 import { i18n } from '../i18n';
 import { logger } from '../utils/logger';
 
 const TEMPLATE_TYPES: MessageTemplateType[] = [
-  'store_visit',
-  'purchase',
-  'referral',
   'payment_reminder_d2',
   'payment_reminder_d1',
   'payment_reminder_d0',
-  'payment_paid_on_time',
   'payment_overdue',
   'payment_paid_late',
-  'winner_notification'
 ];
 
 const getCancelKeyboard = (locale: string) =>
@@ -138,7 +132,8 @@ const waitForTypeSelection = async (
       }
 
       if (data.startsWith('type_select:')) {
-        return data.split(':')[1] as MessageTemplateType;
+        const type = data.split(':')[1] as MessageTemplateType;
+        if (TEMPLATE_TYPES.includes(type)) return type;
       }
     } else if (callbackCtx.message?.text && isCancelText(callbackCtx.message.text, locale)) {
       await callbackCtx.reply(i18n.t(locale, 'admin_cancelled'), {

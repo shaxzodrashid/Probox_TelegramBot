@@ -5,11 +5,8 @@ import { SapService } from '../../sap/sap-hana.service';
 import { HanaService } from '../../sap/hana.service';
 import { getAdminMissingTemplateKeyboard } from '../../keyboards/template.keyboards';
 import { formatDateForLocale, getTashkentDateKey } from '../../utils/time/tashkent-time.util';
-import { normalizeUzPhoneOrNull } from '../../utils/uz-phone.util';
 import { logger } from '../../utils/logger';
 import { BotNotificationService } from '../bot-notification.service';
-import { Coupon, CouponService } from '../coupon/coupon.service';
-import { Promotion, PromotionService } from '../coupon/promotion.service';
 import { User, UserService } from '../user.service';
 import { formatItemsList } from '../../utils/formatting/items-formatter.util';
 
@@ -18,10 +15,7 @@ type ReminderType = 'd2' | 'd1' | 'd0' | 'overdue' | 'paid_late';
 interface ProcessingWindow {
   dueDateFrom: string;
   dueDateTo: string;
-  rewardMonth: string;
-  rewardMonthStart: string;
-  rewardMonthEnd: string;
-  todayKey: string;
+  processingMonth: string;
   todayIndex: number;
 }
 
@@ -36,6 +30,7 @@ export interface PaymentReminderRunResult {
   fetchedInstallments: number;
   remindersSent: number;
   reminderNotificationsSent: number;
+  /** Legacy summary fields retained for consumers; rewards are permanently disabled. */
   rewardCouponsIssued: number;
   rewardNotificationsSent: number;
   unlinkedRewardCouponsIssued: number;
@@ -105,7 +100,7 @@ export class PaymentReminderService {
   private static getMonthBounds(monthKey: string): { start: string; end: string } {
     const match = monthKey.match(/^(\d{4})-(\d{2})$/);
     if (!match) {
-      throw new Error(`PAYMENT_REWARD_TARGET_MONTH must use YYYY-MM format. Received: ${monthKey}`);
+      throw new Error(`Processing month must use YYYY-MM format. Received: ${monthKey}`);
     }
 
     const year = Number(match[1]);
@@ -125,23 +120,19 @@ export class PaymentReminderService {
     return date.toISOString().slice(0, 10);
   }
 
-  private static buildProcessingWindow(now: Date, rewardMonthOverride?: string): ProcessingWindow {
+  private static buildProcessingWindow(now: Date): ProcessingWindow {
     const todayKey = getTashkentDateKey(now);
     const todayIndex = this.toDayIndex(todayKey);
-    const rewardMonth =
-      rewardMonthOverride || process.env.PAYMENT_REWARD_TARGET_MONTH || this.toMonthKey(now);
-    const rewardBounds = this.getMonthBounds(rewardMonth);
+    const processingMonth = this.toMonthKey(now);
+    const monthBounds = this.getMonthBounds(processingMonth);
     const reminderWindowStart = this.addDays(todayKey, -1);
     const reminderWindowEnd = this.addDays(todayKey, 2);
 
     return {
       dueDateFrom:
-        rewardBounds.start < reminderWindowStart ? rewardBounds.start : reminderWindowStart,
-      dueDateTo: rewardBounds.end > reminderWindowEnd ? rewardBounds.end : reminderWindowEnd,
-      rewardMonth,
-      rewardMonthStart: rewardBounds.start,
-      rewardMonthEnd: rewardBounds.end,
-      todayKey,
+        monthBounds.start < reminderWindowStart ? monthBounds.start : reminderWindowStart,
+      dueDateTo: monthBounds.end > reminderWindowEnd ? monthBounds.end : reminderWindowEnd,
+      processingMonth,
       todayIndex,
     };
   }
@@ -188,16 +179,6 @@ export class PaymentReminderService {
     return this.getDateKey(installment.InstFullyPaidDate);
   }
 
-  private static isPaidOnTime(installment: IPurchaseInstallment): boolean {
-    const paymentDateKey = this.getInstallmentFullyPaidDateKey(installment);
-    const dueDateKey = this.getDateKey(installment.InstDueDate);
-    if (!paymentDateKey || !dueDateKey) {
-      return false;
-    }
-
-    return paymentDateKey <= dueDateKey;
-  }
-
   private static isPaidLate(installment: IPurchaseInstallment): boolean {
     const paymentDateKey = this.getInstallmentFullyPaidDateKey(installment);
     const dueDateKey = this.getDateKey(installment.InstDueDate);
@@ -206,18 +187,6 @@ export class PaymentReminderService {
     }
 
     return paymentDateKey > dueDateKey;
-  }
-
-  private static isPaymentInRewardMonth(
-    installment: IPurchaseInstallment,
-    window: ProcessingWindow,
-  ): boolean {
-    const paymentDateKey = this.getInstallmentFullyPaidDateKey(installment);
-    return Boolean(
-      paymentDateKey &&
-      paymentDateKey >= window.rewardMonthStart &&
-      paymentDateKey <= window.rewardMonthEnd,
-    );
   }
 
   private static buildLinkedUserMap(users: User[]): Map<string, LinkedUserContext> {
@@ -239,30 +208,6 @@ export class PaymentReminderService {
     }
 
     return map;
-  }
-
-  private static getPhoneSnapshot(
-    installment: IPurchaseInstallment,
-    linkedUser?: LinkedUserContext,
-  ): string {
-    const candidates = [
-      linkedUser?.user.phone_number,
-      installment.Phone1,
-      installment.Phone2,
-      installment.Cellular,
-    ];
-
-    for (const candidate of candidates) {
-      const normalized = normalizeUzPhoneOrNull(candidate);
-      if (normalized) {
-        return normalized;
-      }
-    }
-
-    logger.warn(
-      `[PAYMENT_REMINDER] Missing phone snapshot for CardCode ${installment.CardCode}, DocEntry ${installment.DocEntry}, installment ${installment.InstlmntID}`,
-    );
-    return '';
   }
 
   private static async fetchInstallments(
@@ -315,18 +260,6 @@ export class PaymentReminderService {
     });
   }
 
-  private static async findExistingRewardCoupon(
-    installment: IPurchaseInstallment,
-  ): Promise<Coupon | undefined> {
-    const existingCoupon = await db<Coupon>('coupons')
-      .where('source_type', 'payment_on_time')
-      .andWhere('sap_doc_entry', installment.DocEntry)
-      .andWhere('sap_installment_id', installment.InstlmntID)
-      .first();
-
-    return existingCoupon || undefined;
-  }
-
   private static async notifyAdminsAboutMissingTemplates(
     missingTemplates: Set<string>,
   ): Promise<void> {
@@ -357,77 +290,6 @@ export class PaymentReminderService {
     }
   }
 
-  private static async issueOnTimeReward(params: {
-    installment: IPurchaseInstallment;
-    linkedUser?: LinkedUserContext;
-    promotion: Promotion | null;
-    window: ProcessingWindow;
-    dryRun: boolean;
-    missingTemplates: Set<string>;
-  }): Promise<{ couponIssued: boolean; notificationSent: boolean }> {
-    const { installment, linkedUser, promotion, window, dryRun, missingTemplates } = params;
-
-    if (!this.isPaymentInRewardMonth(installment, window)) {
-      return { couponIssued: false, notificationSent: false };
-    }
-
-    if (!this.isInstallmentFullyPaid(installment) || !this.isPaidOnTime(installment)) {
-      return { couponIssued: false, notificationSent: false };
-    }
-
-    const existingCoupon = await this.findExistingRewardCoupon(installment);
-    if (existingCoupon) {
-      return { couponIssued: false, notificationSent: false };
-    }
-
-    if (!promotion) {
-      logger.warn(
-        `[PAYMENT_REMINDER] No active promotion configured for on-time payment reward. Skipping DocEntry ${installment.DocEntry}, installment ${installment.InstlmntID}`,
-      );
-      return { couponIssued: false, notificationSent: false };
-    }
-
-    if (dryRun) {
-      return { couponIssued: true, notificationSent: Boolean(linkedUser) };
-    }
-
-    const coupons = await CouponService.createCouponsForUser({
-      userId: linkedUser?.user.id,
-      promotionId: promotion.id,
-      sourceType: 'payment_on_time',
-      phoneSnapshot: this.getPhoneSnapshot(installment, linkedUser),
-      customerFullName: linkedUser?.fullName || installment.CardName,
-      sapDocEntry: installment.DocEntry,
-      sapInstallmentId: installment.InstlmntID,
-    });
-
-    const firstCoupon = coupons[0];
-    if (!linkedUser || !firstCoupon) {
-      return { couponIssued: coupons.length > 0, notificationSent: false };
-    }
-
-    const result = await BotNotificationService.sendTemplateMessage({
-      user: linkedUser.user,
-      templateType: 'payment_paid_on_time',
-      placeholders: {
-        customer_name: linkedUser.fullName,
-        coupon_code: firstCoupon.code,
-        payment_due_date: formatDateForLocale(installment.InstDueDate, linkedUser.locale),
-        product_name: formatItemsList(installment.itemsPairs) || '',
-        referrer_name: '',
-        prize_name: '',
-      },
-      couponId: firstCoupon.id,
-      dispatchType: 'payment_on_time',
-    });
-
-    if (!result.delivered && result.error?.includes('Template not found')) {
-      missingTemplates.add('payment_paid_on_time');
-    }
-
-    return { couponIssued: coupons.length > 0, notificationSent: result.delivered };
-  }
-
   private static async processPaidLateReminder(params: {
     installment: IPurchaseInstallment;
     linkedUser: LinkedUserContext;
@@ -455,11 +317,8 @@ export class PaymentReminderService {
       templateType: 'payment_paid_late',
       placeholders: {
         customer_name: linkedUser.fullName,
-        coupon_code: '',
         payment_due_date: formatDateForLocale(installment.InstDueDate, linkedUser.locale),
         product_name: formatItemsList(installment.itemsPairs) || '',
-        referrer_name: '',
-        prize_name: '',
       },
       dispatchType: 'payment_paid_late',
     });
@@ -516,11 +375,8 @@ export class PaymentReminderService {
         | 'payment_reminder_d0',
       placeholders: {
         customer_name: linkedUser.fullName,
-        coupon_code: '',
         payment_due_date: formatDateForLocale(installment.InstDueDate, linkedUser.locale),
         product_name: formatItemsList(installment.itemsPairs) || '',
-        referrer_name: '',
-        prize_name: '',
       },
       dispatchType: templateType,
     });
@@ -543,28 +399,19 @@ export class PaymentReminderService {
     return result.delivered;
   }
 
-  static async run(options?: {
-    now?: Date;
-    dryRun?: boolean;
-    rewardMonth?: string;
-  }): Promise<PaymentReminderRunResult> {
+  static async run(options?: { now?: Date; dryRun?: boolean }): Promise<PaymentReminderRunResult> {
     const runLockToken = await this.acquireRunLock();
     const now = options?.now || new Date();
     const dryRun = options?.dryRun || false;
-    const window = this.buildProcessingWindow(now, options?.rewardMonth);
+    const window = this.buildProcessingWindow(now);
 
     try {
       logger.info(
-        `[PAYMENT_REMINDER] Starting run. dryRun=${dryRun} rewardMonth=${window.rewardMonth} dueDateFrom=${window.dueDateFrom} dueDateTo=${window.dueDateTo}`,
+        `[PAYMENT_REMINDER] Starting run. dryRun=${dryRun} processingMonth=${window.processingMonth} dueDateFrom=${window.dueDateFrom} dueDateTo=${window.dueDateTo}`,
       );
 
-      if (!dryRun) {
-        await CouponService.expireStaleCoupons();
-      }
-
-      const [users, promotion, installments] = await Promise.all([
+      const [users, installments] = await Promise.all([
         UserService.getUsersWithSapCardCode(),
-        PromotionService.getCurrentPromotion(now),
         this.fetchInstallments(window),
       ]);
 
@@ -573,35 +420,13 @@ export class PaymentReminderService {
         .size;
       const missingTemplates = new Set<string>();
 
-      let rewardCouponsIssued = 0;
-      let rewardNotificationsSent = 0;
+      const rewardCouponsIssued = 0;
+      const rewardNotificationsSent = 0;
       let reminderNotificationsSent = 0;
-      let unlinkedRewardCouponsIssued = 0;
+      const unlinkedRewardCouponsIssued = 0;
 
       for (const installment of installments) {
         const linkedUser = linkedUsersByCardCode.get(installment.CardCode);
-
-        if (this.isPaymentInRewardMonth(installment, window)) {
-          const rewardResult = await this.issueOnTimeReward({
-            installment,
-            linkedUser,
-            promotion,
-            window,
-            dryRun,
-            missingTemplates,
-          });
-
-          if (rewardResult.couponIssued) {
-            rewardCouponsIssued += 1;
-            if (!linkedUser) {
-              unlinkedRewardCouponsIssued += 1;
-            }
-          }
-
-          if (rewardResult.notificationSent) {
-            rewardNotificationsSent += 1;
-          }
-        }
 
         if (!linkedUser) {
           continue;
@@ -655,7 +480,7 @@ export class PaymentReminderService {
         rewardCouponsIssued,
         rewardNotificationsSent,
         unlinkedRewardCouponsIssued,
-        rewardTargetMonth: window.rewardMonth,
+        rewardTargetMonth: window.processingMonth,
         dueDateFrom: window.dueDateFrom,
         dueDateTo: window.dueDateTo,
       };

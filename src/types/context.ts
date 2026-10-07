@@ -5,6 +5,7 @@ import { ConversationFlavor, Conversation } from '@grammyjs/conversations';
 import { Contract } from '../data/contracts.mock';
 import { PaymentContract } from '../interfaces/payment.interface';
 import { FaqAnswerVariants, FaqAuthoringResult } from './faq.types';
+import type { TelegramAuthState } from '../utils/telegram/telegram-auth.util';
 
 export type CustomContext = Context & I18nFlavor & SessionFlavor<SessionData>;
 export type BotContext = ConversationFlavor<CustomContext>;
@@ -42,6 +43,7 @@ export type FaqEditableField =
   | 'agent_mode';
 
 export interface SessionData {
+  telegramAuth?: TelegramAuthState;
   user_phone?: string;
   pendingAction?: 'application';
   __language_code?: string;

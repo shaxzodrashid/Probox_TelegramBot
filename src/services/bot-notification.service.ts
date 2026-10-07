@@ -1,3 +1,4 @@
+import { COUPON_PROGRAM_RETIRED, isRetiredCouponNotification } from './coupon/coupon-retirement';
 import db from '../database/database';
 import { InputFile } from 'grammy';
 import { isUserBlockedError } from '../utils/telegram/telegram-errors';
@@ -56,6 +57,13 @@ export class BotNotificationService {
     dispatchType: string;
     photo?: NotificationPhoto | null;
   }): Promise<NotificationResult> {
+    if (
+      params.couponId !== undefined ||
+      isRetiredCouponNotification(params.templateType) ||
+      isRetiredCouponNotification(params.dispatchType)
+    ) {
+      return { delivered: false, error: COUPON_PROGRAM_RETIRED };
+    }
     const template = await MessageTemplateService.getActiveTemplateByType(params.templateType);
 
     if (!template) {
@@ -91,6 +99,13 @@ export class BotNotificationService {
     dispatchType: string;
     photo?: NotificationPhoto | null;
   }): Promise<NotificationResult> {
+    if (
+      params.couponId !== undefined ||
+      isRetiredCouponNotification(params.template.template_type) ||
+      isRetiredCouponNotification(params.dispatchType)
+    ) {
+      return { delivered: false, error: COUPON_PROGRAM_RETIRED };
+    }
     try {
       const locale = params.user.language_code || 'uz';
       const text = formatUzsAmountsInText(
@@ -151,6 +166,9 @@ export class BotNotificationService {
     text: string;
     dispatchType: string;
   }): Promise<NotificationResult> {
+    if (isRetiredCouponNotification(params.dispatchType)) {
+      return { delivered: false, error: COUPON_PROGRAM_RETIRED };
+    }
     try {
       const bot = await this.getBot();
       const text = formatUzsAmountsInText(params.text);

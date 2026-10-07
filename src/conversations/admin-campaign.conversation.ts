@@ -1,5 +1,5 @@
 import { InlineKeyboard, InputFile, Keyboard } from 'grammy';
-import { BotContext, BotConversation, PromotionPrizeEditableField } from '../types/context';
+import { BotContext, BotConversation } from '../types/context';
 import {
   CreatePrizeInput,
   CreatePromotionInput,
@@ -201,7 +201,6 @@ const buildAdminPromotionSummary = (promotion: Promotion, locale: string): strin
     `${i18n.t(locale, 'admin_campaign_status_label')}: ${escapeHtml(status)}`,
     `${i18n.t(locale, 'admin_campaign_starts_at_label')}: ${escapeHtml(formatDateTimeForLocale(promotion.starts_at, locale))}`,
     `${i18n.t(locale, 'admin_campaign_ends_at_label')}: ${escapeHtml(formatDateTimeForLocale(promotion.ends_at, locale))}`,
-    `${i18n.t(locale, 'admin_campaign_assign_coupons_label')}: ${promotion.assign_coupons ? escapeHtml(i18n.t(locale, 'admin_yes')) : escapeHtml(i18n.t(locale, 'admin_no'))}`,
     `${i18n.t(locale, 'admin_campaign_image_label')}: ${promotion.cover_image_object_key ? escapeHtml(i18n.t(locale, 'admin_yes')) : escapeHtml(i18n.t(locale, 'admin_no'))}`,
     '',
     `${i18n.t(locale, 'admin_campaign_title_uz_label')}: ${escapeHtml(promotion.title_uz)}`,
@@ -264,7 +263,6 @@ const buildDraftSummary = (draft: CreatePromotionInput | Promotion, locale: stri
     `${i18n.t(locale, 'admin_campaign_status_label')}: ${escapeHtml(status)}`,
     `${i18n.t(locale, 'admin_campaign_starts_at_label')}: ${escapeHtml(formatDateTimeForLocale(draft.starts_at, locale))}`,
     `${i18n.t(locale, 'admin_campaign_ends_at_label')}: ${escapeHtml(formatDateTimeForLocale(draft.ends_at, locale))}`,
-    `${i18n.t(locale, 'admin_campaign_assign_coupons_label')}: ${draft.assign_coupons ? escapeHtml(i18n.t(locale, 'admin_yes')) : escapeHtml(i18n.t(locale, 'admin_no'))}`,
     '',
     `${i18n.t(locale, 'admin_campaign_title_uz_label')}: ${escapeHtml(draft.title_uz)}`,
     `${i18n.t(locale, 'admin_campaign_title_ru_label')}: ${escapeHtml(draft.title_ru)}`,
@@ -1041,16 +1039,7 @@ export async function adminPromotionCreateConversation(
   }
   draft.is_active = isActive;
 
-  const assignCoupons = await waitForActiveState(
-    conversation,
-    ctx,
-    locale,
-    i18n.t(locale, 'admin_campaign_ask_assign_coupons'),
-  );
-  if (assignCoupons === null) {
-    return;
-  }
-  draft.assign_coupons = assignCoupons;
+  draft.assign_coupons = false;
 
   const warningAccepted = await reviewLongContentWarning(conversation, ctx, locale, draft);
   if (!warningAccepted) {
@@ -1263,20 +1252,8 @@ export async function adminPromotionEditConversation(
       break;
     }
     case 'assign_coupons': {
-      const value = await waitForActiveState(
-        conversation,
-        ctx,
-        locale,
-        i18n.t(locale, 'admin_campaign_edit_prompt_assign_coupons'),
-      );
-      if (value === null) {
-        await conversation.external((c) => {
-          if (c.session) c.session.adminPromotionEditTarget = undefined;
-        });
-        return;
-      }
-      update.assign_coupons = value;
-      break;
+      await ctx.reply(i18n.t(locale, 'coupon_program_retired'));
+      return;
     }
   }
 

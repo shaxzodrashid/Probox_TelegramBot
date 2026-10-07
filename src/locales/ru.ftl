@@ -625,21 +625,18 @@ admin_campaign_edit_prompt_template_content_ru = Введите новый те�
 admin_campaign_template_create_guidance =
     📝 Инструкция по созданию нового шаблона сообщения
 
-    1. <b>Название</b>: это имя шаблона внутри админки. Пример: Visited Store
-    2. <b>Ключ</b>: должен быть уникальным. Используйте латиницу. Пример: visited_store_v1
-    3. <b>Тип</b>: определяет, для какого события будет использоваться шаблон. Для визита в магазин выберите `store_visit`.
+    1. <b>Название</b>: это имя шаблона внутри админки. Пример: Payment Reminder
+    2. <b>Ключ</b>: должен быть уникальным. Используйте латиницу. Пример: payment_reminder_v1
+    3. <b>Тип</b>: определяет, для какого события будет использоваться шаблон. Для напоминания о платеже выберите `payment_reminder_d1`.
     4. <b>Текст</b>: переменные пишутся в формате <code>{"{{customer_name}}"}</code>.
 
     Поддерживаемые placeholder'ы:
     - <code>{"{{customer_name}}"}</code> -- Имя и фамилия клиента
-    - <code>{"{{coupon_code}}"}</code> -- 10-символьный код купона (автоматически форматируется как inline-code)
     - <code>{"{{payment_due_date}}"}</code> -- Срок следующего платежа
     - <code>{"{{product_name}}"}</code> -- Название товара
-    - <code>{"{{referrer_name}}"}</code> -- Имя пригласившего (реферера)
-    - <code>{"{{prize_name}}"}</code> -- Название приза
 
-    Рекомендуемый пример для визита в магазин:
-    <blockquote>Здравствуйте, <code>{"{{customer_name}}"}</code>! Спасибо, что посетили магазин Probox. Для вас создан специальный промо-код {"{{coupon_code}}"}.</blockquote>
+    Пример напоминания о платеже:
+    <blockquote>Здравствуйте, {"{{customer_name}}"}! Дата платежа: {"{{payment_due_date}}"}.</blockquote>
 
     Чтобы отменить создание, на любом шаге нажмите кнопку "Отмена".
 admin_template_created = ✅ Шаблон успешно создан.
@@ -725,3 +722,14 @@ admin_faq_edit_cancelled = Редактирование FAQ отменено.
 admin_faq_delete_confirm_text = Удалить этот FAQ?\n\n{ $question }
 admin_faq_deleted = ✅ FAQ удалён.
 admin_faq_delete_cancelled = Удаление FAQ отменено.
+
+coupon_program_retired = Купонная программа завершена.
+
+telegram_auth_request_contact = Для подтверждения номера телефона поделитесь своим Telegram-контактом с помощью кнопки ниже. Отмена: /cancel.
+telegram_auth_own_contact_only = Поделитесь только своим Telegram-контактом с помощью кнопки ниже. Чужие и пересланные контакты не принимаются.
+telegram_auth_phone_mismatch = Номер вашего Telegram-аккаунта не совпадает с номером в ссылке. Получите новую ссылку для правильного номера или отмените проверку командой /cancel.
+telegram_auth_invalid_link = Неверная ссылка для подтверждения. Пожалуйста, получите новую ссылку.
+telegram_auth_private_only = Для подтверждения номера откройте ссылку в личном чате с ботом.
+telegram_auth_expired = Время подтверждения истекло. Пожалуйста, откройте ссылку повторно.
+telegram_auth_cancelled = Подтверждение номера телефона отменено.
+telegram_auth_verified = ✅ Ваш номер телефона и Telegram-аккаунт подтверждены.

@@ -1,3 +1,8 @@
+import {
+  RETIRED_COUPON_TEMPLATE_TYPES,
+  isRetiredCouponNotification,
+  rejectRetiredCouponOperation,
+} from './coupon/coupon-retirement';
 import db from '../database/database';
 
 export type MessageTemplateType =
@@ -32,7 +37,9 @@ export class MessageTemplateService {
 
   static hasPlaceholder(template: MessageTemplate, locale: string, placeholder: string): boolean {
     const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`\\{\\{\\s*${escapedPlaceholder}\\s*\\}\\}`).test(this.getContent(template, locale));
+    return new RegExp(`\\{\\{\\s*${escapedPlaceholder}\\s*\\}\\}`).test(
+      this.getContent(template, locale),
+    );
   }
 
   static async getActiveTemplateByType(type: MessageTemplateType): Promise<MessageTemplate | null> {
@@ -50,10 +57,16 @@ export class MessageTemplateService {
   }
 
   static async listTemplates(): Promise<MessageTemplate[]> {
-    return db<MessageTemplate>('message_templates').orderBy('template_type', 'asc').orderBy('id', 'asc');
+    return db<MessageTemplate>('message_templates')
+      .whereNotIn('template_type', [...RETIRED_COUPON_TEMPLATE_TYPES])
+      .orderBy('template_type', 'asc')
+      .orderBy('id', 'asc');
   }
 
-  static async create(data: Omit<MessageTemplate, 'id' | 'created_at' | 'updated_at'>): Promise<MessageTemplate> {
+  static async create(
+    data: Omit<MessageTemplate, 'id' | 'created_at' | 'updated_at'>,
+  ): Promise<MessageTemplate> {
+    if (isRetiredCouponNotification(data.template_type)) rejectRetiredCouponOperation();
     const [template] = await db<MessageTemplate>('message_templates')
       .insert({
         ...data,
@@ -64,7 +77,13 @@ export class MessageTemplateService {
     return template;
   }
 
-  static async update(id: number, data: Partial<Omit<MessageTemplate, 'id' | 'created_at' | 'updated_at'>>): Promise<MessageTemplate | null> {
+  static async update(
+    id: number,
+    data: Partial<Omit<MessageTemplate, 'id' | 'created_at' | 'updated_at'>>,
+  ): Promise<MessageTemplate | null> {
+    const current = await this.getById(id);
+    if (isRetiredCouponNotification(data.template_type || current?.template_type || ''))
+      rejectRetiredCouponOperation();
     const [template] = await db<MessageTemplate>('message_templates')
       .where({ id })
       .update({
@@ -76,6 +95,9 @@ export class MessageTemplateService {
   }
 
   static async setTemplateActiveState(id: number, isActive: boolean): Promise<boolean> {
+    const current = await this.getById(id);
+    if (isActive && isRetiredCouponNotification(current?.template_type || ''))
+      rejectRetiredCouponOperation();
     const updatedCount = await db('message_templates')
       .where({ id })
       .update({ is_active: isActive, updated_at: new Date() });
@@ -99,20 +121,20 @@ export class MessageTemplateService {
       if (value === null || value === undefined || value === '') {
         return '';
       }
-      
+
       const stringValue = String(value);
       if (key === 'coupon_code') {
         // Check if the placeholder is already wrapped in <code> tags
         const prefix = raw.substring(Math.max(0, offset - 6), offset);
         const suffix = raw.substring(offset + match.length, offset + match.length + 7);
-        
+
         if (prefix.toLowerCase().endsWith('<code>') && suffix.toLowerCase().startsWith('</code>')) {
           return stringValue;
         }
-        
+
         return `<code>${stringValue}</code>`;
       }
-      
+
       return stringValue;
     });
   }

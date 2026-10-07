@@ -20,7 +20,6 @@ import { isCallbackQueryExpiredError } from '../utils/telegram/telegram-errors';
 import { strictNormalizeUzPhone } from '../utils/uz-phone.util';
 import { sanitizeName } from '../utils/formatting/formatter.util';
 import { redisService } from '../redis/redis.service';
-import { CouponRegistrationService } from '../services/coupon/coupon-registration.service';
 import { clearAccountSwitchArtifacts } from '../utils/account-switch.util';
 import {
   isSapBusinessPartnerAdmin,
@@ -308,9 +307,6 @@ export async function registrationConversation(conversation: BotConversation, ct
       reply_markup: { remove_keyboard: true },
     });
 
-    if (user.phone_number) {
-      await conversation.external(() => CouponRegistrationService.claimPendingCouponsForUser(user));
-    }
 
     if (pendingAction === 'application') {
       // Inside a conversation, ctx.conversation is unavailable (plain hydrated Context).

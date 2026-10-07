@@ -1,3 +1,4 @@
+import { rejectRetiredCouponOperation } from './coupon-retirement';
 import path from 'path';
 import db from '../../database/database';
 import { minioService } from '../minio.service';
@@ -244,19 +245,10 @@ export class PromotionService {
   }
 
   static async createPromotion(input: CreatePromotionInput): Promise<Promotion> {
-    const normalized = this.normalizePromotionInput(input);
+    const normalized = this.normalizePromotionInput({ ...input, assign_coupons: false });
     this.assertDateRange(normalized.starts_at, normalized.ends_at);
 
     return db.transaction(async (trx) => {
-      if (normalized.assign_coupons) {
-        await trx<Promotion>('promotions')
-          .whereNull('deleted_at')
-          .update({
-            assign_coupons: false,
-            updated_at: new Date(),
-          });
-      }
-
       const [promotion] = await trx<Promotion>('promotions')
         .insert({
           ...normalized,
@@ -274,23 +266,13 @@ export class PromotionService {
       return null;
     }
 
-    const normalized = this.normalizePromotionInput(input);
+    const normalized = this.normalizePromotionInput({ ...input, assign_coupons: false });
     this.assertDateRange(
       normalized.starts_at === undefined ? promotion.starts_at : normalized.starts_at,
       normalized.ends_at === undefined ? promotion.ends_at : normalized.ends_at,
     );
 
     return db.transaction(async (trx) => {
-      if (normalized.assign_coupons === true) {
-        await trx<Promotion>('promotions')
-          .whereNot('id', id)
-          .whereNull('deleted_at')
-          .update({
-            assign_coupons: false,
-            updated_at: new Date(),
-          });
-      }
-
       const [updated] = await trx<Promotion>('promotions')
         .where({ id })
         .whereNull('deleted_at')
@@ -318,28 +300,9 @@ export class PromotionService {
   }
 
   static async setPromotionAssignCouponsState(id: number, assignCoupons: boolean): Promise<Promotion | null> {
-    return db.transaction(async (trx) => {
-      if (assignCoupons) {
-        await trx<Promotion>('promotions')
-          .whereNot('id', id)
-          .whereNull('deleted_at')
-          .update({
-            assign_coupons: false,
-            updated_at: new Date(),
-          });
-      }
-
-      const [updated] = await trx<Promotion>('promotions')
-        .where({ id })
-        .whereNull('deleted_at')
-        .update({
-          assign_coupons: assignCoupons,
-          updated_at: new Date(),
-        })
-        .returning('*');
-
-      return updated || null;
-    });
+    void id;
+    void assignCoupons;
+    return rejectRetiredCouponOperation();
   }
 
   static async archivePromotion(id: number): Promise<boolean> {

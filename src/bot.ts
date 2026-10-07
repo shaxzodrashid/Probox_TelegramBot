@@ -1,3 +1,4 @@
+import { couponRetirementMiddleware } from './middlewares/coupon-retirement.middleware';
 import { Bot, session } from 'grammy';
 import { conversations, createConversation } from '@grammyjs/conversations';
 import { BotContext, SessionData } from './types/context';
@@ -7,6 +8,7 @@ import { config } from './config';
 import { logger } from './utils/logger';
 import { loggerMiddleware } from './middlewares/logger.middleware';
 import { sessionRestorerMiddleware } from './middlewares/session.middleware';
+import { createTelegramAuthMiddleware } from './middlewares/telegram-auth.middleware';
 
 import { startHandler } from './handlers/start.handler';
 import { helpHandler, aboutHandler } from './handlers/help.handler';
@@ -281,6 +283,13 @@ bot.use(i18n);
 bot.use(sessionRestorerMiddleware);
 
 bot.use(conversations());
+bot.use(
+  createTelegramAuthMiddleware(async (telegramId) => {
+    await redisService.delete(`registrationActive:${telegramId}`);
+    await redisService.delete(`pendingAction:${telegramId}`);
+  }),
+);
+bot.use(couponRetirementMiddleware);
 
 bot.use(createConversation(exampleConversation));
 bot.use(createConversation(registrationConversation));

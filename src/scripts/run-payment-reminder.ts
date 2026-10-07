@@ -3,7 +3,6 @@ import { logger } from '../utils/logger';
 
 async function main(): Promise<void> {
   const nowInput = process.env.PAYMENT_REMINDER_RUN_NOW;
-  const rewardMonth = process.env.PAYMENT_REWARD_TARGET_MONTH;
   const now = nowInput ? new Date(nowInput) : new Date();
 
   if (Number.isNaN(now.getTime())) {
@@ -12,7 +11,6 @@ async function main(): Promise<void> {
 
   const result = await PaymentReminderService.run({
     now,
-    rewardMonth,
   });
 
   logger.info(`[PAYMENT_REMINDER_RUN] Summary: ${JSON.stringify(result)}`);

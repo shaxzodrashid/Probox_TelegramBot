@@ -36,6 +36,7 @@ const translations: Record<string, string> = {
   menu_coupons: '🎟 Kuponlar',
   back: '🔙 Orqaga',
   admin_campaign_promotions_back: '🔙 Ro‘yxatga qaytish',
+  coupon_program_retired: 'Kupon dasturi yakunlangan.',
   campaign_login_required: "Kuponlarni ko'rish uchun avval akkauntga kiring.",
   registration_button: "📝 Ro'yxatdan o'tish",
 };
@@ -118,7 +119,7 @@ test('promotionsHandler sends the single active promotion card directly', async 
 
     assert.deepEqual(
       buttons.map((button) => button.callback_data),
-      ['campaign_open_coupons', 'campaign_back_to_menu'],
+      ['campaign_back_to_menu'],
     );
   } finally {
     PromotionService.getActivePromotions = originalGetActivePromotions;
@@ -151,7 +152,6 @@ test('promotionsHandler sends a numbered inline selector when multiple promotion
       [
         { text: '1', callback_data: 'promotion_detail:10' },
         { text: '2', callback_data: 'promotion_detail:11' },
-        { text: '🎟 Kuponlar', callback_data: 'campaign_open_coupons' },
         { text: '🔙 Orqaga', callback_data: 'campaign_back_to_menu' },
       ],
     );
@@ -212,7 +212,7 @@ test('promotionDetailHandler deletes the selector message and sends the card whe
 
     assert.deepEqual(
       buttons.map((button) => button.callback_data),
-      ['campaign_back_to_promotions', 'campaign_open_coupons', 'campaign_back_to_menu'],
+      ['campaign_back_to_promotions', 'campaign_back_to_menu'],
     );
   } finally {
     PromotionService.getActivePromotions = originalGetActivePromotions;
@@ -220,32 +220,14 @@ test('promotionDetailHandler deletes the selector message and sends the card whe
   }
 });
 
-test('couponsHandler shows registration starter when user is not logged in', async () => {
-  const originalGetUserByTelegramId = UserService.getUserByTelegramId;
-
-  try {
-    UserService.getUserByTelegramId = (async () => null) as typeof UserService.getUserByTelegramId;
-
-    const { ctx, calls } = createContext();
-    ctx.session.promotions = [{ id: 1, title: 'Barakali Hafta' }];
-
-    await couponsHandler(ctx);
-
-    assert.equal(ctx.session.promotions, undefined);
-    assert.equal(calls.replies.length, 1);
-    assert.equal(calls.replies[0].text, "Kuponlarni ko'rish uchun avval akkauntga kiring.");
-
-    const buttons = getInlineButtons(
-      calls.replies[0].other?.reply_markup as { inline_keyboard?: Array<Array<{ text?: string; callback_data?: string }>> },
-    );
-
-    assert.deepEqual(
-      buttons.map((button) => ({ text: button.text, callback_data: button.callback_data })),
-      [
-        { text: "📝 Ro'yxatdan o'tish", callback_data: 'start_registration' },
-      ],
-    );
-  } finally {
-    UserService.getUserByTelegramId = originalGetUserByTelegramId;
-  }
+test('couponsHandler reports retirement without requesting registration or loading coupons', async (t) => {
+  t.mock.method(UserService, 'getUserByTelegramId', () => { throw new Error('must not load user'); });
+  const { ctx, calls } = createContext({ callbackData: 'campaign_open_coupons' });
+  ctx.session.promotions = [{ id: 1, title: 'Barakali Hafta' }];
+  await couponsHandler(ctx);
+  assert.equal(ctx.session.promotions, undefined);
+  assert.equal(calls.answerCallbackQuery, 1);
+  assert.equal(calls.replies.length, 1);
+  assert.equal(calls.replies[0].text, 'Kupon dasturi yakunlangan.');
+  assert.equal(calls.replies[0].other?.reply_markup, undefined);
 });

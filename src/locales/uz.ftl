@@ -605,21 +605,18 @@ admin_template_status_updated = ✅ Shablon holati yangilandi.
 admin_campaign_template_create_guidance =
     📝 Yangi xabar shabloni yaratish bo'yicha yo'riqnoma
 
-    1. <b>Sarlavha</b>: admin ichida ko'rinadigan nom. Masalan: Visited Store
-    2. <b>Kalit</b>: noyob bo'lishi kerak. Faqat lotincha yozing. Masalan: visited_store_v1
-    3. <b>Tur</b>: xabar qaysi hodisa uchun ishlashini belgilaydi. Do'konga tashrif uchun `store_visit` ni tanlang.
+    1. <b>Sarlavha</b>: admin ichida ko'rinadigan nom. Masalan: Payment Reminder
+    2. <b>Kalit</b>: noyob bo'lishi kerak. Faqat lotincha yozing. Masalan: payment_reminder_v1
+    3. <b>Tur</b>: xabar qaysi hodisa uchun ishlashini belgilaydi. To‘lov eslatmasi uchun `payment_reminder_d1` ni tanlang.
     4. <b>Matn</b>: o'zgaruvchilarni <code>{"{{customer_name}}"}</code> kabi formatda yozing.
 
     Hozir amalda ishlaydigan placeholder'lar:
     - <code>{"{{customer_name}}"}</code> -- Mijozning ismi va familiyasi
-    - <code>{"{{coupon_code}}"}</code> -- PRO bilan boshlanadigan 10 belgili kupon kodi (avtomatik ravishda inline-code formatiga o'tkaziladi)
     - <code>{"{{payment_due_date}}"}</code> -- Navbatdagi to'lov muddati (sana)
     - <code>{"{{product_name}}"}</code> -- Mahsulot nomi
-    - <code>{"{{referrer_name}}"}</code> -- Taklif qilgan kishi ismi
-    - <code>{"{{prize_name}}"}</code> -- Yutuq nomi
 
-    Do'konga tashrif uchun tavsiya etilgan misol:
-    <blockquote>Assalomu alaykum, <code>{"{{customer_name}}"}</code>! Probox do'konimizga tashrif buyurganingiz uchun rahmat. Siz uchun {"{{coupon_code}}"} maxsus promo-kodi yaratildi.</blockquote>
+    To‘lov eslatmasi uchun misol:
+    <blockquote>Assalomu alaykum, {"{{customer_name}}"}! To‘lov sanasi: {"{{payment_due_date}}"}.</blockquote>
 
     Bekor qilish uchun istalgan bosqichda "Bekor qilish" tugmasini bosing.
 admin_campaign_ask_template_key = Shablon kalitini kiriting (masalan: order_success):
@@ -712,3 +709,14 @@ admin_faq_edit_cancelled = FAQ tahriri bekor qilindi.
 admin_faq_delete_confirm_text = Quyidagi FAQ o'chirilsinmi?\n\n{ $question }
 admin_faq_deleted = ✅ FAQ o'chirildi.
 admin_faq_delete_cancelled = FAQ o'chirish bekor qilindi.
+
+coupon_program_retired = Kupon dasturi yakunlangan.
+
+telegram_auth_request_contact = Telefon raqamingizni tasdiqlash uchun pastdagi tugma orqali o'zingizning Telegram kontaktingizni ulashing. Bekor qilish: /cancel.
+telegram_auth_own_contact_only = Faqat o'zingizning Telegram kontaktingizni pastdagi tugma orqali ulashing. Boshqa yoki yo'naltirilgan kontakt qabul qilinmaydi.
+telegram_auth_phone_mismatch = Telegram telefon raqamingiz havoladagi raqamga mos kelmadi. To'g'ri raqam uchun yangi havola oling yoki /cancel orqali bekor qiling.
+telegram_auth_invalid_link = Tasdiqlash havolasi noto'g'ri. Iltimos, yangi havola oling.
+telegram_auth_private_only = Telefon raqamini tasdiqlash uchun botning shaxsiy chatida havolani oching.
+telegram_auth_expired = Tasdiqlash muddati tugadi. Iltimos, havolani qayta oching.
+telegram_auth_cancelled = Telefon raqamini tasdiqlash bekor qilindi.
+telegram_auth_verified = ✅ Telefon raqamingiz va Telegram akkauntingiz tasdiqlandi.
