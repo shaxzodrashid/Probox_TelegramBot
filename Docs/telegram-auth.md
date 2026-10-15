@@ -1,6 +1,6 @@
-# Telegram website login
+# Telegram website and app login
 
-Implemented against [the store API contract](ExternalSystemWebhook.md). The website/store API creates `https://t.me/<bot_username>?start=auth_<login_id>` with a 32-character lowercase hexadecimal login ID. Phone-only links such as `auth_998901234567` are rejected; the phone link builder has been removed. The bot never creates website login IDs.
+Implemented against [the updated store API contract](TELEGRAM_BOT_LOGIN_API_SECOND_EDITION.md). The website/app and store API create `https://t.me/<bot_username>?start=auth_<login_id>` with a 32-character lowercase hexadecimal login ID. Phone-only links such as `auth_998901234567` are rejected; the phone link builder has been removed. The bot never creates login IDs.
 
 ## Configuration
 
@@ -39,6 +39,8 @@ Every request uses `X-Probox-Bot-Signature: t=<unix_seconds>,s=<hex HMAC-SHA256>
 Redis-backed `ctx.session.telegramAuth` stores the login ID, Telegram ID, server expiry, pending masked request details or verified timestamp, and an outstanding refusal when needed. It does not store the shared contact phone. Expiry is checked on updates; expired data can remain until an update or the existing three-day Redis session TTL. Old persisted phone-only auth sessions are discarded.
 
 Uzbek and Russian messages follow the bot's current locale. Raw auth starts, contacts and pending auth updates are excluded from verbose update logs; auth-start and pending auth messages are redacted in bot error notifications. The webhook client never logs secrets, signatures, full login IDs, phones or upstream response messages.
+
+The optional `open.source` selects website (`web`) or mobile app (`app`) wording in both locales. A missing source defaults to `web` for older API responses and persisted sessions. Pending details and verified state preserve the source; repeated contacts during the verified attempt receive the matching already-confirmed message without another API call. Invalid links and not-found, expired or other-account errors before a successful `open` use neutral website/app wording. Requests, signatures and environment settings are unchanged.
 
 ## Verification and rollout
 

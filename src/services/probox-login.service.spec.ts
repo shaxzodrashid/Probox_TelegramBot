@@ -169,6 +169,8 @@ test('fails closed on incomplete, wrong-session or wrong-status success response
     { ...open, login_id: 'wrong' },
     { ...open, expires_at: 'invalid' },
     { ...open, client: null },
+    { ...open, source: 'unknown' },
+    { ...open, source: null },
   ]) {
     const f = clientWith([response(200, value)]);
     await assert.rejects(
@@ -188,6 +190,18 @@ test('fails closed on incomplete, wrong-session or wrong-status success response
   }
   const f = clientWith([response(200, { login_id: loginId, status: 'confirmed' })]);
   await assert.rejects(() => f.client.decline(loginId, 123, 'cancelled'));
+});
+
+test('accepts web, app and legacy open responses without changing the signed request', async () => {
+  for (const source of ['web', 'app', undefined]) {
+    const result = { ...open, ...(source ? { source } : {}) };
+    const f = clientWith([response(200, result)]);
+    assert.deepEqual(await f.client.open(loginId, 123), result);
+    assert.deepEqual(JSON.parse(String(f.calls[0].init.body)), {
+      login_id: loginId,
+      telegram_user_id: 123,
+    });
+  }
 });
 
 test('missing secret, invalid origins and non-HTTPS destinations fail before any request', async () => {

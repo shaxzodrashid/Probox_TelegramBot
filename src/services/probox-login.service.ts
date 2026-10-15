@@ -1,8 +1,11 @@
 import { createHmac } from 'node:crypto';
 
+export type LoginSource = 'web' | 'app';
+
 export interface ProboxLoginOpenResult {
   login_id: string;
   status: 'opened';
+  source?: LoginSource;
   phone_masked: string;
   language: 'uz' | 'ru' | 'en';
   client: { device_type: string | null; os: string | null; browser: string | null };
@@ -75,6 +78,7 @@ export class ProboxLoginClient implements ProboxLoginApi {
     if (
       result.login_id !== loginId ||
       result.status !== 'opened' ||
+      (result.source !== undefined && result.source !== 'web' && result.source !== 'app') ||
       typeof result.phone_masked !== 'string' ||
       !['uz', 'ru', 'en'].includes(String(result.language)) ||
       !nullableStrings(result.client, ['device_type', 'os', 'browser']) ||

@@ -6,7 +6,7 @@ import {
   TelegramAuthState,
 } from '../utils/telegram/telegram-auth.util';
 import { escapeHtml } from '../utils/telegram/telegram-rich-text.util';
-import { ProboxLoginApi, ProboxLoginError } from '../services/probox-login.service';
+import { LoginSource, ProboxLoginApi, ProboxLoginError } from '../services/probox-login.service';
 
 const START_COMMAND = /^\/start(?:@\w+)?(?:\s|$)/i;
 const CANCEL_COMMAND = /^\/cancel(?:@\w+)?$/i;
@@ -43,7 +43,7 @@ export function createTelegramAuthMiddleware(
         const info = await login.open(authStart.login_id, telegramId);
         const expiresAt = Date.parse(info.expires_at);
         if (expiresAt <= Date.now()) {
-          await replyFinal(ctx, 'telegram_auth_expired');
+          await replyFinal(ctx, 'telegram_auth_expired', info.source ?? 'web');
           return;
         }
         pending = {
@@ -54,6 +54,7 @@ export function createTelegramAuthMiddleware(
           started_at: Math.floor(Date.now() / 1000) * 1000,
           expires_at: expiresAt,
           details: {
+            source: info.source ?? 'web',
             phone_masked: info.phone_masked,
             client: info.client,
             location: info.location,
@@ -85,14 +86,22 @@ export function createTelegramAuthMiddleware(
       return;
     }
     if (auth.status === 'verified') {
-      if (Date.now() >= auth.expires_at) ctx.session.telegramAuth = undefined;
+      if (Date.now() >= auth.expires_at) {
+        ctx.session.telegramAuth = undefined;
+      } else if (ctx.message?.contact) {
+        await replyFinal(ctx, 'telegram_auth_already_confirmed', auth.source ?? 'web');
+        return;
+      } else if (ctx.message || ctx.callbackQuery) {
+        // A new interaction leaves login so later registration contacts can pass through.
+        ctx.session.telegramAuth = undefined;
+      }
       return next();
     }
 
     if (ctx.callbackQuery) await ctx.answerCallbackQuery();
     if (Date.now() >= auth.expires_at || auth.telegram_id !== telegramId) {
       ctx.session.telegramAuth = undefined;
-      await replyFinal(ctx, 'telegram_auth_expired');
+      await replyFinal(ctx, 'telegram_auth_expired', auth.details.source ?? 'web');
       return;
     }
 
@@ -117,6 +126,7 @@ export function createTelegramAuthMiddleware(
       await replyFinal(
         ctx,
         declineReason === 'not_me' ? 'telegram_auth_declined' : 'telegram_auth_cancelled',
+        auth.details.source ?? 'web',
       );
       return;
     }
@@ -158,8 +168,9 @@ export function createTelegramAuthMiddleware(
       telegram_id: telegramId,
       verified_at: Date.now(),
       expires_at: auth.expires_at,
+      source: auth.details.source ?? 'web',
     };
-    await replyFinal(ctx, 'telegram_auth_verified');
+    await replyFinal(ctx, 'telegram_auth_verified', auth.details.source ?? 'web');
   };
 }
 
@@ -177,12 +188,12 @@ function contactRequest(ctx: BotContext, auth: PendingAuth): string {
   const device = [client.browser, client.os, client.device_type].filter(Boolean).join(' · ');
   const place = [location.city, location.country].filter(Boolean).join(', ');
   const lines = [
-    ctx.t('telegram_auth_heading'),
+    ctx.t(authKey('telegram_auth_heading', auth.details.source ?? 'web')),
     ctx.t('telegram_auth_phone', { phone: escapeHtml(phone_masked) }),
   ];
   if (device) lines.push(ctx.t('telegram_auth_device', { device: escapeHtml(device) }));
   if (place) lines.push(ctx.t('telegram_auth_location', { place: escapeHtml(place) }));
-  lines.push('', ctx.t('telegram_auth_request_contact'));
+  lines.push('', ctx.t(authKey('telegram_auth_request_contact', auth.details.source ?? 'web')));
   return lines.join('\n');
 }
 
@@ -207,14 +218,40 @@ function errorTextKey(error: unknown, retryKey: string): string {
 }
 
 async function handleActionError(ctx: BotContext, error: unknown, retryKey: string): Promise<void> {
+  const auth = ctx.session.telegramAuth;
+  const source = auth?.status === 'pending' ? (auth.details.source ?? 'web') : undefined;
   if (error instanceof ProboxLoginError && !error.retryable) {
     ctx.session.telegramAuth = undefined;
-    await replyFinal(ctx, errorTextKey(error, retryKey));
+    await replyFinal(ctx, errorTextKey(error, retryKey), source);
   } else {
-    await ctx.reply(ctx.t(errorTextKey(error, retryKey)), { reply_markup: contactKeyboard(ctx) });
+    await ctx.reply(ctx.t(authKey(errorTextKey(error, retryKey), source)), {
+      reply_markup: contactKeyboard(ctx),
+    });
   }
 }
 
-async function replyFinal(ctx: BotContext, key: string): Promise<void> {
-  await ctx.reply(ctx.t(key), { reply_markup: { remove_keyboard: true } });
+const APP_KEYS = new Set([
+  'telegram_auth_heading',
+  'telegram_auth_request_contact',
+  'telegram_auth_verified',
+  'telegram_auth_already_confirmed',
+  'telegram_auth_phone_mismatch',
+  'telegram_auth_declined',
+  'telegram_auth_decline_retry',
+  'telegram_auth_error',
+  'telegram_auth_expired',
+]);
+const NEUTRAL_KEYS = new Set([
+  'telegram_auth_invalid_link',
+  'telegram_auth_expired',
+  'telegram_auth_other_account',
+]);
+
+function authKey(key: string, source?: LoginSource): string {
+  if (!source) return NEUTRAL_KEYS.has(key) ? `${key}_any` : key;
+  return source === 'app' && APP_KEYS.has(key) ? `${key}_app` : key;
+}
+
+async function replyFinal(ctx: BotContext, key: string, source?: LoginSource): Promise<void> {
+  await ctx.reply(ctx.t(authKey(key, source)), { reply_markup: { remove_keyboard: true } });
 }

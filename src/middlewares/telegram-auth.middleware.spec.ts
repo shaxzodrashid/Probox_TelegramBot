@@ -102,6 +102,101 @@ function fixture(locale = 'uz') {
   };
 }
 
+test('app, web and legacy sources survive session persistence and select both locales', async () => {
+  for (const locale of ['uz', 'ru']) {
+    for (const source of ['app', 'web', undefined] as const) {
+      const f = fixture(locale);
+      f.api.open = async () => ({
+        ...openResult(),
+        source,
+        client: { browser: null, os: 'Android', device_type: 'mobile' },
+      });
+      await f.run();
+      const suffix = source === 'app' ? '_app' : '';
+      assert.ok(f.last().text.includes(i18n.t(locale, `telegram_auth_heading${suffix}`)));
+      assert.ok(f.last().text.includes(i18n.t(locale, `telegram_auth_request_contact${suffix}`)));
+      assert.ok(f.last().text.includes('Android · mobile'));
+      f.ctx.session = JSON.parse(JSON.stringify(f.ctx.session));
+      f.contact();
+      await f.run();
+      assert.equal(f.last().text, i18n.t(locale, `telegram_auth_verified${suffix}`));
+      const verified = f.auth();
+      assert.equal(verified?.status === 'verified' && verified.source, source ?? 'web');
+      f.ctx.session = JSON.parse(JSON.stringify(f.ctx.session));
+      await f.run();
+      assert.equal(f.last().text, i18n.t(locale, `telegram_auth_already_confirmed${suffix}`));
+      assert.equal(f.confirmed.length, 1);
+    }
+  }
+});
+
+test('unknown source uses neutral invalid-link and open-error messages in both locales', async () => {
+  for (const locale of ['uz', 'ru']) {
+    const invalid = fixture(locale);
+    invalid.text('/start auth_998901234567');
+    await invalid.run();
+    assert.equal(invalid.last().text, i18n.t(locale, 'telegram_auth_invalid_link_any'));
+    for (const [status, location, key] of [
+      [404, 'TG_LOGIN_NOT_FOUND', 'invalid_link'],
+      [410, 'TG_LOGIN_EXPIRED', 'expired'],
+      [403, 'TG_LOGIN_OTHER_ACCOUNT', 'other_account'],
+    ] as const) {
+      const f = fixture(locale);
+      f.api.open = async () => {
+        throw new ProboxLoginError(status, location);
+      };
+      await f.run();
+      assert.equal(f.last().text, i18n.t(locale, `telegram_auth_${key}_any`));
+      assert.equal(f.auth(), undefined);
+      assert.deepEqual(f.last().options, { reply_markup: { remove_keyboard: true } });
+    }
+  }
+});
+
+test('app action errors, expiry and refusal retain app wording even after state is cleared', async () => {
+  for (const locale of ['uz', 'ru']) {
+    for (const scenario of [
+      'phone_mismatch',
+      'already_confirmed',
+      'declined',
+      'error',
+      'expired',
+      'decline_retry',
+      'not_me',
+    ] as const) {
+      const f = fixture(locale);
+      f.api.open = async () => ({ ...openResult(), source: 'app' });
+      await f.run();
+      if (scenario === 'expired') {
+        f.auth()!.expires_at = Date.now();
+        f.contact();
+      } else if (scenario === 'decline_retry' || scenario === 'not_me') {
+        f.text(i18n.t(locale, 'telegram_auth_not_me'));
+        if (scenario === 'decline_retry') {
+          f.api.decline = async () => {
+            throw new ProboxLoginError(503, 'TG_LOGIN_UNAVAILABLE');
+          };
+        }
+      } else {
+        const locations = {
+          phone_mismatch: 'TG_LOGIN_PHONE_MISMATCH',
+          already_confirmed: 'TG_LOGIN_ALREADY_CONFIRMED',
+          declined: 'TG_LOGIN_DECLINED',
+          error: 'TG_LOGIN_NOT_OPENED',
+        };
+        f.api.confirm = async () => {
+          throw new ProboxLoginError(409, locations[scenario]);
+        };
+        f.contact();
+      }
+      await f.run();
+      const key = scenario === 'not_me' ? 'declined' : scenario;
+      assert.equal(f.last().text, i18n.t(locale, `telegram_auth_${key}_app`));
+      assert.equal(f.auth()?.status, scenario === 'decline_retry' ? 'pending' : undefined);
+    }
+  }
+});
+
 test('open precedes contact request, displays details and warning, and retains server expiry', async () => {
   const f = fixture();
   const result = openResult();
@@ -163,7 +258,8 @@ test('only successful confirm verifies; sends the unmodified contact phone and s
   await f.run();
   assert.deepEqual(f.auth(), verified);
   assert.equal(f.confirmed.length, 1);
-  assert.equal(f.stats().nextCalls, 1);
+  assert.equal(f.stats().nextCalls, 0);
+  assert.equal(f.last().text, i18n.t('uz', 'telegram_auth_already_confirmed'));
 });
 
 test('unowned, forwarded, old and typed contacts never reach confirm; valid retries do', async () => {

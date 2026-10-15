@@ -1,6 +1,7 @@
 import type {
   ProboxLoginOpenResult,
   ProboxLoginDeclineReason,
+  LoginSource,
 } from '../../services/probox-login.service';
 
 export const TELEGRAM_AUTH_PREFIX = 'auth_';
@@ -15,10 +16,10 @@ export type TelegramAuthState = {
   | {
       status: 'pending';
       started_at: number;
-      details: Pick<ProboxLoginOpenResult, 'phone_masked' | 'client' | 'location'>;
+      details: Pick<ProboxLoginOpenResult, 'phone_masked' | 'client' | 'location' | 'source'>;
       decline_reason?: ProboxLoginDeclineReason;
     }
-  | { status: 'verified'; verified_at: number }
+  | { status: 'verified'; verified_at: number; source?: LoginSource }
 );
 
 /** The store API owns login IDs and phone matching; phone-only links are obsolete. */
